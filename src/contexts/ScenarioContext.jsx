@@ -42,6 +42,13 @@ export const ScenarioProvider = ({ children }) => {
       retirementAge: 62,
       currentAge: 42
     },
+    // FIRE-specific fields for FireFed upgrade
+    fire: {
+      desiredFireAge: 55,
+      monthlyFireIncomeGoal: 6000,
+      sideHustleIncome: 500,
+      spouseIncome: 4000
+    },
     summary: {
       monthlyExpenses: 4000
     }
