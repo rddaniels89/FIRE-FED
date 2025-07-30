@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -42,6 +42,18 @@ function FERSPensionCalc() {
     privateJobYears: '20'
   });
 
+  // Utility function to parse numeric inputs only when needed
+  const parseNumericInputs = (inputs) => ({
+    yearsOfService: inputs.yearsOfService === '' ? 0 : parseFloat(inputs.yearsOfService) || 0,
+    monthsOfService: inputs.monthsOfService === '' ? 0 : parseFloat(inputs.monthsOfService) || 0,
+    high3Salary: inputs.high3Salary === '' ? 0 : parseFloat(inputs.high3Salary) || 0,
+    currentAge: inputs.currentAge === '' ? 0 : parseFloat(inputs.currentAge) || 0,
+    retirementAge: inputs.retirementAge === '' ? 0 : parseFloat(inputs.retirementAge) || 0,
+    showComparison: inputs.showComparison,
+    privateJobSalary: inputs.privateJobSalary === '' ? 0 : parseFloat(inputs.privateJobSalary) || 0,
+    privateJobYears: inputs.privateJobYears === '' ? 0 : parseFloat(inputs.privateJobYears) || 0
+  });
+
   // Results state
   const [results, setResults] = useState({
     stayFed: {
@@ -65,23 +77,14 @@ function FERSPensionCalc() {
   // Validation state
   const [validationErrors, setValidationErrors] = useState({});
 
-  // Parse numeric values from string inputs
-  const numericInputs = useMemo(() => ({
-    yearsOfService: parseFloat(inputs.yearsOfService) || 0,
-    monthsOfService: parseFloat(inputs.monthsOfService) || 0,
-    high3Salary: parseFloat(inputs.high3Salary) || 0,
-    currentAge: parseFloat(inputs.currentAge) || 0,
-    retirementAge: parseFloat(inputs.retirementAge) || 0,
-    showComparison: inputs.showComparison,
-    privateJobSalary: parseFloat(inputs.privateJobSalary) || 0,
-    privateJobYears: parseFloat(inputs.privateJobYears) || 0
-  }), [inputs]);
+
 
   // Load from scenario context
   useEffect(() => {
     if (currentScenario?.fers) {
       const fers = currentScenario.fers;
-      setInputs({
+      // Only update inputs if the values are actually different to prevent loops
+      const newInputs = {
         yearsOfService: String(fers.yearsOfService || 20),
         monthsOfService: String(fers.monthsOfService || 0),
         high3Salary: String(fers.high3Salary || 85000),
@@ -90,6 +93,15 @@ function FERSPensionCalc() {
         showComparison: fers.showComparison || false,
         privateJobSalary: String(fers.privateJobSalary || 95000),
         privateJobYears: String(fers.privateJobYears || 20)
+      };
+      
+      // Only update if different to prevent unnecessary re-renders
+      setInputs(prevInputs => {
+        const isDifferent = Object.keys(newInputs).some(key => 
+          newInputs[key] !== prevInputs[key]
+        );
+        
+        return isDifferent ? newInputs : prevInputs;
       });
     }
   }, [currentScenario]);
@@ -97,17 +109,21 @@ function FERSPensionCalc() {
   // Save to scenario context when inputs change (debounced)
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (currentScenario) {
-        updateCurrentScenario({
-          fers: numericInputs
-        });
+      if (currentScenario && Object.keys(inputs).length > 0) {
+        // Only update if we have actual input values
+        const hasValidInputs = inputs.currentAge && inputs.retirementAge;
+        if (hasValidInputs) {
+          updateCurrentScenario({
+            fers: parseNumericInputs(inputs)
+          });
+        }
       }
-    }, 1000); // 1 second debounce
+    }, 1000); // Standard debounce
 
     return () => clearTimeout(timeoutId);
-  }, [numericInputs, currentScenario, updateCurrentScenario]);
+  }, [inputs, currentScenario, updateCurrentScenario]);
 
-  // Simple input change handler for freehand typing
+  // Store raw input values without any parsing or cleanup
   const handleInputChange = useCallback((field, value) => {
     setInputs(prev => ({
       ...prev,
@@ -125,11 +141,13 @@ function FERSPensionCalc() {
 
   // Calculate total years of service including months
   const totalYears = useMemo(() => {
+    const numericInputs = parseNumericInputs(inputs);
     return numericInputs.yearsOfService + (numericInputs.monthsOfService / 12);
-  }, [numericInputs.yearsOfService, numericInputs.monthsOfService]);
+  }, [inputs]);
 
   // Validation function
   const validateInputs = useCallback(() => {
+    const numericInputs = parseNumericInputs(inputs);
     const errors = {};
     
     if (numericInputs.yearsOfService < 0 || numericInputs.yearsOfService > 50) {
@@ -141,11 +159,11 @@ function FERSPensionCalc() {
     if (numericInputs.high3Salary <= 0) {
       errors.high3Salary = 'High-3 salary must be greater than 0';
     }
-    if (numericInputs.currentAge < 18 || numericInputs.currentAge > 80) {
-      errors.currentAge = 'Current age must be between 18 and 80';
+    if (numericInputs.currentAge < 18 || numericInputs.currentAge > 999) {
+      errors.currentAge = 'Current age must be between 18 and 999';
     }
-    if (numericInputs.retirementAge <= numericInputs.currentAge || numericInputs.retirementAge > 75) {
-      errors.retirementAge = 'Retirement age must be greater than current age and less than 75';
+    if (numericInputs.retirementAge <= numericInputs.currentAge || numericInputs.retirementAge > 999) {
+      errors.retirementAge = 'Retirement age must be greater than current age and less than 999';
     }
     if (numericInputs.showComparison && numericInputs.privateJobSalary <= 0) {
       errors.privateJobSalary = 'Private sector salary must be greater than 0';
@@ -156,12 +174,13 @@ function FERSPensionCalc() {
 
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [numericInputs]);
+  }, [inputs]);
 
   // Main calculation functions
   const calculateFERSPension = useCallback(() => {
     if (!validateInputs()) return;
 
+    const numericInputs = parseNumericInputs(inputs);
     const years = totalYears;
     
     // FERS multiplier calculation
@@ -238,13 +257,13 @@ function FERSPensionCalc() {
         breakEvenAge: breakEvenAge
       }
     });
-  }, [numericInputs, totalYears, validateInputs]);
+  }, [inputs, totalYears, validateInputs]);
 
   // Calculate on input changes (debounced)
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       calculateFERSPension();
-    }, 500); // 500ms debounce
+    }, 300); // Shorter debounce for calculations
 
     return () => clearTimeout(timeoutId);
   }, [calculateFERSPension]);
@@ -397,6 +416,9 @@ function FERSPensionCalc() {
     </div>
   );
 
+  // Parse numeric inputs for rendering
+  const numericInputs = parseNumericInputs(inputs);
+
   return (
     <div className="animate-fade-in">
       <ScenarioManager />
@@ -430,15 +452,12 @@ function FERSPensionCalc() {
                 <div>
                   <label className="label">Years of Service</label>
                   <input
-                    type="number"
+                    type="text"
                     value={getDisplayValue('yearsOfService')}
                     onChange={(e) => handleInputChange('yearsOfService', e.target.value)}
-                    onBlur={() => validateInputs()}
-                    className={`input-field w-full ${validationErrors.yearsOfService ? 'border-red-500' : ''}`}
+                    className="input-field w-full"
                     placeholder="20"
-                    min="0"
-                    max="50"
-                    step="any"
+                    inputMode="decimal"
                   />
                   {validationErrors.yearsOfService && (
                     <p className="text-red-500 text-xs mt-1">{validationErrors.yearsOfService}</p>
@@ -450,14 +469,12 @@ function FERSPensionCalc() {
                 <div>
                   <label className="label">Additional Months</label>
                   <input
-                    type="number"
+                    type="text"
                     value={getDisplayValue('monthsOfService')}
                     onChange={(e) => handleInputChange('monthsOfService', e.target.value)}
-                    onBlur={() => validateInputs()}
-                    className={`input-field w-full ${validationErrors.monthsOfService ? 'border-red-500' : ''}`}
+                    className="input-field w-full"
                     placeholder="0"
-                    min="0"
-                    max="11"
+                    inputMode="numeric"
                   />
                   {validationErrors.monthsOfService && (
                     <p className="text-red-500 text-xs mt-1">{validationErrors.monthsOfService}</p>
@@ -479,14 +496,12 @@ function FERSPensionCalc() {
                 <div>
                   <label className="label">High-3 Average Salary</label>
                   <input
-                    type="number"
+                    type="text"
                     value={getDisplayValue('high3Salary')}
                     onChange={(e) => handleInputChange('high3Salary', e.target.value)}
-                    onBlur={() => validateInputs()}
-                    className={`input-field w-full ${validationErrors.high3Salary ? 'border-red-500' : ''}`}
-                    placeholder="85,000"
-                    min="1"
-                    step="any"
+                    className="input-field w-full"
+                    placeholder="1000000"
+                    inputMode="decimal"
                   />
                   {validationErrors.high3Salary && (
                     <p className="text-red-500 text-xs mt-1">{validationErrors.high3Salary}</p>
@@ -499,15 +514,12 @@ function FERSPensionCalc() {
                   <div>
                     <label className="label">Current Age</label>
                     <input
-                      type="number"
+                      type="text"
                       value={getDisplayValue('currentAge')}
                       onChange={(e) => handleInputChange('currentAge', e.target.value)}
-                      onBlur={() => validateInputs()}
-                      className={`input-field w-full ${validationErrors.currentAge ? 'border-red-500' : ''}`}
+                      className="input-field w-full"
                       placeholder="42"
-                      min="18"
-                      max="80"
-                      step="any"
+                      inputMode="numeric"
                     />
                     {validationErrors.currentAge && (
                       <p className="text-red-500 text-xs mt-1">{validationErrors.currentAge}</p>
@@ -519,15 +531,12 @@ function FERSPensionCalc() {
                   <div>
                     <label className="label">Planned Retirement Age</label>
                     <input
-                      type="number"
+                      type="text"
                       value={getDisplayValue('retirementAge')}
                       onChange={(e) => handleInputChange('retirementAge', e.target.value)}
-                      onBlur={() => validateInputs()}
-                      className={`input-field w-full ${validationErrors.retirementAge ? 'border-red-500' : ''}`}
+                      className="input-field w-full"
                       placeholder="62"
-                      min="50"
-                      max="75"
-                      step="any"
+                      inputMode="numeric"
                     />
                     {validationErrors.retirementAge && (
                       <p className="text-red-500 text-xs mt-1">{validationErrors.retirementAge}</p>
@@ -559,14 +568,12 @@ function FERSPensionCalc() {
                   <div>
                     <label className="label">Private Sector Salary</label>
                     <input
-                      type="number"
+                      type="text"
                       value={getDisplayValue('privateJobSalary')}
                       onChange={(e) => handleInputChange('privateJobSalary', e.target.value)}
-                      onBlur={() => validateInputs()}
-                      className={`input-field w-full ${validationErrors.privateJobSalary ? 'border-red-500' : ''}`}
-                      placeholder="95,000"
-                      min="1"
-                      step="any"
+                      className="input-field w-full"
+                      placeholder="1000000"
+                      inputMode="decimal"
                     />
                     {validationErrors.privateJobSalary && (
                       <p className="text-red-500 text-xs mt-1">{validationErrors.privateJobSalary}</p>
@@ -578,15 +585,12 @@ function FERSPensionCalc() {
                   <div>
                     <label className="label">Private Sector Working Years</label>
                     <input
-                      type="number"
+                      type="text"
                       value={getDisplayValue('privateJobYears')}
                       onChange={(e) => handleInputChange('privateJobYears', e.target.value)}
-                      onBlur={() => validateInputs()}
-                      className={`input-field w-full ${validationErrors.privateJobYears ? 'border-red-500' : ''}`}
+                      className="input-field w-full"
                       placeholder="20"
-                      min="1"
-                      max="40"
-                      step="any"
+                      inputMode="numeric"
                     />
                     {validationErrors.privateJobYears && (
                       <p className="text-red-500 text-xs mt-1">{validationErrors.privateJobYears}</p>

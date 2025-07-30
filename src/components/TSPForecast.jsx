@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -47,6 +47,26 @@ function TSPForecast() {
     retirementTaxRate: '15',
     showComparison: false
   });
+
+  // Utility function to parse numeric inputs only when needed
+  const parseNumericInputs = (inputs) => ({
+    currentBalance: inputs.currentBalance === '' ? 0 : parseFloat(inputs.currentBalance) || 0,
+    currentAge: inputs.currentAge === '' ? 0 : parseFloat(inputs.currentAge) || 0,
+    retirementAge: inputs.retirementAge === '' ? 0 : parseFloat(inputs.retirementAge) || 0,
+    monthlyContributionPercent: inputs.monthlyContributionPercent === '' ? 0 : parseFloat(inputs.monthlyContributionPercent) || 0,
+    annualSalary: inputs.annualSalary === '' ? 0 : parseFloat(inputs.annualSalary) || 0,
+    allocation: {
+      G: inputs.allocation.G === '' ? 0 : parseFloat(inputs.allocation.G) || 0,
+      F: inputs.allocation.F === '' ? 0 : parseFloat(inputs.allocation.F) || 0,
+      C: inputs.allocation.C === '' ? 0 : parseFloat(inputs.allocation.C) || 0,
+      S: inputs.allocation.S === '' ? 0 : parseFloat(inputs.allocation.S) || 0,
+      I: inputs.allocation.I === '' ? 0 : parseFloat(inputs.allocation.I) || 0
+    },
+    contributionType: inputs.contributionType,
+    currentTaxRate: inputs.currentTaxRate === '' ? 0 : parseFloat(inputs.currentTaxRate) || 0,
+    retirementTaxRate: inputs.retirementTaxRate === '' ? 0 : parseFloat(inputs.retirementTaxRate) || 0,
+    showComparison: inputs.showComparison
+  });
   
   // Results state
   const [results, setResults] = useState({
@@ -69,31 +89,14 @@ function TSPForecast() {
   // Validation state
   const [validationErrors, setValidationErrors] = useState({});
 
-  // Parse numeric values from string inputs
-  const numericInputs = useMemo(() => ({
-    currentBalance: parseFloat(inputs.currentBalance) || 0,
-    currentAge: parseFloat(inputs.currentAge) || 0,
-    retirementAge: parseFloat(inputs.retirementAge) || 0,
-    monthlyContributionPercent: parseFloat(inputs.monthlyContributionPercent) || 0,
-    annualSalary: parseFloat(inputs.annualSalary) || 0,
-    allocation: {
-      G: parseFloat(inputs.allocation.G) || 0,
-      F: parseFloat(inputs.allocation.F) || 0,
-      C: parseFloat(inputs.allocation.C) || 0,
-      S: parseFloat(inputs.allocation.S) || 0,
-      I: parseFloat(inputs.allocation.I) || 0
-    },
-    contributionType: inputs.contributionType,
-    currentTaxRate: parseFloat(inputs.currentTaxRate) || 0,
-    retirementTaxRate: parseFloat(inputs.retirementTaxRate) || 0,
-    showComparison: inputs.showComparison
-  }), [inputs]);
+
 
   // Load from scenario context
   useEffect(() => {
     if (currentScenario?.tsp) {
       const tsp = currentScenario.tsp;
-      setInputs({
+      // Only update inputs if the values are actually different to prevent loops
+      const newInputs = {
         currentBalance: String(tsp.currentBalance || 50000),
         currentAge: String(tsp.currentAge || 35),
         retirementAge: String(tsp.retirementAge || 62),
@@ -110,6 +113,20 @@ function TSPForecast() {
         currentTaxRate: String(tsp.currentTaxRate || 22),
         retirementTaxRate: String(tsp.retirementTaxRate || 15),
         showComparison: tsp.showComparison || false
+      };
+      
+      // Only update if different to prevent unnecessary re-renders
+      setInputs(prevInputs => {
+        const isDifferent = Object.keys(newInputs).some(key => {
+          if (key === 'allocation') {
+            return Object.keys(newInputs.allocation).some(fund => 
+              newInputs.allocation[fund] !== prevInputs.allocation[fund]
+            );
+          }
+          return newInputs[key] !== prevInputs[key];
+        });
+        
+        return isDifferent ? newInputs : prevInputs;
       });
     }
   }, [currentScenario]);
@@ -117,17 +134,21 @@ function TSPForecast() {
   // Save to scenario context when inputs change (debounced)
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (currentScenario) {
-        updateCurrentScenario({
-          tsp: numericInputs
-        });
+      if (currentScenario && Object.keys(inputs).length > 0) {
+        // Only update if we have actual input values
+        const hasValidInputs = inputs.currentAge && inputs.retirementAge;
+        if (hasValidInputs) {
+          updateCurrentScenario({
+            tsp: parseNumericInputs(inputs)
+          });
+        }
       }
-    }, 1000); // 1 second debounce
+    }, 1000); // Standard debounce
 
     return () => clearTimeout(timeoutId);
-  }, [numericInputs, currentScenario, updateCurrentScenario]);
+  }, [inputs, currentScenario, updateCurrentScenario]);
 
-  // Simple input change handler for freehand typing
+  // Store raw input values without any parsing or cleanup
   const handleInputChange = useCallback((field, value) => {
     setInputs(prev => ({
       ...prev,
@@ -135,7 +156,7 @@ function TSPForecast() {
     }));
   }, []);
 
-  // Allocation input change handler
+  // Store raw allocation values without any parsing or cleanup
   const handleAllocationChange = useCallback((fund, value) => {
     setInputs(prev => ({
       ...prev,
@@ -164,6 +185,7 @@ function TSPForecast() {
 
   // Auto-adjust allocation to 100% helper
   const autoAdjustAllocation = useCallback(() => {
+    const numericInputs = parseNumericInputs(inputs);
     const currentTotal = Object.values(numericInputs.allocation).reduce((sum, val) => sum + val, 0);
     if (currentTotal === 0) return;
 
@@ -178,20 +200,21 @@ function TSPForecast() {
       ...prev,
       allocation: adjustedAllocation
     }));
-  }, [numericInputs.allocation]);
+  }, [inputs]);
 
   // Validation function
   const validateInputs = useCallback(() => {
+    const numericInputs = parseNumericInputs(inputs);
     const errors = {};
     
     if (numericInputs.currentBalance < 0) {
       errors.currentBalance = 'Current balance cannot be negative';
     }
-    if (numericInputs.currentAge < 18 || numericInputs.currentAge > 80) {
-      errors.currentAge = 'Current age must be between 18 and 80';
+    if (numericInputs.currentAge < 18 || numericInputs.currentAge > 999) {
+      errors.currentAge = 'Current age must be between 18 and 999';
     }
-    if (numericInputs.retirementAge <= numericInputs.currentAge || numericInputs.retirementAge > 75) {
-      errors.retirementAge = 'Retirement age must be greater than current age and less than 75';
+    if (numericInputs.retirementAge <= numericInputs.currentAge || numericInputs.retirementAge > 999) {
+      errors.retirementAge = 'Retirement age must be greater than current age and less than 999';
     }
     if (numericInputs.monthlyContributionPercent < 0 || numericInputs.monthlyContributionPercent > 100) {
       errors.monthlyContributionPercent = 'Contribution percentage must be between 0 and 100';
@@ -207,12 +230,13 @@ function TSPForecast() {
 
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [numericInputs]);
+  }, [inputs]);
 
   // Calculate projections
   const calculateProjections = useCallback(() => {
     if (!validateInputs()) return;
 
+    const numericInputs = parseNumericInputs(inputs);
     const years = numericInputs.retirementAge - numericInputs.currentAge;
     const monthlyContribution = (numericInputs.annualSalary * numericInputs.monthlyContributionPercent / 100) / 12;
     
@@ -236,7 +260,9 @@ function TSPForecast() {
       monthlyContribution,
       weightedReturn,
       years,
-      'traditional'
+      'traditional',
+      numericInputs.currentAge,
+      numericInputs.retirementTaxRate
     );
 
     // Calculate Roth TSP  
@@ -245,20 +271,22 @@ function TSPForecast() {
       monthlyContribution * (1 - numericInputs.currentTaxRate / 100), // After-tax contribution
       weightedReturn,
       years,
-      'roth'
+      'roth',
+      numericInputs.currentAge,
+      numericInputs.retirementTaxRate
     );
 
     setResults({ traditional, roth });
-  }, [numericInputs, validateInputs]);
+  }, [inputs, validateInputs]);
 
   // TSP projection calculation helper
-  const calculateTSPProjection = useCallback((startBalance, monthlyContrib, annualReturn, years, type) => {
+  const calculateTSPProjection = useCallback((startBalance, monthlyContrib, annualReturn, years, type, currentAge, retirementTaxRate) => {
     let balance = startBalance;
     const yearlyData = [];
     let totalContributions = 0;
 
     for (let year = 0; year <= years; year++) {
-      const currentAge = numericInputs.currentAge + year;
+      const ageAtYear = currentAge + year;
       
       if (year > 0) {
         // Add monthly contributions for the year
@@ -272,12 +300,12 @@ function TSPForecast() {
       // Calculate after-tax value
       let afterTaxValue = balance;
       if (type === 'traditional') {
-        afterTaxValue = balance * (1 - numericInputs.retirementTaxRate / 100);
+        afterTaxValue = balance * (1 - retirementTaxRate / 100);
       }
       // Roth is already after-tax
 
       yearlyData.push({
-        year: currentAge,
+        year: ageAtYear,
         balance: balance,
         afterTaxValue: afterTaxValue,
         contributions: totalContributions
@@ -291,13 +319,13 @@ function TSPForecast() {
       yearlyData: yearlyData,
       afterTaxValue: yearlyData[yearlyData.length - 1]?.afterTaxValue || 0
     };
-  }, [numericInputs]);
+  }, []);
 
   // Calculate on input changes (debounced)
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       calculateProjections();
-    }, 500); // 500ms debounce
+    }, 300); // Shorter debounce for calculations
 
     return () => clearTimeout(timeoutId);
   }, [calculateProjections]);
@@ -413,6 +441,9 @@ function TSPForecast() {
     I: 0.06
   };
 
+  // Parse numeric inputs for rendering
+  const numericInputs = parseNumericInputs(inputs);
+
   return (
     <div className="animate-fade-in">
       <ScenarioManager />
@@ -447,14 +478,12 @@ function TSPForecast() {
                 <div>
                   <label className="label">Starting TSP Balance</label>
                   <input
-                    type="number"
+                    type="text"
                     value={getDisplayValue('currentBalance')}
                     onChange={(e) => handleInputChange('currentBalance', e.target.value)}
-                    onBlur={() => validateInputs()}
-                    className={`input-field w-full ${validationErrors.currentBalance ? 'border-red-500' : ''}`}
-                    placeholder="50,000"
-                    min="0"
-                    step="any"
+                    className="input-field w-full"
+                    placeholder="1000000"
+                    inputMode="decimal"
                   />
                   {validationErrors.currentBalance && (
                     <p className="text-red-500 text-xs mt-1">{validationErrors.currentBalance}</p>
@@ -466,15 +495,12 @@ function TSPForecast() {
                 <div>
                   <label className="label">Current Age</label>
                   <input
-                    type="number"
+                    type="text"
                     value={getDisplayValue('currentAge')}
                     onChange={(e) => handleInputChange('currentAge', e.target.value)}
-                    onBlur={() => validateInputs()}
-                    className={`input-field w-full ${validationErrors.currentAge ? 'border-red-500' : ''}`}
+                    className="input-field w-full"
                     placeholder="35"
-                    min="18"
-                    max="80"
-                    step="any"
+                    inputMode="numeric"
                   />
                   {validationErrors.currentAge && (
                     <p className="text-red-500 text-xs mt-1">{validationErrors.currentAge}</p>
@@ -486,15 +512,12 @@ function TSPForecast() {
                 <div>
                   <label className="label">Target Retirement Age</label>
                   <input
-                    type="number"
+                    type="text"
                     value={getDisplayValue('retirementAge')}
                     onChange={(e) => handleInputChange('retirementAge', e.target.value)}
-                    onBlur={() => validateInputs()}
-                    className={`input-field w-full ${validationErrors.retirementAge ? 'border-red-500' : ''}`}
+                    className="input-field w-full"
                     placeholder="62"
-                    min="50"
-                    max="75"
-                    step="any"
+                    inputMode="numeric"
                   />
                   {validationErrors.retirementAge && (
                     <p className="text-red-500 text-xs mt-1">{validationErrors.retirementAge}</p>
@@ -506,14 +529,12 @@ function TSPForecast() {
                 <div>
                   <label className="label">Annual Salary</label>
                   <input
-                    type="number"
+                    type="text"
                     value={getDisplayValue('annualSalary')}
                     onChange={(e) => handleInputChange('annualSalary', e.target.value)}
-                    onBlur={() => validateInputs()}
-                    className={`input-field w-full ${validationErrors.annualSalary ? 'border-red-500' : ''}`}
-                    placeholder="80,000"
-                    min="1"
-                    step="any"
+                    className="input-field w-full"
+                    placeholder="1000000"
+                    inputMode="decimal"
                   />
                   {validationErrors.annualSalary && (
                     <p className="text-red-500 text-xs mt-1">{validationErrors.annualSalary}</p>
@@ -569,15 +590,12 @@ function TSPForecast() {
               <div className="mb-4">
                 <label className="label">Monthly Contribution %</label>
                 <input
-                  type="number"
+                  type="text"
                   value={getDisplayValue('monthlyContributionPercent')}
                   onChange={(e) => handleInputChange('monthlyContributionPercent', e.target.value)}
-                  onBlur={() => validateInputs()}
-                  className={`input-field w-full ${validationErrors.monthlyContributionPercent ? 'border-red-500' : ''}`}
+                                        className="input-field w-full"
                   placeholder="10"
-                  min="0"
-                  max="100"
-                  step="any"
+                  inputMode="decimal"
                 />
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
                   Monthly contribution: ${((numericInputs.annualSalary * numericInputs.monthlyContributionPercent / 100) / 12).toLocaleString('en-US', { maximumFractionDigits: 0 })}
@@ -594,15 +612,12 @@ function TSPForecast() {
                   <div>
                     <label className="label">Current Tax Rate %</label>
                     <input
-                      type="number"
+                      type="text"
                       value={getDisplayValue('currentTaxRate')}
                       onChange={(e) => handleInputChange('currentTaxRate', e.target.value)}
-                      onBlur={() => validateInputs()}
-                      className={`input-field w-full ${validationErrors.currentTaxRate ? 'border-red-500' : ''}`}
+                      className="input-field w-full"
                       placeholder="22"
-                      min="0"
-                      max="50"
-                      step="any"
+                      inputMode="decimal"
                     />
                     {validationErrors.currentTaxRate && (
                       <p className="text-red-500 text-xs mt-1">{validationErrors.currentTaxRate}</p>
@@ -614,15 +629,12 @@ function TSPForecast() {
                   <div>
                     <label className="label">Retirement Tax Rate %</label>
                     <input
-                      type="number"
+                      type="text"
                       value={getDisplayValue('retirementTaxRate')}
                       onChange={(e) => handleInputChange('retirementTaxRate', e.target.value)}
-                      onBlur={() => validateInputs()}
-                      className={`input-field w-full ${validationErrors.retirementTaxRate ? 'border-red-500' : ''}`}
+                      className="input-field w-full"
                       placeholder="15"
-                      min="0"
-                      max="50"
-                      step="any"
+                      inputMode="decimal"
                     />
                     {validationErrors.retirementTaxRate && (
                       <p className="text-red-500 text-xs mt-1">{validationErrors.retirementTaxRate}</p>
@@ -650,14 +662,12 @@ function TSPForecast() {
                 <div key={fund} className="flex items-center space-x-4">
                   <div className="w-20 text-sm text-slate-600 dark:text-slate-400 font-medium">{fund} Fund</div>
                   <input
-                    type="number"
+                    type="text"
                     value={getAllocationDisplayValue(fund)}
                     onChange={(e) => handleAllocationChange(fund, e.target.value)}
                     className="input-field flex-1"
                     placeholder="0"
-                    min="0"
-                    max="100"
-                    step="any"
+                    inputMode="decimal"
                   />
                   <div className="w-12 text-sm text-slate-500 dark:text-slate-400">%</div>
                   <div className="w-12 text-xs text-slate-400 dark:text-slate-500">
