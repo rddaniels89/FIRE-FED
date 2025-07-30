@@ -42,6 +42,13 @@ export const ScenarioProvider = ({ children }) => {
       retirementAge: 62,
       currentAge: 42
     },
+    // FIRE-specific fields for FireFed upgrade
+    fire: {
+      desiredFireAge: 55,
+      monthlyFireIncomeGoal: 6000,
+      sideHustleIncome: 500,
+      spouseIncome: 4000
+    },
     summary: {
       monthlyExpenses: 4000
     }
@@ -53,9 +60,19 @@ export const ScenarioProvider = ({ children }) => {
     if (savedScenarios) {
       try {
         const parsed = JSON.parse(savedScenarios);
-        setScenarios(parsed);
-        if (parsed.length > 0) {
-          setCurrentScenario(parsed[0]);
+        if (parsed && parsed.length > 0) {
+          // Ensure each scenario has all required fields with defaults
+          const normalizedScenarios = parsed.map(scenario => ({
+            ...createDefaultScenario(scenario.name || 'Scenario'),
+            ...scenario
+          }));
+          setScenarios(normalizedScenarios);
+          setCurrentScenario(normalizedScenarios[0]);
+        } else {
+          // Create default scenario if array is empty
+          const defaultScenario = createDefaultScenario('Default Scenario');
+          setScenarios([defaultScenario]);
+          setCurrentScenario(defaultScenario);
         }
       } catch (error) {
         console.error('Error loading scenarios:', error);
@@ -75,7 +92,7 @@ export const ScenarioProvider = ({ children }) => {
 
   // Save scenarios to localStorage whenever they change
   useEffect(() => {
-    if (!isLoadingScenarios) {
+    if (!isLoadingScenarios && scenarios.length > 0) {
       localStorage.setItem('retirement-scenarios', JSON.stringify(scenarios));
     }
   }, [scenarios, isLoadingScenarios]);
@@ -97,7 +114,17 @@ export const ScenarioProvider = ({ children }) => {
   const updateCurrentScenario = (updates) => {
     if (!currentScenario) return;
     
-    const updatedScenario = { ...currentScenario, ...updates };
+    // Ensure we deep merge the updates properly
+    const updatedScenario = {
+      ...currentScenario,
+      ...updates,
+      // Ensure nested objects are properly merged
+      tsp: updates.tsp ? { ...currentScenario.tsp, ...updates.tsp } : currentScenario.tsp,
+      fers: updates.fers ? { ...currentScenario.fers, ...updates.fers } : currentScenario.fers,
+      fire: updates.fire ? { ...currentScenario.fire, ...updates.fire } : currentScenario.fire,
+      summary: updates.summary ? { ...currentScenario.summary, ...updates.summary } : currentScenario.summary
+    };
+    
     setCurrentScenario(updatedScenario);
     
     setScenarios(prev => 

@@ -2,10 +2,12 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react
 import { useState } from 'react';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { ScenarioProvider } from './contexts/ScenarioContext';
+import { AuthProvider } from './contexts/AuthContext';
 import HomePage from './components/HomePage';
 import TSPForecast from './components/TSPForecast';
 import FERSPensionCalc from './components/FERSPensionCalc';
 import SummaryDashboard from './components/SummaryDashboard';
+import ScenariosPage from './components/ScenariosPage';
 
 function Navigation() {
   const location = useLocation();
@@ -17,6 +19,7 @@ function Navigation() {
     { path: '/tsp-forecast', label: 'TSP Forecast', icon: '📈' },
     { path: '/fers-pension', label: 'FERS Pension', icon: '💰' },
     { path: '/summary', label: 'Summary', icon: '📊' },
+    { path: '/scenarios', label: 'Scenarios', icon: '💼' },
   ];
 
   return (
@@ -26,7 +29,7 @@ function Navigation() {
           <div className="flex items-center">
             <Link to="/" className="flex items-center space-x-3">
               <span className="text-2xl">🏛️</span>
-              <span className="text-xl font-bold navy-text dark:text-navy-300">Fed Retire Advisor</span>
+              <span className="text-xl font-bold navy-text dark:text-navy-300">🔥 FireFed</span>
             </Link>
           </div>
           
@@ -113,9 +116,10 @@ function Navigation() {
 
 function App() {
   return (
-    <ThemeProvider>
-      <ScenarioProvider>
-        <Router>
+    <AuthProvider>
+      <ThemeProvider>
+        <ScenarioProvider>
+          <Router>
           <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-200">
             <Navigation />
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -124,12 +128,14 @@ function App() {
                 <Route path="/tsp-forecast" element={<TSPForecast />} />
                 <Route path="/fers-pension" element={<FERSPensionCalc />} />
                 <Route path="/summary" element={<SummaryDashboard />} />
+                <Route path="/scenarios" element={<ScenariosPage />} />
               </Routes>
             </main>
           </div>
         </Router>
       </ScenarioProvider>
     </ThemeProvider>
+  </AuthProvider>
   );
 }
 

@@ -14,6 +14,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { useScenario } from '../contexts/ScenarioContext';
 import ScenarioManager from './ScenarioManager';
+import FIREGapCalculator from './FIREGapCalculator';
 
 ChartJS.register(
   CategoryScale,
@@ -598,6 +599,13 @@ function SummaryDashboard() {
           </div>
         </div>
       </div>
+
+      {/* 🔥 FIRE Gap Calculator - New FireFed Feature */}
+      <div className="section-divider"></div>
+      <FIREGapCalculator 
+        tspProjectedBalance={tspData.projectedBalance}
+        pensionMonthly={pensionData.monthlyPension}
+      />
 
       <div className="mt-8 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
         <div className="text-center">
