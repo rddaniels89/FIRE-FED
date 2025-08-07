@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -27,6 +27,10 @@ ChartJS.register(
 
 function TSPForecast() {
   const { currentScenario, updateCurrentScenario } = useScenario();
+  
+  // Flag to prevent loading from scenario while user is typing
+  const [isUserTyping, setIsUserTyping] = useState(false);
+  const typingTimeoutRef = useRef(null);
   
   // Main inputs state - using string values for controlled inputs
   const [inputs, setInputs] = useState({
@@ -89,47 +93,55 @@ function TSPForecast() {
   // Validation state
   const [validationErrors, setValidationErrors] = useState({});
 
-
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Load from scenario context
   useEffect(() => {
-    if (currentScenario?.tsp) {
-      const tsp = currentScenario.tsp;
-      // Only update inputs if the values are actually different to prevent loops
-      const newInputs = {
-        currentBalance: String(tsp.currentBalance || 50000),
-        currentAge: String(tsp.currentAge || 35),
-        retirementAge: String(tsp.retirementAge || 62),
-        monthlyContributionPercent: String(tsp.monthlyContributionPercent || 10),
-        annualSalary: String(tsp.annualSalary || 80000),
-        allocation: {
-          G: String(tsp.allocation?.G || 10),
-          F: String(tsp.allocation?.F || 20),
-          C: String(tsp.allocation?.C || 40),
-          S: String(tsp.allocation?.S || 20),
-          I: String(tsp.allocation?.I || 10)
-        },
-        contributionType: tsp.contributionType || 'traditional',
-        currentTaxRate: String(tsp.currentTaxRate || 22),
-        retirementTaxRate: String(tsp.retirementTaxRate || 15),
-        showComparison: tsp.showComparison || false
-      };
-      
-      // Only update if different to prevent unnecessary re-renders
-      setInputs(prevInputs => {
-        const isDifferent = Object.keys(newInputs).some(key => {
-          if (key === 'allocation') {
-            return Object.keys(newInputs.allocation).some(fund => 
-              newInputs.allocation[fund] !== prevInputs.allocation[fund]
-            );
-          }
-          return newInputs[key] !== prevInputs[key];
-        });
-        
-        return isDifferent ? newInputs : prevInputs;
+    // Don't load from scenario if user is currently typing
+    if (isUserTyping || !currentScenario?.tsp) return;
+    
+    const tsp = currentScenario.tsp;
+    // Only update inputs if the values are actually different to prevent loops
+    const newInputs = {
+      currentBalance: String(tsp.currentBalance || 50000),
+      currentAge: String(tsp.currentAge || 35),
+      retirementAge: String(tsp.retirementAge || 62),
+      monthlyContributionPercent: String(tsp.monthlyContributionPercent || 10),
+      annualSalary: String(tsp.annualSalary || 80000),
+      allocation: {
+        G: String(tsp.allocation?.G || 10),
+        F: String(tsp.allocation?.F || 20),
+        C: String(tsp.allocation?.C || 40),
+        S: String(tsp.allocation?.S || 20),
+        I: String(tsp.allocation?.I || 10)
+      },
+      contributionType: tsp.contributionType || 'traditional',
+      currentTaxRate: String(tsp.currentTaxRate || 22),
+      retirementTaxRate: String(tsp.retirementTaxRate || 15),
+      showComparison: tsp.showComparison || false
+    };
+    
+    // Only update if different to prevent unnecessary re-renders
+    setInputs(prevInputs => {
+      const isDifferent = Object.keys(newInputs).some(key => {
+        if (key === 'allocation') {
+          return Object.keys(newInputs.allocation).some(fund => 
+            newInputs.allocation[fund] !== prevInputs.allocation[fund]
+          );
+        }
+        return newInputs[key] !== prevInputs[key];
       });
-    }
-  }, [currentScenario]);
+      
+      return isDifferent ? newInputs : prevInputs;
+    });
+  }, [currentScenario, isUserTyping]);
 
   // Save to scenario context when inputs change (debounced)
   useEffect(() => {
@@ -150,14 +162,26 @@ function TSPForecast() {
 
   // Store raw input values without any parsing or cleanup
   const handleInputChange = useCallback((field, value) => {
+    setIsUserTyping(true);
     setInputs(prev => ({
       ...prev,
       [field]: value
     }));
+    
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    // Set new timeout to clear typing flag
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsUserTyping(false);
+    }, 1500);
   }, []);
 
   // Store raw allocation values without any parsing or cleanup
   const handleAllocationChange = useCallback((fund, value) => {
+    setIsUserTyping(true);
     setInputs(prev => ({
       ...prev,
       allocation: {
@@ -165,6 +189,16 @@ function TSPForecast() {
         [fund]: value
       }
     }));
+    
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    // Set new timeout to clear typing flag
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsUserTyping(false);
+    }, 1500);
   }, []);
 
   // Contribution type change handler
