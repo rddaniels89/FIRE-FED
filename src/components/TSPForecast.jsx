@@ -102,46 +102,38 @@ function TSPForecast() {
     };
   }, []);
 
-  // Load from scenario context
+  // Load from scenario context ONLY when the scenario changes (by id)
+  const lastScenarioIdRef = useRef(null);
   useEffect(() => {
-    // Don't load from scenario if user is currently typing
-    if (isUserTyping || !currentScenario?.tsp) return;
-    
+    const scenarioId = currentScenario?.id;
+    if (!scenarioId || !currentScenario?.tsp) return;
+
+    // Skip if this is the same scenario, to avoid clobbering in-progress edits
+    if (lastScenarioIdRef.current === scenarioId) return;
+    lastScenarioIdRef.current = scenarioId;
+
     const tsp = currentScenario.tsp;
-    // Only update inputs if the values are actually different to prevent loops
     const newInputs = {
-      currentBalance: String(tsp.currentBalance || 50000),
-      currentAge: String(tsp.currentAge || 35),
-      retirementAge: String(tsp.retirementAge || 62),
-      monthlyContributionPercent: String(tsp.monthlyContributionPercent || 10),
-      annualSalary: String(tsp.annualSalary || 80000),
+      currentBalance: String(tsp.currentBalance ?? 50000),
+      currentAge: String(tsp.currentAge ?? 35),
+      retirementAge: String(tsp.retirementAge ?? 62),
+      monthlyContributionPercent: String(tsp.monthlyContributionPercent ?? 10),
+      annualSalary: String(tsp.annualSalary ?? 80000),
       allocation: {
-        G: String(tsp.allocation?.G || 10),
-        F: String(tsp.allocation?.F || 20),
-        C: String(tsp.allocation?.C || 40),
-        S: String(tsp.allocation?.S || 20),
-        I: String(tsp.allocation?.I || 10)
+        G: String(tsp.allocation?.G ?? 10),
+        F: String(tsp.allocation?.F ?? 20),
+        C: String(tsp.allocation?.C ?? 40),
+        S: String(tsp.allocation?.S ?? 20),
+        I: String(tsp.allocation?.I ?? 10)
       },
-      contributionType: tsp.contributionType || 'traditional',
-      currentTaxRate: String(tsp.currentTaxRate || 22),
-      retirementTaxRate: String(tsp.retirementTaxRate || 15),
-      showComparison: tsp.showComparison || false
+      contributionType: tsp.contributionType ?? 'traditional',
+      currentTaxRate: String(tsp.currentTaxRate ?? 22),
+      retirementTaxRate: String(tsp.retirementTaxRate ?? 15),
+      showComparison: Boolean(tsp.showComparison)
     };
-    
-    // Only update if different to prevent unnecessary re-renders
-    setInputs(prevInputs => {
-      const isDifferent = Object.keys(newInputs).some(key => {
-        if (key === 'allocation') {
-          return Object.keys(newInputs.allocation).some(fund => 
-            newInputs.allocation[fund] !== prevInputs.allocation[fund]
-          );
-        }
-        return newInputs[key] !== prevInputs[key];
-      });
-      
-      return isDifferent ? newInputs : prevInputs;
-    });
-  }, [currentScenario, isUserTyping]);
+
+    setInputs(prevInputs => ({ ...prevInputs, ...newInputs }));
+  }, [currentScenario?.id]);
 
   // Save to scenario context when inputs change (debounced)
   useEffect(() => {
@@ -158,7 +150,7 @@ function TSPForecast() {
     }, 1000); // Standard debounce
 
     return () => clearTimeout(timeoutId);
-  }, [inputs, currentScenario, updateCurrentScenario]);
+  }, [inputs, updateCurrentScenario]);
 
   // Handle numeric input changes with validation
   const handleInputChange = useCallback((field, value) => {
