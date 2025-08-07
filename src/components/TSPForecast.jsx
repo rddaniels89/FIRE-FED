@@ -160,8 +160,39 @@ function TSPForecast() {
     return () => clearTimeout(timeoutId);
   }, [inputs, currentScenario, updateCurrentScenario]);
 
-  // Store raw input values without any parsing or cleanup
+  // Handle numeric input changes with validation
   const handleInputChange = useCallback((field, value) => {
+    // Define field validation rules
+    const fieldRules = {
+      currentAge: { type: 'integer', maxLength: 3 },
+      retirementAge: { type: 'integer', maxLength: 3 },
+      currentBalance: { type: 'decimal', maxLength: 12 },
+      annualSalary: { type: 'decimal', maxLength: 10 },
+      monthlyContributionPercent: { type: 'decimal', maxLength: 5 },
+      currentTaxRate: { type: 'decimal', maxLength: 5 },
+      retirementTaxRate: { type: 'decimal', maxLength: 5 }
+    };
+    
+    const rule = fieldRules[field];
+    if (rule) {
+      // Check max length
+      if (value.length > rule.maxLength) {
+        return; // Don't update if too long
+      }
+      
+      if (rule.type === 'integer') {
+        // Allow only digits for integer fields
+        if (value !== '' && !/^\d+$/.test(value)) {
+          return; // Don't update if input contains non-digits
+        }
+      } else if (rule.type === 'decimal') {
+        // Allow digits and one decimal point for decimal fields
+        if (value !== '' && !/^\d*\.?\d*$/.test(value)) {
+          return; // Don't update if input contains invalid characters
+        }
+      }
+    }
+    
     setIsUserTyping(true);
     setInputs(prev => ({
       ...prev,
@@ -179,8 +210,18 @@ function TSPForecast() {
     }, 1500);
   }, []);
 
-  // Store raw allocation values without any parsing or cleanup
+  // Handle allocation input changes with decimal validation
   const handleAllocationChange = useCallback((fund, value) => {
+    // Validate allocation percentages (max 3 digits + decimal)
+    if (value.length > 5) {
+      return; // Don't update if too long
+    }
+    
+    // Allow digits and one decimal point for percentages
+    if (value !== '' && !/^\d*\.?\d*$/.test(value)) {
+      return; // Don't update if input contains invalid characters
+    }
+    
     setIsUserTyping(true);
     setInputs(prev => ({
       ...prev,
