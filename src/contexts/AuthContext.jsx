@@ -79,9 +79,19 @@ export const AuthProvider = ({ children }) => {
   };
 
   const isProUser = () => {
-    // For now, all authenticated users are considered "pro"
-    // You can implement subscription logic here later
-    return isAuthenticated;
+    // Check if user has pro role/subscription
+    // This can be enhanced with Supabase user metadata or separate subscription table
+    if (!user) return false;
+    
+    // Check user metadata for pro subscription
+    const userMetadata = user.user_metadata || {};
+    const appMetadata = user.app_metadata || {};
+    
+    // Check for pro subscription in metadata
+    return userMetadata.subscription_plan === 'pro' || 
+           appMetadata.subscription_plan === 'pro' ||
+           userMetadata.role === 'pro' ||
+           appMetadata.role === 'pro';
   };
 
   const isPlanActive = () => {
@@ -131,23 +141,46 @@ export const AuthProvider = ({ children }) => {
   };
 
   const upgradeToPro = async () => {
-    // Mock upgrade - replace with real payment processing
-    setUser(prev => ({
-      ...prev,
-      isProUser: true,
-      subscription: {
-        plan: 'pro',
-        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
-        features: [
-          'scenario_comparison',
-          'advanced_analytics',
-          'pdf_export',
-          'priority_support',
-          'unlimited_scenarios'
-        ]
+    try {
+      if (isSupabaseAvailable && user) {
+        // Update user metadata in Supabase
+        const { error } = await supabase.auth.updateUser({
+          data: { 
+            subscription_plan: 'pro',
+            upgraded_at: new Date().toISOString()
+          }
+        });
+        
+        if (error) throw error;
+        
+        // Update local user state
+        setUser(prev => ({
+          ...prev,
+          user_metadata: {
+            ...prev.user_metadata,
+            subscription_plan: 'pro',
+            upgraded_at: new Date().toISOString()
+          }
+        }));
+      } else {
+        // Fallback for localStorage
+        const updatedUser = {
+          ...user,
+          user_metadata: {
+            ...user.user_metadata,
+            subscription_plan: 'pro',
+            upgraded_at: new Date().toISOString()
+          }
+        };
+        localStorage.setItem('auth-user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
       }
-    }));
-    return { success: true };
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Upgrade error:', error);
+      return { success: false, error: error.message };
+    }
   };
 
   const value = {

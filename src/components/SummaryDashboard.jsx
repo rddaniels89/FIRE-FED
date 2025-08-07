@@ -13,6 +13,7 @@ import {
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { useScenario } from '../contexts/ScenarioContext';
+import { useAuth } from '../contexts/AuthContext';
 import ScenarioManager from './ScenarioManager';
 import FIREGapCalculator from './FIREGapCalculator';
 
@@ -27,6 +28,7 @@ ChartJS.register(
 );
 
 function SummaryDashboard() {
+  const { user, isAuthenticated } = useAuth();
   const { currentScenario, updateCurrentScenario } = useScenario();
   
   const [tspData, setTspData] = useState({
@@ -322,22 +324,37 @@ function SummaryDashboard() {
             </p>
           </div>
           
-          <button
-            onClick={generatePDF}
-            disabled={isGeneratingPDF}
-            className="btn-primary flex items-center gap-2"
-          >
-            {isGeneratingPDF ? (
-              <>
-                <span className="animate-spin">⏳</span>
-                Generating...
-              </>
-            ) : (
-              <>
-                📄 Download PDF
-              </>
-            )}
-          </button>
+          {isAuthenticated ? (
+            <button
+              onClick={generatePDF}
+              disabled={isGeneratingPDF}
+              className="btn-primary flex items-center gap-2"
+            >
+              {isGeneratingPDF ? (
+                <>
+                  <span className="animate-spin">⏳</span>
+                  Generating...
+                </>
+              ) : (
+                <>
+                  📄 Download PDF
+                </>
+              )}
+            </button>
+          ) : (
+            <div className="relative group">
+              <button
+                disabled
+                className="btn-primary opacity-50 cursor-not-allowed flex items-center gap-2"
+                title="Please log in to export PDF"
+              >
+                🔒 Download PDF
+              </button>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap z-50">
+                🔒 Please log in to save or export your FIRE scenario.
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

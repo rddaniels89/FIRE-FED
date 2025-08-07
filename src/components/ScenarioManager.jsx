@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useScenario } from '../contexts/ScenarioContext';
+import { useAuth } from '../contexts/AuthContext';
 
 function ScenarioManager() {
+  const { user, isAuthenticated } = useAuth();
   const {
     scenarios,
     currentScenario,
@@ -150,13 +152,28 @@ function ScenarioManager() {
         </div>
 
         {/* Save New Scenario Button */}
-        <button
-          onClick={openSaveModal}
-          className="btn-secondary"
-          title="Save current inputs as a new scenario"
-        >
-          💾 Save New
-        </button>
+        {isAuthenticated ? (
+          <button
+            onClick={openSaveModal}
+            className="btn-secondary"
+            title="Save current inputs as a new scenario"
+          >
+            💾 Save New
+          </button>
+        ) : (
+          <div className="relative group">
+            <button
+              disabled
+              className="btn-secondary opacity-50 cursor-not-allowed"
+              title="Please log in to save scenarios"
+            >
+              🔒 Save New
+            </button>
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap z-50">
+              🔒 Please log in to save or export your FIRE scenario.
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Click outside to close dropdown */}

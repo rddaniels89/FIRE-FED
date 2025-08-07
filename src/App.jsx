@@ -9,6 +9,7 @@ import FERSPensionCalc from './components/FERSPensionCalc';
 import SummaryDashboard from './components/SummaryDashboard';
 import ScenariosPage from './components/ScenariosPage';
 import Auth from './components/Auth';
+import ProFeatures from './components/ProFeatures';
 
 function Navigation() {
   const location = useLocation();
@@ -22,6 +23,7 @@ function Navigation() {
     { path: '/fers-pension', label: 'FERS Pension', icon: '💰' },
     { path: '/summary', label: 'Summary', icon: '📊' },
     { path: '/scenarios', label: 'Scenarios', icon: '💼' },
+    { path: '/pro-features', label: 'Pro Features', icon: '🚀' },
   ];
 
   return (
@@ -60,7 +62,7 @@ function Navigation() {
             {isAuthenticated && (
               <div className="flex items-center space-x-3">
                 <span className="text-sm text-slate-600 dark:text-slate-300">
-                  Welcome, {user?.email || user?.user_metadata?.email}
+                  👋 Welcome, {user?.email || user?.user_metadata?.email}
                 </span>
                 <button
                   onClick={logout}
@@ -130,7 +132,7 @@ function Navigation() {
                 ))}
                 <div className="border-t border-slate-200 dark:border-slate-600 pt-2 mt-2">
                   <div className="px-3 py-2 text-sm text-slate-600 dark:text-slate-300">
-                    Welcome, {user?.email || user?.user_metadata?.email}
+                    👋 Welcome, {user?.email || user?.user_metadata?.email}
                   </div>
                   <button
                     onClick={() => {
@@ -184,6 +186,7 @@ function AppContent() {
           <Route path="/fers-pension" element={<FERSPensionCalc />} />
           <Route path="/summary" element={<SummaryDashboard />} />
           <Route path="/scenarios" element={<ScenariosPage />} />
+          <Route path="/pro-features" element={<ProFeatures />} />
         </Routes>
       </main>
     </div>
