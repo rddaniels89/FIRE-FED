@@ -39,8 +39,8 @@ test.describe('Smoke: core flows', () => {
   test('Summary shows both desired and projected FIRE ages; PDF export triggers download', async ({ page }) => {
     await page.goto('/summary');
 
-    await expect(page.getByText('Desired FIRE Age')).toBeVisible();
-    await expect(page.getByText('Projected FIRE Age')).toBeVisible();
+    await expect(page.getByText('Desired FIRE Age', { exact: true })).toBeVisible();
+    await expect(page.getByText('Projected FIRE Age', { exact: true })).toBeVisible();
 
     // With VITE_BYPASS_PRO enabled via Playwright config, PDF export should be available.
     const pdfButton = page.getByRole('button', { name: /Download PDF/i });

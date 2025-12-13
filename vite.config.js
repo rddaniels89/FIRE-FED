@@ -24,5 +24,11 @@ export default defineConfig({
     globals: true,
     restoreMocks: true,
     clearMocks: true,
+    exclude: [
+      'tests/e2e/**',
+      'playwright-report/**',
+      'test-results/**',
+      'node_modules/**',
+    ],
   },
 })
