@@ -22,21 +22,9 @@ ALTER TABLE waitlist ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Anyone can join waitlist" ON waitlist
   FOR INSERT WITH CHECK (true);
 
--- Create policy to allow reading own email (optional - for confirmation)
-CREATE POLICY "Users can view their own waitlist entry" ON waitlist
-  FOR SELECT USING (true);
-
--- Optional: Create a view for admin dashboard (if needed later)
-CREATE VIEW waitlist_stats AS
-SELECT 
-  COUNT(*) as total_signups,
-  COUNT(CASE WHEN submitted_at >= NOW() - INTERVAL '24 hours' THEN 1 END) as signups_last_24h,
-  COUNT(CASE WHEN submitted_at >= NOW() - INTERVAL '7 days' THEN 1 END) as signups_last_week,
-  DATE_TRUNC('day', submitted_at) as signup_date,
-  COUNT(*) as daily_signups
-FROM waitlist
-GROUP BY DATE_TRUNC('day', submitted_at)
-ORDER BY signup_date DESC;
+-- Security note:
+-- Do NOT add a public SELECT policy unless you explicitly want anyone to read the full waitlist.
+-- Use Supabase service-role access (server-side) for admin reporting.
 
 COMMENT ON TABLE waitlist IS 'Stores email addresses for Pro features waitlist';
 COMMENT ON COLUMN waitlist.email IS 'User email address for Pro features notifications';

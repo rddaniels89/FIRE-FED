@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useScenario } from '../contexts/ScenarioContext';
 import { useAuth } from '../contexts/AuthContext';
+import { FEATURES, hasEntitlement } from '../lib/entitlements';
 
 /**
  * ScenariosPage Component - Core MVP feature for FireFed SaaS
@@ -24,7 +25,9 @@ function ScenariosPage() {
   const [renameValue, setRenameValue] = useState('');
   
   // Pro feature gating using AuthContext
-  const { isProUser, hasFeature, upgradeToPro } = useAuth();
+  const { entitlements } = useAuth();
+  const canCompare = hasEntitlement(entitlements, FEATURES.SCENARIO_COMPARE);
+  const navigate = useNavigate();
 
   const handleScenarioSelect = (scenarioId) => {
     setSelectedScenarios(prev => {
@@ -91,7 +94,7 @@ function ScenariosPage() {
         
         {/* Pro Feature Badge */}
         <div className="flex items-center space-x-4 mt-4 md:mt-0">
-          {isProUser && (
+          {entitlements?.isPro && (
             <span className="px-3 py-1 bg-gold-100 dark:bg-gold-900 text-gold-800 dark:text-gold-200 
                            text-xs font-semibold rounded-full border border-gold-200 dark:border-gold-700">
               ✨ PRO FEATURES
@@ -136,10 +139,17 @@ function ScenariosPage() {
             </div>
             <button 
               className="btn-primary bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-600 hover:to-gold-700"
-              disabled={!isProUser}
-              title={!isProUser ? "Pro feature - upgrade to compare scenarios" : "Compare selected scenarios"}
+              disabled={!canCompare}
+              title={!canCompare ? "Pro feature - join the waitlist to compare scenarios" : "Compare selected scenarios"}
+              onClick={() => {
+                if (!canCompare) {
+                  navigate('/pro-features', { state: { reason: 'compare_pro' } });
+                  return;
+                }
+                navigate('/scenarios/compare', { state: { scenarioIds: selectedScenarios } });
+              }}
             >
-              {isProUser ? '📊 Compare Scenarios' : '🔒 Pro Feature'}
+              {canCompare ? '📊 Compare Scenarios' : '🔒 Pro Feature'}
             </button>
           </div>
         </div>
@@ -270,7 +280,12 @@ function ScenariosPage() {
                       </button>
                     )}
                     <button
-                      onClick={() => duplicateScenario(scenario.id)}
+                      onClick={async () => {
+                        const result = await duplicateScenario(scenario.id);
+                        if (result?.success === false && result?.error?.code === 'SCENARIO_LIMIT') {
+                          navigate('/pro-features', { state: { reason: 'scenario_limit', limit: result.error.scenarioLimit } });
+                        }
+                      }}
                       className="btn-secondary text-sm"
                       title="Duplicate scenario"
                     >
@@ -301,16 +316,19 @@ function ScenariosPage() {
       </div>
 
       {/* Pro Feature Callout */}
-      {!isProUser && (
+      {!entitlements?.isPro && (
         <div className="mt-8 card p-6 text-center bg-gradient-to-r from-gold-50 to-navy-50 dark:from-gold-900/20 dark:to-navy-900/20 
                         border border-gold-200 dark:border-gold-700">
           <h3 className="text-xl font-semibold navy-text mb-2">🔥 Unlock FireFed Pro</h3>
           <p className="text-slate-600 dark:text-slate-400 mb-4">
             Get advanced scenario comparison, Supabase sync, and premium retirement planning tools
           </p>
-          <button className="btn-primary bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-600 hover:to-gold-700">
-            ⚡ Upgrade to Pro
-          </button>
+          <Link
+            to="/pro-features"
+            className="btn-primary bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-600 hover:to-gold-700 inline-flex items-center justify-center"
+          >
+            ⭐ Join Pro Waitlist
+          </Link>
         </div>
       )}
     </div>

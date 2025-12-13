@@ -10,12 +10,14 @@ import {
   Legend,
   ArcElement
 } from 'chart.js';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { useScenario } from '../contexts/ScenarioContext';
 import { useAuth } from '../contexts/AuthContext';
 import ScenarioManager from './ScenarioManager';
 import FIREGapCalculator from './FIREGapCalculator';
+import { calculateTspTraditionalVsRoth } from '../lib/calculations/tsp';
+import { calculateFersResults } from '../lib/calculations/fers';
+import { FEATURES, hasEntitlement } from '../lib/entitlements';
+import { trackEvent } from '../lib/telemetry';
 
 ChartJS.register(
   CategoryScale,
@@ -28,13 +30,15 @@ ChartJS.register(
 );
 
 function SummaryDashboard() {
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated, entitlements } = useAuth();
   const { currentScenario, updateCurrentScenario } = useScenario();
+  const canExportPdf = hasEntitlement(entitlements, FEATURES.PDF_EXPORT);
   
   const [tspData, setTspData] = useState({
     projectedBalance: 800000,
     totalContributions: 300000,
     totalGrowth: 500000,
+    yearlyData: [],
     retirementAge: 62,
     currentAge: 35
   });
@@ -44,14 +48,17 @@ function SummaryDashboard() {
     monthlyPension: 2083,
     lifetimePension: 575000,
     yearsOfService: 20,
-    high3Salary: 85000
+    high3Salary: 85000,
+    retirementAge: 62
   });
 
   const [fireData, setFireData] = useState({
     monthlyExpenses: 4000,
-    fireAge: 0,
+    desiredFireAge: 55,
+    projectedFireAge: 0,
     fireMessage: '',
-    totalNetWorth: 0
+    totalNetWorth: 0,
+    fireGoalMonthly: 0
   });
 
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -63,29 +70,25 @@ function SummaryDashboard() {
       // Load TSP data from scenario
       if (currentScenario.tsp) {
         const tspScenario = currentScenario.tsp;
-        const yearsToRetirement = tspScenario.retirementAge - tspScenario.currentAge;
-        const monthlyContribution = (tspScenario.annualSalary * tspScenario.monthlyContributionPercent / 100) / 12;
-        const weightedReturn = Object.keys(tspScenario.allocation).reduce((acc, fund) => {
-          const fundReturns = { G: 0.02, F: 0.04, C: 0.07, S: 0.08, I: 0.06 };
-          return acc + (tspScenario.allocation[fund] / 100) * fundReturns[fund];
-        }, 0);
-        
-        const monthlyReturn = weightedReturn / 12;
-        let balance = tspScenario.currentBalance;
-        let totalContributions = 0;
-        
-        for (let year = 0; year < yearsToRetirement; year++) {
-          for (let month = 0; month < 12; month++) {
-            balance += monthlyContribution;
-            totalContributions += monthlyContribution;
-            balance = balance * (1 + monthlyReturn);
-          }
-        }
-        
+
+        const { traditional, roth } = calculateTspTraditionalVsRoth({
+          currentBalance: tspScenario.currentBalance,
+          annualSalary: tspScenario.annualSalary,
+          monthlyContributionPercent: tspScenario.monthlyContributionPercent,
+          currentAge: tspScenario.currentAge,
+          retirementAge: tspScenario.retirementAge,
+          allocation: tspScenario.allocation,
+          currentTaxRate: tspScenario.currentTaxRate ?? 22,
+          retirementTaxRate: tspScenario.retirementTaxRate ?? 15,
+        });
+
+        const selected = tspScenario.contributionType === 'roth' ? roth : traditional;
+
         setTspData({
-          projectedBalance: Math.round(balance),
-          totalContributions: Math.round(totalContributions),
-          totalGrowth: Math.round(balance - tspScenario.currentBalance - totalContributions),
+          projectedBalance: Math.round(selected.projectedBalance),
+          totalContributions: Math.round(selected.totalContributions),
+          totalGrowth: Math.round(selected.totalGrowth),
+          yearlyData: selected.yearlyData || [],
           retirementAge: tspScenario.retirementAge,
           currentAge: tspScenario.currentAge
         });
@@ -94,27 +97,25 @@ function SummaryDashboard() {
       // Load FERS data from scenario
       if (currentScenario.fers) {
         const fersScenario = currentScenario.fers;
-        const totalYears = fersScenario.yearsOfService + (fersScenario.monthsOfService / 12);
-        const additionalYears = Math.max(0, fersScenario.retirementAge - fersScenario.currentAge);
-        const finalYears = totalYears + additionalYears;
-        
-        let multiplier = 0.01;
-        if (fersScenario.retirementAge >= 62 && finalYears >= 20) {
-          multiplier = 0.011;
-        }
-        
-        const annualPension = fersScenario.high3Salary * finalYears * multiplier;
-        const monthlyPension = annualPension / 12;
-        const lifeExpectancy = 85;
-        const yearsInRetirement = Math.max(0, lifeExpectancy - fersScenario.retirementAge);
-        const lifetimePension = annualPension * yearsInRetirement;
-        
+        const fers = calculateFersResults({
+          yearsOfService: fersScenario.yearsOfService,
+          monthsOfService: fersScenario.monthsOfService,
+          high3Salary: fersScenario.high3Salary,
+          currentAge: fersScenario.currentAge,
+          retirementAge: fersScenario.retirementAge,
+          showComparison: false,
+          privateJobSalary: fersScenario.privateJobSalary ?? 0,
+          privateJobYears: fersScenario.privateJobYears ?? 0,
+          includeFutureService: true,
+        });
+
         setPensionData({
-          annualPension: Math.round(annualPension),
-          monthlyPension: Math.round(monthlyPension),
-          lifetimePension: Math.round(lifetimePension),
-          yearsOfService: finalYears,
-          high3Salary: fersScenario.high3Salary
+          annualPension: Math.round(fers.stayFed.annualPension),
+          monthlyPension: Math.round(fers.stayFed.monthlyPension),
+          lifetimePension: Math.round(fers.stayFed.lifetimePension),
+          yearsOfService: Math.round((fers.projectedYears ?? fers.totalYears) * 10) / 10,
+          high3Salary: fersScenario.high3Salary,
+          retirementAge: fersScenario.retirementAge
         });
       }
       
@@ -123,6 +124,15 @@ function SummaryDashboard() {
         setFireData(prev => ({
           ...prev,
           monthlyExpenses: currentScenario.summary.monthlyExpenses || 4000
+        }));
+      }
+
+      // Load FIRE goal inputs from scenario (user-configured FIRE age, etc.)
+      if (currentScenario.fire) {
+        setFireData(prev => ({
+          ...prev,
+          desiredFireAge: currentScenario.fire.desiredFireAge || 55,
+          fireGoalMonthly: currentScenario.fire.monthlyFireIncomeGoal || 0
         }));
       }
     }
@@ -139,34 +149,61 @@ function SummaryDashboard() {
     }
   }, [fireData.monthlyExpenses, currentScenario, updateCurrentScenario]);
 
-  const calculateFireAge = () => {
-    const annualExpenses = fireData.monthlyExpenses * 12;
-    const fireNumber = annualExpenses * 25; // 4% withdrawal rule
-    
-    const currentAge = tspData.currentAge;
-    const yearsToFire = Math.log(fireNumber / 50000) / Math.log(1.07); // Assuming 7% growth
-    const fireAge = Math.max(currentAge, currentAge + yearsToFire);
-    
+  const calculateFireProjection = () => {
     const totalNetWorth = tspData.projectedBalance + pensionData.lifetimePension;
-    
+
+    // Use the user's FIRE goal if provided; otherwise fall back to monthly expenses as a proxy.
+    const fireGoalMonthly =
+      (currentScenario?.fire?.monthlyFireIncomeGoal ?? 0) > 0
+        ? currentScenario.fire.monthlyFireIncomeGoal
+        : fireData.monthlyExpenses;
+
+    const sideHustleIncome = currentScenario?.fire?.sideHustleIncome ?? 0;
+    const spouseIncome = currentScenario?.fire?.spouseIncome ?? 0;
+
+    const pensionStartAge = currentScenario?.fers?.retirementAge ?? pensionData.retirementAge ?? tspData.retirementAge;
+    const pensionMonthly = pensionData.monthlyPension || 0;
+
+    // Find first age where projected passive income meets FIRE goal.
+    let projectedFireAge = 0;
+    const series = Array.isArray(tspData.yearlyData) ? tspData.yearlyData : [];
+    for (const point of series) {
+      const age = Number(point.year ?? 0);
+      const balance = Number(point.balance ?? 0);
+      if (!age) continue;
+
+      const tspMonthlyWithdrawal = balance * 0.04 / 12; // 4% SWR assumption
+      const pensionThisAge = age >= pensionStartAge ? pensionMonthly : 0;
+      const totalMonthlyIncome = tspMonthlyWithdrawal + pensionThisAge + sideHustleIncome + spouseIncome;
+
+      if (totalMonthlyIncome >= fireGoalMonthly) {
+        projectedFireAge = Math.round(age);
+        break;
+      }
+    }
+
     let fireMessage = '';
-    if (fireAge <= tspData.retirementAge) {
-      fireMessage = `You may reach FIRE at age ${Math.round(fireAge)} if spending stays at $${fireData.monthlyExpenses.toLocaleString()}/month.`;
+    if (projectedFireAge > 0) {
+      const isBeforeRetirement = projectedFireAge <= tspData.retirementAge;
+      fireMessage = isBeforeRetirement
+        ? `Projected to reach FIRE at age ${projectedFireAge} given your current plan and income goal of $${Number(fireGoalMonthly).toLocaleString()}/month.`
+        : `Projected to reach FIRE after your planned retirement age (age ${projectedFireAge}). Consider reducing expenses or increasing savings/income.`;
     } else {
-      fireMessage = `Based on current projections, FIRE would be achieved after your planned retirement age.`;
+      fireMessage = 'Projected FIRE age not available with current inputs.';
     }
 
     setFireData(prev => ({
       ...prev,
-      fireAge: Math.round(fireAge),
-      fireMessage: fireMessage,
-      totalNetWorth: totalNetWorth
+      projectedFireAge,
+      fireMessage,
+      totalNetWorth,
+      fireGoalMonthly
     }));
   };
 
   useEffect(() => {
-    calculateFireAge();
-  }, [tspData, pensionData, fireData.monthlyExpenses]);
+    calculateFireProjection();
+  }, [tspData, pensionData, fireData.monthlyExpenses, currentScenario?.fire, currentScenario?.fers]);
 
   const handleExpenseChange = (value) => {
     setFireData(prev => ({
@@ -258,8 +295,14 @@ function SummaryDashboard() {
     if (!summaryRef.current) return;
     
     setIsGeneratingPDF(true);
+    trackEvent('pdf_export_started', {});
     
     try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ]);
+
       const canvas = await html2canvas(summaryRef.current, {
         scale: 2,
         useCORS: true,
@@ -304,6 +347,7 @@ function SummaryDashboard() {
       
     } catch (error) {
       console.error('Error generating PDF:', error);
+      trackEvent('pdf_export_failed', { message: error?.message || 'unknown' });
       alert('Error generating PDF. Please try again.');
     } finally {
       setIsGeneratingPDF(false);
@@ -324,7 +368,7 @@ function SummaryDashboard() {
             </p>
           </div>
           
-          {isAuthenticated ? (
+          {canExportPdf ? (
             <button
               onClick={generatePDF}
               disabled={isGeneratingPDF}
@@ -346,12 +390,12 @@ function SummaryDashboard() {
               <button
                 disabled
                 className="btn-primary opacity-50 cursor-not-allowed flex items-center gap-2"
-                title="Please log in to export PDF"
+                title={!isAuthenticated ? "Please log in to export PDF" : "Pro feature - join the waitlist to export PDF"}
               >
                 🔒 Download PDF
               </button>
               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap z-50">
-                🔒 Please log in to save or export your FIRE scenario.
+                {!isAuthenticated ? '🔒 Please log in to save or export your FIRE scenario.' : '🔒 PDF export is a Pro feature. Join the waitlist in Pro Features.'}
               </div>
             </div>
           )}
@@ -373,10 +417,20 @@ function SummaryDashboard() {
             <div className="text-sm text-slate-500 dark:text-slate-400">Annual Retirement Income</div>
           </div>
           <div className="card p-6 text-center">
-            <div className="text-3xl font-bold text-slate-600 dark:text-slate-400 mb-2">
-              {fireData.fireAge}
+            <div className="grid grid-cols-2 gap-4 items-start">
+              <div>
+                <div className="text-3xl font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {fireData.desiredFireAge}
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">Desired FIRE Age</div>
+              </div>
+              <div className="rounded-lg border border-gold-200 dark:border-gold-700 bg-gold-50 dark:bg-gold-900/20 p-2">
+                <div className="text-3xl font-bold text-gold-700 dark:text-gold-300 mb-1">
+                  {fireData.projectedFireAge || '—'}
+                </div>
+                <div className="text-xs font-semibold text-gold-700 dark:text-gold-300">Projected FIRE Age</div>
+              </div>
             </div>
-            <div className="text-sm text-slate-500 dark:text-slate-400">FIRE Age</div>
           </div>
           <div className="card p-6 text-center">
             <div className="text-3xl font-bold text-slate-600 dark:text-slate-400 mb-2">
@@ -434,7 +488,7 @@ function SummaryDashboard() {
             })()}
 
             {(() => {
-              const fireAchievable = fireData.fireAge <= tspData.retirementAge;
+              const fireAchievable = (fireData.projectedFireAge || 0) > 0 && fireData.projectedFireAge <= tspData.retirementAge;
               return (
                 <div className={`p-4 rounded-lg border ${
                   fireAchievable ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700' :
@@ -447,7 +501,7 @@ function SummaryDashboard() {
                   </div>
                   <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                     {fireAchievable ? 
-                     `Great news! You may achieve FIRE by age ${fireData.fireAge}, before your planned retirement.` :
+                     `Great news! You may achieve FIRE by age ${fireData.projectedFireAge}, before your planned retirement.` :
                      'FIRE would be achieved after retirement age. Consider reducing expenses or increasing savings rate.'}
                   </div>
                 </div>
@@ -512,22 +566,22 @@ function SummaryDashboard() {
                     className="input-field w-full"
                     placeholder="4,000"
                   />
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                     Annual expenses: ${(fireData.monthlyExpenses * 12).toLocaleString()}
                   </p>
                 </div>
                 
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <p className="text-slate-700">
+                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <p className="text-slate-800 dark:text-slate-200">
                     <strong>FIRE Number:</strong> ${(fireData.monthlyExpenses * 12 * 25).toLocaleString()}
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                     Based on 4% withdrawal rule (25x annual expenses)
                   </p>
                 </div>
                 
-                <div className="p-4 bg-navy-50 rounded-lg border border-navy-200">
-                  <p className="text-slate-700">
+                <div className="p-4 bg-navy-50 dark:bg-navy-900/20 rounded-lg border border-navy-200 dark:border-navy-700">
+                  <p className="text-slate-800 dark:text-slate-200">
                     {fireData.fireMessage}
                   </p>
                 </div>

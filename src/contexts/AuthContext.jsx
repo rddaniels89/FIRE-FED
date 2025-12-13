@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase, isSupabaseAvailable } from '../supabaseClient';
+import { getEntitlements, hasEntitlement } from '../lib/entitlements';
 
 /**
  * AuthContext - Authentication context for FireFed SaaS with Supabase integration
@@ -21,11 +22,29 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Never allow bypass in production builds.
+  const bypassAuth = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true';
+  const bypassPro = import.meta.env.DEV && import.meta.env.VITE_BYPASS_PRO === 'true';
 
   // Check for existing session on mount
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        // Dev-only bypass to allow viewing the full UI without signing in
+        if (bypassAuth) {
+          const mockUser = {
+            id: 'dev-bypass',
+            email: 'dev@local',
+            user_metadata: {
+              email: 'dev@local',
+              ...(bypassPro ? { subscription_plan: 'pro' } : {}),
+            },
+          };
+          setUser(mockUser);
+          setIsAuthenticated(true);
+          return;
+        }
+
         if (isSupabaseAvailable) {
           // Check for existing Supabase session
           const { data: { session } } = await supabase.auth.getSession();
@@ -52,7 +71,7 @@ export const AuthProvider = ({ children }) => {
     initializeAuth();
 
     // Set up auth state listener for Supabase
-    if (isSupabaseAvailable) {
+    if (!bypassAuth && isSupabaseAvailable) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (event, session) => {
           if (session?.user) {
@@ -70,14 +89,6 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // Helper functions for feature gating
-  const hasFeature = (feature) => {
-    // For now, all authenticated users have access to basic features
-    // You can implement subscription logic here later
-    const basicFeatures = ['scenario_comparison', 'pdf_export'];
-    return isAuthenticated && basicFeatures.includes(feature);
-  };
-
   const isProUser = () => {
     // Check if user has pro role/subscription
     // This can be enhanced with Supabase user metadata or separate subscription table
@@ -92,6 +103,13 @@ export const AuthProvider = ({ children }) => {
            appMetadata.subscription_plan === 'pro' ||
            userMetadata.role === 'pro' ||
            appMetadata.role === 'pro';
+  };
+
+  // Helper functions for feature gating
+  const entitlements = getEntitlements({ isAuthenticated, isProUser: isProUser() });
+
+  const hasFeature = (feature) => {
+    return hasEntitlement(entitlements, feature);
   };
 
   const isPlanActive = () => {
@@ -188,6 +206,7 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated,
     loading,
     isProUser: isProUser(),
+    entitlements,
     hasFeature,
     isPlanActive: isPlanActive(),
     login,

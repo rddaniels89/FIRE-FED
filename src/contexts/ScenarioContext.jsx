@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase, isSupabaseAvailable } from '../supabaseClient';
 import { useAuth } from './AuthContext';
+import { DEFAULT_FREE_SCENARIO_LIMIT } from '../lib/entitlements';
+import { trackEvent } from '../lib/telemetry';
 
 const ScenarioContext = createContext();
 
@@ -13,10 +15,14 @@ export const useScenario = () => {
 };
 
 export const ScenarioProvider = ({ children }) => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, entitlements } = useAuth();
   const [scenarios, setScenarios] = useState([]);
   const [currentScenario, setCurrentScenario] = useState(null);
   const [isLoadingScenarios, setIsLoadingScenarios] = useState(true);
+  const [lastScenarioError, setLastScenarioError] = useState(null);
+
+  const scenarioLimit = entitlements?.scenarioLimit ?? DEFAULT_FREE_SCENARIO_LIMIT;
+  const isScenarioLimitReached = Number.isFinite(scenarioLimit) ? scenarios.length >= scenarioLimit : false;
 
   // Default scenario structure
   const createDefaultScenario = (name = 'New Scenario') => ({
@@ -231,6 +237,15 @@ export const ScenarioProvider = ({ children }) => {
   };
 
   const saveScenario = async (name, data) => {
+    setLastScenarioError(null);
+
+    if (isScenarioLimitReached) {
+      const error = { code: 'SCENARIO_LIMIT', scenarioLimit };
+      setLastScenarioError(error);
+      trackEvent('scenario_limit_hit', { limit: scenarioLimit });
+      return { success: false, error };
+    }
+
     const scenario = {
       ...createDefaultScenario(name),
       ...data,
@@ -250,6 +265,7 @@ export const ScenarioProvider = ({ children }) => {
     
     setScenarios(prev => [...prev, scenario]);
     setCurrentScenario(scenario);
+    trackEvent('scenario_created', { count: scenarios.length + 1 });
     
     // Fallback to localStorage if Supabase not available
     if (!isSupabaseAvailable) {
@@ -348,6 +364,15 @@ export const ScenarioProvider = ({ children }) => {
   };
 
   const duplicateScenario = async (id) => {
+    setLastScenarioError(null);
+
+    if (isScenarioLimitReached) {
+      const error = { code: 'SCENARIO_LIMIT', scenarioLimit };
+      setLastScenarioError(error);
+      trackEvent('scenario_limit_hit', { limit: scenarioLimit });
+      return { success: false, error };
+    }
+
     const scenario = scenarios.find(s => s.id === id);
     if (scenario) {
       const duplicated = {
@@ -381,6 +406,9 @@ export const ScenarioProvider = ({ children }) => {
     scenarios,
     currentScenario,
     isLoadingScenarios,
+    scenarioLimit,
+    isScenarioLimitReached,
+    lastScenarioError,
     saveScenario,
     updateCurrentScenario,
     deleteScenario,

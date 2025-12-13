@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useScenario } from '../contexts/ScenarioContext';
+import { calculateFireGap } from '../lib/calculations/fire';
 
 /**
  * FIREGapCalculator Component - Core MVP feature for FireFed SaaS
@@ -21,37 +22,18 @@ function FIREGapCalculator({ tspProjectedBalance, pensionMonthly }) {
   useEffect(() => {
     if (!currentScenario?.fire) return;
 
-    const fire = currentScenario.fire;
-    
-    // Calculate TSP withdrawal using 4% rule (monthly)
-    const tspMonthlyWithdrawal = (tspProjectedBalance || 0) * 0.04 / 12;
-    
-    // Total projected passive income
-    const totalPassiveIncome = 
-      tspMonthlyWithdrawal + 
-      (pensionMonthly || 0) + 
-      (fire.sideHustleIncome || 0) + 
-      (fire.spouseIncome || 0);
-
-    const fireIncomeGoal = fire.monthlyFireIncomeGoal || 0;
-    const monthlyGap = totalPassiveIncome - fireIncomeGoal;
-    const isFireReady = monthlyGap >= 0;
-    
-    // Determine confidence level based on surplus/shortfall percentage
-    let confidenceLevel = 'low';
-    if (isFireReady) {
-      const surplusPercentage = (monthlyGap / fireIncomeGoal) * 100;
-      if (surplusPercentage >= 25) confidenceLevel = 'high';
-      else if (surplusPercentage >= 10) confidenceLevel = 'medium';
-      else confidenceLevel = 'low';
-    }
+    const gap = calculateFireGap({
+      tspProjectedBalance,
+      pensionMonthly,
+      fire: currentScenario.fire
+    });
 
     setGapAnalysis({
-      totalPassiveIncome,
-      fireIncomeGoal,
-      monthlyGap,
-      isFireReady,
-      confidenceLevel
+      totalPassiveIncome: gap.totalPassiveIncome,
+      fireIncomeGoal: gap.fireIncomeGoal,
+      monthlyGap: gap.monthlyGap,
+      isFireReady: gap.isFireReady,
+      confidenceLevel: gap.confidenceLevel
     });
   }, [currentScenario?.fire, tspProjectedBalance, pensionMonthly]);
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase, isSupabaseAvailable } from '../supabaseClient'
+import { trackEvent } from '../lib/telemetry'
 
 const Auth = ({ onAuthSuccess }) => {
   const [loading, setLoading] = useState(false)
@@ -37,8 +38,10 @@ const Auth = ({ onAuthSuccess }) => {
         if (result.error) throw result.error
         if (result.data?.user && !result.data.user.email_confirmed_at) {
           setMessage('Check your email for the confirmation link!')
+          trackEvent('signup_completed', { email_domain: (email || '').split('@')[1] || null })
         } else {
           setMessage('Account created successfully!')
+          trackEvent('signup_completed', { email_domain: (email || '').split('@')[1] || null })
           onAuthSuccess?.(result.data.user)
         }
       } else {
@@ -48,6 +51,7 @@ const Auth = ({ onAuthSuccess }) => {
         })
         if (result.error) throw result.error
         setMessage('Signed in successfully!')
+        trackEvent('login_completed', { email_domain: (email || '').split('@')[1] || null })
         onAuthSuccess?.(result.data.user)
       }
     } catch (error) {

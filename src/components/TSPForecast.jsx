@@ -13,6 +13,8 @@ import {
 } from 'chart.js';
 import { useScenario } from '../contexts/ScenarioContext';
 import ScenarioManager from './ScenarioManager';
+import { calculateTspTraditionalVsRoth } from '../lib/calculations/tsp';
+import TooltipWrapper from './TooltipWrapper';
 
 ChartJS.register(
   CategoryScale,
@@ -53,24 +55,33 @@ function TSPForecast() {
   });
 
   // Utility function to parse numeric inputs only when needed
-  const parseNumericInputs = (inputs) => ({
-    currentBalance: inputs.currentBalance === '' ? 0 : parseFloat(inputs.currentBalance) || 0,
-    currentAge: inputs.currentAge === '' ? 0 : parseFloat(inputs.currentAge) || 0,
-    retirementAge: inputs.retirementAge === '' ? 0 : parseFloat(inputs.retirementAge) || 0,
-    monthlyContributionPercent: inputs.monthlyContributionPercent === '' ? 0 : parseFloat(inputs.monthlyContributionPercent) || 0,
-    annualSalary: inputs.annualSalary === '' ? 0 : parseFloat(inputs.annualSalary) || 0,
-    allocation: {
-      G: inputs.allocation.G === '' ? 0 : parseFloat(inputs.allocation.G) || 0,
-      F: inputs.allocation.F === '' ? 0 : parseFloat(inputs.allocation.F) || 0,
-      C: inputs.allocation.C === '' ? 0 : parseFloat(inputs.allocation.C) || 0,
-      S: inputs.allocation.S === '' ? 0 : parseFloat(inputs.allocation.S) || 0,
-      I: inputs.allocation.I === '' ? 0 : parseFloat(inputs.allocation.I) || 0
-    },
-    contributionType: inputs.contributionType,
-    currentTaxRate: inputs.currentTaxRate === '' ? 0 : parseFloat(inputs.currentTaxRate) || 0,
-    retirementTaxRate: inputs.retirementTaxRate === '' ? 0 : parseFloat(inputs.retirementTaxRate) || 0,
-    showComparison: inputs.showComparison
-  });
+  const parseNumericInputs = (inputs) => {
+    const toNumber = (val) => {
+      if (val === '' || val === null || val === undefined) return 0;
+      const normalized = String(val).replace(/,/g, '');
+      const parsed = parseFloat(normalized);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    return ({
+      currentBalance: toNumber(inputs.currentBalance),
+      currentAge: toNumber(inputs.currentAge),
+      retirementAge: toNumber(inputs.retirementAge),
+      monthlyContributionPercent: toNumber(inputs.monthlyContributionPercent),
+      annualSalary: toNumber(inputs.annualSalary),
+      allocation: {
+        G: toNumber(inputs.allocation.G),
+        F: toNumber(inputs.allocation.F),
+        C: toNumber(inputs.allocation.C),
+        S: toNumber(inputs.allocation.S),
+        I: toNumber(inputs.allocation.I)
+      },
+      contributionType: inputs.contributionType,
+      currentTaxRate: toNumber(inputs.currentTaxRate),
+      retirementTaxRate: toNumber(inputs.retirementTaxRate),
+      showComparison: inputs.showComparison
+    });
+  };
   
   // Results state
   const [results, setResults] = useState({
@@ -154,41 +165,14 @@ function TSPForecast() {
 
   // Handle numeric input changes with validation
   const handleInputChange = useCallback((field, value) => {
-    // Define field validation rules
-    const fieldRules = {
-      currentAge: { type: 'integer', maxLength: 3 },
-      retirementAge: { type: 'integer', maxLength: 3 },
-      currentBalance: { type: 'decimal', maxLength: 12 },
-      annualSalary: { type: 'decimal', maxLength: 10 },
-      monthlyContributionPercent: { type: 'decimal', maxLength: 5 },
-      currentTaxRate: { type: 'decimal', maxLength: 5 },
-      retirementTaxRate: { type: 'decimal', maxLength: 5 }
-    };
-    
-    const rule = fieldRules[field];
-    if (rule) {
-      // Check max length
-      if (value.length > rule.maxLength) {
-        return; // Don't update if too long
-      }
-      
-      if (rule.type === 'integer') {
-        // Allow only digits for integer fields
-        if (value !== '' && !/^\d+$/.test(value)) {
-          return; // Don't update if input contains non-digits
-        }
-      } else if (rule.type === 'decimal') {
-        // Allow digits and one decimal point for decimal fields
-        if (value !== '' && !/^\d*\.?\d*$/.test(value)) {
-          return; // Don't update if input contains invalid characters
-        }
-      }
-    }
+    // Keep input handling максимально permissive to avoid “stuck” controlled inputs.
+    // Validation/parsing happens elsewhere (validateInputs + parseNumericInputs).
+    const nextValue = String(value ?? '');
     
     setIsUserTyping(true);
     setInputs(prev => ({
       ...prev,
-      [field]: value
+      [field]: nextValue
     }));
     
     // Clear existing timeout
@@ -204,22 +188,14 @@ function TSPForecast() {
 
   // Handle allocation input changes with decimal validation
   const handleAllocationChange = useCallback((fund, value) => {
-    // Validate allocation percentages (max 3 digits + decimal)
-    if (value.length > 5) {
-      return; // Don't update if too long
-    }
-    
-    // Allow digits and one decimal point for percentages
-    if (value !== '' && !/^\d*\.?\d*$/.test(value)) {
-      return; // Don't update if input contains invalid characters
-    }
+    const nextValue = String(value ?? '');
     
     setIsUserTyping(true);
     setInputs(prev => ({
       ...prev,
       allocation: {
         ...prev.allocation,
-        [fund]: value
+        [fund]: nextValue
       }
     }));
     
@@ -304,89 +280,19 @@ function TSPForecast() {
     if (!validateInputs()) return;
 
     const numericInputs = parseNumericInputs(inputs);
-    const years = numericInputs.retirementAge - numericInputs.currentAge;
-    const monthlyContribution = (numericInputs.annualSalary * numericInputs.monthlyContributionPercent / 100) / 12;
-    
-    // Expected returns for each fund
-    const fundReturns = {
-      G: 0.02,  // 2% for G Fund
-      F: 0.03,  // 3% for F Fund  
-      C: 0.07,  // 7% for C Fund
-      S: 0.08,  // 8% for S Fund
-      I: 0.06   // 6% for I Fund
-    };
-
-    // Calculate weighted average return
-    const weightedReturn = Object.keys(fundReturns).reduce((total, fund) => {
-      return total + (fundReturns[fund] * numericInputs.allocation[fund] / 100);
-    }, 0);
-
-    // Calculate traditional TSP
-    const traditional = calculateTSPProjection(
-      numericInputs.currentBalance,
-      monthlyContribution,
-      weightedReturn,
-      years,
-      'traditional',
-      numericInputs.currentAge,
-      numericInputs.retirementTaxRate
-    );
-
-    // Calculate Roth TSP  
-    const roth = calculateTSPProjection(
-      numericInputs.currentBalance,
-      monthlyContribution * (1 - numericInputs.currentTaxRate / 100), // After-tax contribution
-      weightedReturn,
-      years,
-      'roth',
-      numericInputs.currentAge,
-      numericInputs.retirementTaxRate
-    );
+    const { traditional, roth } = calculateTspTraditionalVsRoth({
+      currentBalance: numericInputs.currentBalance,
+      annualSalary: numericInputs.annualSalary,
+      monthlyContributionPercent: numericInputs.monthlyContributionPercent,
+      currentAge: numericInputs.currentAge,
+      retirementAge: numericInputs.retirementAge,
+      allocation: numericInputs.allocation,
+      currentTaxRate: numericInputs.currentTaxRate,
+      retirementTaxRate: numericInputs.retirementTaxRate,
+    });
 
     setResults({ traditional, roth });
   }, [inputs, validateInputs]);
-
-  // TSP projection calculation helper
-  const calculateTSPProjection = useCallback((startBalance, monthlyContrib, annualReturn, years, type, currentAge, retirementTaxRate) => {
-    let balance = startBalance;
-    const yearlyData = [];
-    let totalContributions = 0;
-
-    for (let year = 0; year <= years; year++) {
-      const ageAtYear = currentAge + year;
-      
-      if (year > 0) {
-        // Add monthly contributions for the year
-        for (let month = 0; month < 12; month++) {
-          balance += monthlyContrib;
-          totalContributions += monthlyContrib;
-          balance *= (1 + annualReturn / 12);
-        }
-      }
-      
-      // Calculate after-tax value
-      let afterTaxValue = balance;
-      if (type === 'traditional') {
-        afterTaxValue = balance * (1 - retirementTaxRate / 100);
-      }
-      // Roth is already after-tax
-
-      yearlyData.push({
-        year: ageAtYear,
-        balance: balance,
-        afterTaxValue: afterTaxValue,
-        contributions: totalContributions
-      });
-    }
-
-    return {
-      projectedBalance: balance,
-      totalContributions: totalContributions,
-      totalGrowth: balance - startBalance - totalContributions,
-      yearlyData: yearlyData,
-      afterTaxValue: yearlyData[yearlyData.length - 1]?.afterTaxValue || 0
-    };
-  }, []);
 
   // Calculate on input changes (debounced)
   useEffect(() => {
@@ -490,15 +396,6 @@ function TSPForecast() {
     return inputs.allocation[fund];
   };
 
-  const TooltipWrapper = ({ children, text }) => (
-    <div className="tooltip-trigger relative">
-      {children}
-      <div className="tooltip -top-12 left-0 w-64">
-        {text}
-      </div>
-    </div>
-  );
-
   // Expected returns for fund info
   const fundReturns = {
     G: 0.02,
@@ -510,6 +407,14 @@ function TSPForecast() {
 
   // Parse numeric inputs for rendering
   const numericInputs = parseNumericInputs(inputs);
+
+  const formatDollars = (amount) =>
+    new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount ?? 0);
 
   return (
     <div className="animate-fade-in">
@@ -543,8 +448,9 @@ function TSPForecast() {
             <div className="grid grid-cols-2 gap-6">
               <TooltipWrapper text="Your current TSP account balance">
                 <div>
-                  <label className="label">Starting TSP Balance</label>
+                  <label className="label" htmlFor="currentBalance">Starting TSP Balance</label>
                   <input
+                    id="currentBalance"
                     type="text"
                     value={getDisplayValue('currentBalance')}
                     onChange={(e) => handleInputChange('currentBalance', e.target.value)}
@@ -560,8 +466,9 @@ function TSPForecast() {
               
               <TooltipWrapper text="Your current age in years">
                 <div>
-                  <label className="label">Current Age</label>
+                  <label className="label" htmlFor="currentAge">Current Age</label>
                   <input
+                    id="currentAge"
                     type="text"
                     value={getDisplayValue('currentAge')}
                     onChange={(e) => handleInputChange('currentAge', e.target.value)}
@@ -577,8 +484,9 @@ function TSPForecast() {
               
               <TooltipWrapper text="Age when you plan to retire">
                 <div>
-                  <label className="label">Target Retirement Age</label>
+                  <label className="label" htmlFor="retirementAge">Target Retirement Age</label>
                   <input
+                    id="retirementAge"
                     type="text"
                     value={getDisplayValue('retirementAge')}
                     onChange={(e) => handleInputChange('retirementAge', e.target.value)}
@@ -594,8 +502,9 @@ function TSPForecast() {
               
               <TooltipWrapper text="Your current annual salary">
                 <div>
-                  <label className="label">Annual Salary</label>
+                  <label className="label" htmlFor="annualSalary">Annual Salary</label>
                   <input
+                    id="annualSalary"
                     type="text"
                     value={getDisplayValue('annualSalary')}
                     onChange={(e) => handleInputChange('annualSalary', e.target.value)}
@@ -655,8 +564,9 @@ function TSPForecast() {
 
             <TooltipWrapper text="Percentage of salary contributed to TSP each month">
               <div className="mb-4">
-                <label className="label">Monthly Contribution %</label>
+                <label className="label" htmlFor="monthlyContributionPercent">Monthly Contribution %</label>
                 <input
+                  id="monthlyContributionPercent"
                   type="text"
                   value={getDisplayValue('monthlyContributionPercent')}
                   onChange={(e) => handleInputChange('monthlyContributionPercent', e.target.value)}
@@ -773,13 +683,13 @@ function TSPForecast() {
               <div className="grid grid-cols-2 gap-6">
                 <div className="text-center">
                   <div className="text-3xl font-bold navy-text mb-2">
-                    ${(inputs.contributionType === 'traditional' ? results.traditional.projectedBalance : results.roth.projectedBalance).toLocaleString()}
+                    {formatDollars(inputs.contributionType === 'traditional' ? results.traditional.projectedBalance : results.roth.projectedBalance)}
                   </div>
                   <div className="text-sm text-slate-500 dark:text-slate-400">Projected Balance</div>
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-bold gold-accent mb-2">
-                    ${(inputs.contributionType === 'traditional' ? results.traditional.afterTaxValue : results.roth.afterTaxValue).toLocaleString()}
+                    {formatDollars(inputs.contributionType === 'traditional' ? results.traditional.afterTaxValue : results.roth.afterTaxValue)}
                   </div>
                   <div className="text-sm text-slate-500 dark:text-slate-400">After-Tax Value</div>
                 </div>
@@ -806,13 +716,13 @@ function TSPForecast() {
                   <div className="space-y-3">
                     <div>
                       <div className="text-2xl font-bold text-slate-700 dark:text-slate-300">
-                        ${results.traditional.projectedBalance.toLocaleString()}
+                        {formatDollars(results.traditional.projectedBalance)}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">Gross Balance</div>
                     </div>
                     <div>
                       <div className="text-2xl font-bold text-navy-600 dark:text-navy-400">
-                        ${results.traditional.afterTaxValue.toLocaleString()}
+                        {formatDollars(results.traditional.afterTaxValue)}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">After-Tax Value</div>
                     </div>
@@ -824,13 +734,13 @@ function TSPForecast() {
                   <div className="space-y-3">
                     <div>
                       <div className="text-2xl font-bold text-slate-700 dark:text-slate-300">
-                        ${results.roth.projectedBalance.toLocaleString()}
+                        {formatDollars(results.roth.projectedBalance)}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">Balance (Tax-Free)</div>
                     </div>
                     <div>
                       <div className="text-2xl font-bold text-gold-600 dark:text-gold-400">
-                        ${results.roth.afterTaxValue.toLocaleString()}
+                        {formatDollars(results.roth.afterTaxValue)}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">After-Tax Value</div>
                     </div>

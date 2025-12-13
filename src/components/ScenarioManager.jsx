@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useScenario } from '../contexts/ScenarioContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 function ScenarioManager() {
   const { user, isAuthenticated } = useAuth();
@@ -11,8 +12,11 @@ function ScenarioManager() {
     saveScenario,
     deleteScenario,
     renameScenario,
-    duplicateScenario
+    duplicateScenario,
+    isScenarioLimitReached,
+    scenarioLimit
   } = useScenario();
+  const navigate = useNavigate();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState('save'); // 'save', 'rename'
@@ -39,11 +43,16 @@ function ScenarioManager() {
     setTargetScenarioId(null);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!inputValue.trim()) return;
     
     if (modalType === 'save') {
-      saveScenario(inputValue.trim(), currentScenario);
+      const result = await saveScenario(inputValue.trim(), currentScenario);
+      if (result?.success === false && result?.error?.code === 'SCENARIO_LIMIT') {
+        closeModal();
+        navigate('/pro-features', { state: { reason: 'scenario_limit', limit: result.error.scenarioLimit } });
+        return;
+      }
     } else if (modalType === 'rename') {
       renameScenario(targetScenarioId, inputValue.trim());
     }
@@ -62,8 +71,11 @@ function ScenarioManager() {
     }
   };
 
-  const handleDuplicate = (scenarioId) => {
-    duplicateScenario(scenarioId);
+  const handleDuplicate = async (scenarioId) => {
+    const result = await duplicateScenario(scenarioId);
+    if (result?.success === false && result?.error?.code === 'SCENARIO_LIMIT') {
+      navigate('/pro-features', { state: { reason: 'scenario_limit', limit: result.error.scenarioLimit } });
+    }
   };
 
   return (
@@ -157,8 +169,9 @@ function ScenarioManager() {
             onClick={openSaveModal}
             className="btn-secondary"
             title="Save current inputs as a new scenario"
+            disabled={isScenarioLimitReached}
           >
-            💾 Save New
+            {isScenarioLimitReached ? `🔒 Save Limit (${scenarioLimit})` : '💾 Save New'}
           </button>
         ) : (
           <div className="relative group">

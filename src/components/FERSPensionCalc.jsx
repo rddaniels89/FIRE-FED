@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -14,6 +14,8 @@ import {
 } from 'chart.js';
 import { useScenario } from '../contexts/ScenarioContext';
 import ScenarioManager from './ScenarioManager';
+import { calculateFersResults } from '../lib/calculations/fers';
+import TooltipWrapper from './TooltipWrapper';
 
 ChartJS.register(
   CategoryScale,
@@ -181,83 +183,24 @@ function FERSPensionCalc() {
     if (!validateInputs()) return;
 
     const numericInputs = parseNumericInputs(inputs);
-    const years = totalYears;
-    
-    // FERS multiplier calculation
-    let multiplier = 0.01; // Standard 1% multiplier
-    if (numericInputs.retirementAge >= 62 && years >= 20) {
-      multiplier = 0.011; // 1.1% for years over 20 if retiring after age 62
-    }
 
-    const annualPension = numericInputs.high3Salary * years * multiplier;
-    const monthlyPension = annualPension / 12;
-
-    // Calculate lifetime pension (assume retirement to age 85)
-    const lifetimePension = annualPension * (85 - numericInputs.retirementAge);
-
-    // Check eligibility
-    let isEligible = false;
-    let eligibilityMessage = '';
-    
-    if (numericInputs.retirementAge >= 62 && years >= 5) {
-      isEligible = true;
-      eligibilityMessage = 'Eligible for immediate retirement with full pension';
-    } else if (numericInputs.retirementAge >= 60 && years >= 20) {
-      isEligible = true;
-      eligibilityMessage = 'Eligible for immediate retirement with full pension';
-    } else if (numericInputs.retirementAge >= 57 && years >= 30) {
-      isEligible = true;
-      eligibilityMessage = 'Eligible for immediate retirement with full pension';
-    } else {
-      eligibilityMessage = 'Not eligible for immediate retirement. Consider deferred retirement.';
-    }
-
-    // Calculate total lifetime earnings staying federal
-    const workingYears = numericInputs.retirementAge - numericInputs.currentAge;
-    const totalLifetimeEarnings = (workingYears * numericInputs.high3Salary) + lifetimePension;
-
-    // Calculate leave early scenario (deferred pension)
-    const deferredYears = 20; // Assume leaving after 20 years
-    const mra = 57; // Minimum retirement age
-    const deferredPension = numericInputs.high3Salary * deferredYears * 0.01; // 1% multiplier
-    const lifetimeDeferred = deferredPension * (85 - mra);
-    
-    // Calculate private sector earnings
-    const privateSectorEarnings = numericInputs.privateJobYears * numericInputs.privateJobSalary;
-    const leaveEarlyLifetimeEarnings = (20 * numericInputs.high3Salary) + privateSectorEarnings + lifetimeDeferred;
-
-    // Calculate break-even age
-    let breakEvenAge = 0;
-    if (numericInputs.showComparison) {
-      // Simplified break-even calculation
-      const annualDifference = annualPension - deferredPension;
-      if (annualDifference > 0) {
-        const earningsGap = leaveEarlyLifetimeEarnings - totalLifetimeEarnings;
-        if (earningsGap > 0) {
-          breakEvenAge = numericInputs.retirementAge + (earningsGap / annualDifference);
-        }
-      }
-    }
+    const fers = calculateFersResults({
+      yearsOfService: numericInputs.yearsOfService,
+      monthsOfService: numericInputs.monthsOfService,
+      high3Salary: numericInputs.high3Salary,
+      currentAge: numericInputs.currentAge,
+      retirementAge: numericInputs.retirementAge,
+      showComparison: numericInputs.showComparison,
+      privateJobSalary: numericInputs.privateJobSalary,
+      privateJobYears: numericInputs.privateJobYears,
+      includeFutureService: true,
+    });
 
     setResults({
-      stayFed: {
-        annualPension: annualPension,
-        monthlyPension: monthlyPension,
-        multiplier: multiplier,
-        lifetimePension: lifetimePension,
-        isEligible: isEligible,
-        eligibilityMessage: eligibilityMessage,
-        totalLifetimeEarnings: totalLifetimeEarnings
-      },
-      leaveEarly: {
-        deferredPension: deferredPension,
-        mra: mra,
-        lifetimeDeferred: lifetimeDeferred,
-        totalLifetimeEarnings: leaveEarlyLifetimeEarnings,
-        breakEvenAge: breakEvenAge
-      }
+      stayFed: fers.stayFed,
+      leaveEarly: fers.leaveEarly
     });
-  }, [inputs, totalYears, validateInputs]);
+  }, [inputs, validateInputs]);
 
   // Calculate on input changes (debounced)
   useEffect(() => {
@@ -407,15 +350,6 @@ function FERSPensionCalc() {
     return inputs[field];
   };
 
-  const TooltipWrapper = ({ children, text }) => (
-    <div className="tooltip-trigger relative">
-      {children}
-      <div className="tooltip -top-12 left-0 w-64">
-        {text}
-      </div>
-    </div>
-  );
-
   // Parse numeric inputs for rendering
   const numericInputs = parseNumericInputs(inputs);
 
@@ -448,7 +382,7 @@ function FERSPensionCalc() {
           <div className="card p-6">
             <h3 className="text-xl font-semibold navy-text mb-6">Service Information</h3>
             <div className="grid grid-cols-2 gap-6">
-              <TooltipWrapper text="Total years of creditable federal service">
+              <TooltipWrapper text="Enter years you have already completed as of today (real-time service). This calculator will also project additional service from your Current Age to your Planned Retirement Age to estimate your total years at retirement.">
                 <div>
                   <label className="label">Years of Service</label>
                   <input
@@ -484,7 +418,7 @@ function FERSPensionCalc() {
             </div>
             <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                Total service time: <span className="font-medium">{totalYears.toFixed(1)} years</span>
+                Service entered (today): <span className="font-medium">{totalYears.toFixed(1)} years</span>
               </p>
             </div>
           </div>
@@ -635,7 +569,7 @@ function FERSPensionCalc() {
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-bold gold-accent mb-2">
-                    ${results.stayFed.monthlyPension.toLocaleString()}
+                    ${Math.round(results.stayFed.monthlyPension).toLocaleString()}
                   </div>
                   <div className="text-sm text-slate-500 dark:text-slate-400">Monthly Pension</div>
                 </div>
@@ -703,7 +637,7 @@ function FERSPensionCalc() {
               {results.leaveEarly.breakEvenAge > 0 && (
                 <div className="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
                   <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                    <strong>Break-even analysis:</strong> Private sector becomes more profitable until age {results.leaveEarly.breakEvenAge}, 
+                    <strong>Break-even analysis:</strong> Private sector becomes more profitable until age {Math.round(results.leaveEarly.breakEvenAge)}, 
                     after which staying federal provides better lifetime value.
                   </p>
                 </div>

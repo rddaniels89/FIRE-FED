@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { supabase, isSupabaseAvailable } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { trackEvent } from '../lib/telemetry';
 
 const ProFeatures = () => {
-  const { user, isAuthenticated, isProUser, upgradeToPro } = useAuth();
+  const { user, isAuthenticated, isProUser } = useAuth();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState('');
-  const [isUpgrading, setIsUpgrading] = useState(false);
 
   const handleWaitlistSubmit = async (e) => {
     e.preventDefault();
@@ -33,11 +33,13 @@ const ProFeatures = () => {
           // Check if email already exists
           if (error.code === '23505') {
             setMessage('✅ You\'re already on the waitlist! We\'ll notify you when Pro features launch.');
+            trackEvent('pro_waitlist_submit', { status: 'duplicate' });
           } else {
             throw error;
           }
         } else {
           setMessage('🎉 Success! You\'ve been added to the Pro features waitlist.');
+          trackEvent('pro_waitlist_submit', { status: 'success' });
           setEmail('');
         }
       } else {
@@ -46,10 +48,12 @@ const ProFeatures = () => {
         
         if (existingWaitlist.includes(email.trim())) {
           setMessage('✅ You\'re already on the waitlist! We\'ll notify you when Pro features launch.');
+          trackEvent('pro_waitlist_submit', { status: 'duplicate', storage: 'local' });
         } else {
           existingWaitlist.push(email.trim());
           localStorage.setItem('pro-waitlist', JSON.stringify(existingWaitlist));
           setMessage('🎉 Success! You\'ve been added to the Pro features waitlist.');
+          trackEvent('pro_waitlist_submit', { status: 'success', storage: 'local' });
           setEmail('');
         }
       }
@@ -59,17 +63,6 @@ const ProFeatures = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleTestUpgrade = async () => {
-    setIsUpgrading(true);
-    const result = await upgradeToPro();
-    if (result.success) {
-      setMessage('🎉 You\'ve been upgraded to Pro! (Demo upgrade for testing)');
-    } else {
-      setMessage('❌ Upgrade failed. Please try again.');
-    }
-    setIsUpgrading(false);
   };
 
   const features = [
@@ -183,38 +176,6 @@ const ProFeatures = () => {
                     ✅ Pro subscription active
                   </div>
                 </div>
-              </div>
-            ) : isAuthenticated ? (
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-                  🚀 Upgrade to Pro
-                </h2>
-                <p className="text-gray-600 dark:text-gray-300 mb-6">
-                  You're logged in! Upgrade to Pro for early access to advanced features.
-                </p>
-                
-                {/* Demo Upgrade Button */}
-                <button
-                  onClick={handleTestUpgrade}
-                  disabled={isUpgrading}
-                  className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-medium py-3 px-6 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed mb-4"
-                >
-                  {isUpgrading ? (
-                    <>
-                      <span className="animate-spin inline-block mr-2">⏳</span>
-                      Upgrading...
-                    </>
-                  ) : (
-                    <>
-                      <span className="mr-2">⭐</span>
-                      Demo Upgrade to Pro (Testing)
-                    </>
-                  )}
-                </button>
-                
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-6">
-                  This is a demo upgrade for testing Pro features. In production, this would integrate with payment processing.
-                </p>
               </div>
             ) : (
               <div>

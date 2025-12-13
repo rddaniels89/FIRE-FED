@@ -1,15 +1,33 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { ScenarioProvider } from './contexts/ScenarioContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import HomePage from './components/HomePage';
-import TSPForecast from './components/TSPForecast';
-import FERSPensionCalc from './components/FERSPensionCalc';
-import SummaryDashboard from './components/SummaryDashboard';
-import ScenariosPage from './components/ScenariosPage';
-import Auth from './components/Auth';
-import ProFeatures from './components/ProFeatures';
+import Footer from './components/Footer';
+import AppErrorBoundary from './components/AppErrorBoundary';
+
+const HomePage = lazy(() => import('./components/HomePage'));
+const TSPForecast = lazy(() => import('./components/TSPForecast'));
+const FERSPensionCalc = lazy(() => import('./components/FERSPensionCalc'));
+const SummaryDashboard = lazy(() => import('./components/SummaryDashboard'));
+const ScenariosPage = lazy(() => import('./components/ScenariosPage'));
+const ScenarioCompare = lazy(() => import('./components/ScenarioCompare'));
+const Auth = lazy(() => import('./components/Auth'));
+const ProFeatures = lazy(() => import('./components/ProFeatures'));
+const LegalTerms = lazy(() => import('./components/LegalTerms'));
+const LegalPrivacy = lazy(() => import('./components/LegalPrivacy'));
+const LegalDisclaimer = lazy(() => import('./components/LegalDisclaimer'));
+
+function RouteLoading() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-navy-600 mx-auto"></div>
+        <p className="mt-4 text-slate-600 dark:text-slate-300">Loading...</p>
+      </div>
+    </div>
+  );
+}
 
 function Navigation() {
   const location = useLocation();
@@ -173,22 +191,33 @@ function AppContent() {
   }
 
   if (!isAuthenticated) {
-    return <Auth onAuthSuccess={handleAuthSuccess} />;
+    return (
+      <Suspense fallback={<RouteLoading />}>
+        <Auth onAuthSuccess={handleAuthSuccess} />
+      </Suspense>
+    );
   }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-200">
       <Navigation />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/tsp-forecast" element={<TSPForecast />} />
-          <Route path="/fers-pension" element={<FERSPensionCalc />} />
-          <Route path="/summary" element={<SummaryDashboard />} />
-          <Route path="/scenarios" element={<ScenariosPage />} />
-          <Route path="/pro-features" element={<ProFeatures />} />
-        </Routes>
+        <Suspense fallback={<RouteLoading />}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/tsp-forecast" element={<TSPForecast />} />
+            <Route path="/fers-pension" element={<FERSPensionCalc />} />
+            <Route path="/summary" element={<SummaryDashboard />} />
+            <Route path="/scenarios" element={<ScenariosPage />} />
+            <Route path="/scenarios/compare" element={<ScenarioCompare />} />
+            <Route path="/pro-features" element={<ProFeatures />} />
+            <Route path="/legal/terms" element={<LegalTerms />} />
+            <Route path="/legal/privacy" element={<LegalPrivacy />} />
+            <Route path="/legal/disclaimer" element={<LegalDisclaimer />} />
+          </Routes>
+        </Suspense>
       </main>
+      <Footer />
     </div>
   );
 }
@@ -199,7 +228,9 @@ function App() {
       <ThemeProvider>
         <ScenarioProvider>
           <Router>
-            <AppContent />
+            <AppErrorBoundary>
+              <AppContent />
+            </AppErrorBoundary>
           </Router>
         </ScenarioProvider>
       </ThemeProvider>

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useScenario } from '../contexts/ScenarioContext';
+import OnboardingCard from './OnboardingCard';
 
 function HomePage() {
   const { scenarios, currentScenario, updateCurrentScenario } = useScenario();
@@ -82,6 +83,8 @@ function HomePage() {
           Calculate TSP projections, FERS pension benefits, and analyze your FIRE gap with precision.
         </p>
       </div>
+
+      <OnboardingCard />
 
       {/* Current Scenario Status */}
       {currentScenario && (
