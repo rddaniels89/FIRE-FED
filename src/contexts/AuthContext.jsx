@@ -24,11 +24,29 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  // DEV-only bypass (never active in production builds)
+  const bypassAuth = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true';
+  const bypassPro = import.meta.env.DEV && import.meta.env.VITE_BYPASS_PRO === 'true';
 
   // Check for existing session on mount
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        // Dev-only bypass to allow viewing the full UI without signing in
+        if (bypassAuth) {
+          const mockUser = {
+            id: 'dev-bypass',
+            email: 'dev@local',
+            user_metadata: {
+              email: 'dev@local',
+              ...(bypassPro ? { subscription_plan: 'pro' } : {}),
+            },
+          };
+          setUser(mockUser);
+          setIsAuthenticated(true);
+          return;
+        }
+
         if (isSupabaseAvailable) {
           // Check for existing Supabase session
           const { data: { session } } = await supabase.auth.getSession();
@@ -55,7 +73,7 @@ export const AuthProvider = ({ children }) => {
     initializeAuth();
 
     // Set up auth state listener for Supabase
-    if (isSupabaseAvailable) {
+    if (!bypassAuth && isSupabaseAvailable) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (event, session) => {
           if (session?.user) {
@@ -71,11 +89,17 @@ export const AuthProvider = ({ children }) => {
 
       return () => subscription.unsubscribe();
     }
-  }, []);
+  }, [bypassAuth, bypassPro]);
 
   // Load subscription status (Stripe-synced) from Supabase when authenticated.
   useEffect(() => {
     const loadSubscription = async () => {
+      if (bypassAuth) {
+        setSubscription(bypassPro ? { status: 'active', plan: 'pro' } : null);
+        setSubscriptionLoading(false);
+        return;
+      }
+
       if (!isSupabaseAvailable || !isAuthenticated || !user?.id) {
         setSubscription(null);
         setSubscriptionLoading(false);
@@ -101,7 +125,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     loadSubscription();
-  }, [isAuthenticated, user?.id]);
+  }, [bypassAuth, bypassPro, isAuthenticated, user?.id]);
 
   const isProUser = useMemo(() => {
     if (!user) return false;
