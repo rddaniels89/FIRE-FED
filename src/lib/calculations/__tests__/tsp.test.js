@@ -41,6 +41,57 @@ describe('tsp calculations', () => {
     expect(traditional.yearlyData[0].year).toBe(40);
     expect(traditional.yearlyData[traditional.yearlyData.length - 1].year).toBe(42);
   });
+
+  it('flags when employee contributions exceed the annual deferral limit and caps the effective annual employee contribution', () => {
+    const res = calculateTspTraditionalVsRoth({
+      currentBalance: 0,
+      annualSalary: 200000,
+      monthlyContributionPercent: 20, // $40k/year desired
+      currentAge: 35,
+      retirementAge: 36,
+      allocation: { G: 0, F: 0, C: 100, S: 0, I: 0 },
+      currentTaxRate: 22,
+      retirementTaxRate: 15,
+      annualEmployeeDeferralLimit: 10000,
+      annualCatchUpLimit: 0,
+      catchUpAge: 50,
+    });
+
+    expect(res.limits.isOverLimit).toBe(true);
+    expect(res.limits.desiredAnnualEmployeeContribution).toBeCloseTo(40000, 6);
+    expect(res.limits.annualEmployeeDeferralLimit).toBe(10000);
+    expect(res.limits.effectiveAnnualEmployeeContribution).toBe(10000);
+  });
+
+  it('including employer match increases projected balances (all else equal)', () => {
+    const baseInputs = {
+      currentBalance: 0,
+      annualSalary: 100000,
+      monthlyContributionPercent: 5,
+      currentAge: 30,
+      retirementAge: 31,
+      allocation: { G: 0, F: 0, C: 100, S: 0, I: 0 },
+      currentTaxRate: 22,
+      retirementTaxRate: 15,
+      annualEmployeeDeferralLimit: 50000,
+      annualCatchUpLimit: 0,
+      catchUpAge: 50,
+    };
+
+    const withoutMatch = calculateTspTraditionalVsRoth({
+      ...baseInputs,
+      includeEmployerMatch: false,
+    });
+
+    const withMatch = calculateTspTraditionalVsRoth({
+      ...baseInputs,
+      includeEmployerMatch: true,
+      includeAutomatic1Percent: true,
+    });
+
+    expect(withMatch.traditional.projectedBalance).toBeGreaterThan(withoutMatch.traditional.projectedBalance);
+    expect(withMatch.roth.projectedBalance).toBeGreaterThan(withoutMatch.roth.projectedBalance);
+  });
 });
 
 

@@ -6,6 +6,77 @@ import { trackEvent } from '../lib/telemetry';
 
 const ScenarioContext = createContext();
 
+const SCENARIO_SCHEMA_VERSION = 2;
+
+const SCENARIO_TEMPLATES = Object.freeze([
+  {
+    id: 'template_20s',
+    name: 'Starter (20s)',
+    description: 'Early career baseline with modest TSP savings and high growth runway.',
+    overrides: {
+      tsp: { currentAge: 27, retirementAge: 62, currentBalance: 15000, annualSalary: 70000, monthlyContributionPercent: 10 },
+      fers: { currentAge: 27, retirementAge: 62, yearsOfService: 2, monthsOfService: 0, high3Salary: 70000 },
+      fire: { desiredFireAge: 50, monthlyFireIncomeGoal: 5500 },
+      summary: { monthlyExpenses: 3500 },
+    },
+  },
+  {
+    id: 'template_30s',
+    name: 'Starter (30s)',
+    description: 'Mid-career baseline: stronger salary, meaningful TSP base, and a realistic FIRE target.',
+    overrides: {
+      tsp: { currentAge: 35, retirementAge: 62, currentBalance: 50000, annualSalary: 90000, monthlyContributionPercent: 12 },
+      fers: { currentAge: 35, retirementAge: 62, yearsOfService: 8, monthsOfService: 0, high3Salary: 90000 },
+      fire: { desiredFireAge: 55, monthlyFireIncomeGoal: 6000 },
+      summary: { monthlyExpenses: 4200 },
+    },
+  },
+  {
+    id: 'template_40s',
+    name: 'Starter (40s)',
+    description: 'Late mid-career: prioritize eligibility timing and bridge planning.',
+    overrides: {
+      tsp: { currentAge: 45, retirementAge: 62, currentBalance: 160000, annualSalary: 115000, monthlyContributionPercent: 15 },
+      fers: { currentAge: 45, retirementAge: 62, yearsOfService: 15, monthsOfService: 0, high3Salary: 115000 },
+      fire: { desiredFireAge: 57, monthlyFireIncomeGoal: 7000 },
+      summary: { monthlyExpenses: 5200 },
+    },
+  },
+  {
+    id: 'template_50s',
+    name: 'Starter (50s)',
+    description: 'Pre-retirement: focus on “earliest eligible” and near-term cashflow assumptions.',
+    overrides: {
+      tsp: { currentAge: 55, retirementAge: 62, currentBalance: 350000, annualSalary: 140000, monthlyContributionPercent: 15 },
+      fers: { currentAge: 55, retirementAge: 62, yearsOfService: 25, monthsOfService: 0, high3Salary: 140000 },
+      fire: { desiredFireAge: 60, monthlyFireIncomeGoal: 8000 },
+      summary: { monthlyExpenses: 6500 },
+    },
+  },
+]);
+
+const getValueByPath = (obj, path) => {
+  if (!obj || !path) return undefined;
+  return path.split('.').reduce((acc, key) => (acc ? acc[key] : undefined), obj);
+};
+
+const DIFF_FIELDS = Object.freeze([
+  { path: 'tsp.currentAge', label: 'TSP: current age' },
+  { path: 'tsp.retirementAge', label: 'TSP: retirement age' },
+  { path: 'tsp.currentBalance', label: 'TSP: current balance' },
+  { path: 'tsp.monthlyContributionPercent', label: 'TSP: contribution %' },
+  { path: 'tsp.annualSalary', label: 'TSP: salary' },
+  { path: 'tsp.valueMode', label: 'TSP: real vs nominal' },
+  { path: 'fers.currentAge', label: 'FERS: current age' },
+  { path: 'fers.retirementAge', label: 'FERS: planned retirement age' },
+  { path: 'fers.yearsOfService', label: 'FERS: years of service' },
+  { path: 'fers.high3Salary', label: 'FERS: high-3' },
+  { path: 'fire.desiredFireAge', label: 'FIRE: desired FIRE age' },
+  { path: 'fire.monthlyFireIncomeGoal', label: 'FIRE: income goal (monthly)' },
+  { path: 'summary.monthlyExpenses', label: 'Summary: monthly expenses' },
+  { path: 'summary.assumptions.safeWithdrawalRate', label: 'Assumptions: SWR' },
+]);
+
 export const useScenario = () => {
   const context = useContext(ScenarioContext);
   if (!context) {
@@ -26,6 +97,7 @@ export const ScenarioProvider = ({ children }) => {
 
   // Default scenario structure
   const createDefaultScenario = (name = 'New Scenario') => ({
+    schemaVersion: SCENARIO_SCHEMA_VERSION,
     id: Date.now().toString(),
     name,
     createdAt: new Date().toISOString(),
@@ -35,6 +107,14 @@ export const ScenarioProvider = ({ children }) => {
       retirementAge: 62,
       monthlyContributionPercent: 10,
       annualSalary: 80000,
+      annualSalaryGrowthRate: 3,
+      includeEmployerMatch: true,
+      includeAutomatic1Percent: true,
+      annualEmployeeDeferralLimit: 23500,
+      annualCatchUpLimit: 7500,
+      catchUpAge: 50,
+      inflationRate: 2.5,
+      valueMode: 'nominal', // 'nominal' | 'real'
       allocation: {
         G: 10,
         F: 20,
@@ -42,7 +122,17 @@ export const ScenarioProvider = ({ children }) => {
         S: 20,
         I: 10
       },
-      contributionType: 'traditional' // 'traditional' or 'roth'
+      fundReturns: {
+        G: 2,
+        F: 3,
+        C: 7,
+        S: 8,
+        I: 6,
+      },
+      contributionType: 'traditional', // 'traditional' or 'roth'
+      currentTaxRate: 22,
+      retirementTaxRate: 15,
+      showComparison: false,
     },
     fers: {
       yearsOfService: 20,
@@ -59,9 +149,107 @@ export const ScenarioProvider = ({ children }) => {
       spouseIncome: 4000
     },
     summary: {
-      monthlyExpenses: 4000
+      monthlyExpenses: 4000,
+      socialSecurity: {
+        mode: 'not_configured', // 'not_configured' | 'estimate' | 'manual'
+        claimingAge: 67,
+        monthlyBenefit: 0,
+        percentOfSalary: 30,
+      },
+      assumptions: {
+        pensionEndAge: 85,
+        safeWithdrawalRate: 0.04,
+      },
     }
   });
+
+  const migrateScenarioToLatest = (scenario) => {
+    if (!scenario || typeof scenario !== 'object') return scenario;
+
+    // Work on a shallow clone; nested objects are normalized later.
+    let s = { ...scenario };
+    let version = Number(s.schemaVersion ?? 0);
+
+    // v0 -> v1: ensure schemaVersion exists (normalization handles shape)
+    if (version < 1) {
+      s.schemaVersion = 1;
+      version = 1;
+    }
+
+    // v1 -> v2: add metadata + ensure summary.assumptions exists (normalization handles defaults)
+    if (version < 2) {
+      s = {
+        ...s,
+        meta: {
+          ...(s.meta ?? {}),
+          updatedAt: (s.meta && s.meta.updatedAt) ? s.meta.updatedAt : (s.createdAt || new Date().toISOString()),
+        },
+        schemaVersion: 2,
+      };
+      version = 2;
+    }
+
+    if (!Number.isFinite(version) || version !== SCENARIO_SCHEMA_VERSION) {
+      s.schemaVersion = SCENARIO_SCHEMA_VERSION;
+    }
+
+    return s;
+  };
+
+  const normalizeScenario = (scenario) => {
+    const migrated = migrateScenarioToLatest(scenario);
+    const base = createDefaultScenario(migrated?.name || 'Scenario');
+    const merged = {
+      ...base,
+      ...migrated,
+      tsp: { ...base.tsp, ...(migrated?.tsp ?? {}) },
+      fers: { ...base.fers, ...(migrated?.fers ?? {}) },
+      fire: { ...base.fire, ...(migrated?.fire ?? {}) },
+      summary: {
+        ...base.summary,
+        ...(migrated?.summary ?? {}),
+        socialSecurity: { ...base.summary.socialSecurity, ...(migrated?.summary?.socialSecurity ?? {}) },
+        assumptions: { ...base.summary.assumptions, ...(migrated?.summary?.assumptions ?? {}) },
+      },
+    };
+
+    if (!merged.schemaVersion) merged.schemaVersion = SCENARIO_SCHEMA_VERSION;
+    return merged;
+  };
+
+  const getScenarioTemplates = () => SCENARIO_TEMPLATES.slice();
+
+  const buildScenarioFromTemplate = (templateId, nameOverride) => {
+    const template = SCENARIO_TEMPLATES.find(t => t.id === templateId);
+    const base = createDefaultScenario(nameOverride || template?.name || 'New Scenario');
+    if (!template) return base;
+
+    return normalizeScenario({
+      ...base,
+      name: nameOverride || template.name,
+      meta: { ...(base.meta ?? {}), templateId: template.id, updatedAt: new Date().toISOString() },
+      tsp: { ...base.tsp, ...(template.overrides?.tsp ?? {}) },
+      fers: { ...base.fers, ...(template.overrides?.fers ?? {}) },
+      fire: { ...base.fire, ...(template.overrides?.fire ?? {}) },
+      summary: { ...base.summary, ...(template.overrides?.summary ?? {}) },
+    });
+  };
+
+  const getScenarioDiff = (fromScenario, toScenario) => {
+    if (!fromScenario || !toScenario) return [];
+
+    const diffs = [];
+    for (const field of DIFF_FIELDS) {
+      const fromValue = getValueByPath(fromScenario, field.path);
+      const toValue = getValueByPath(toScenario, field.path);
+      const equal = Object.is(fromValue, toValue) || JSON.stringify(fromValue) === JSON.stringify(toValue);
+      if (!equal) {
+        diffs.push({ ...field, from: fromValue, to: toValue });
+      }
+    }
+
+    return diffs;
+  };
 
   // Load scenarios when user authentication changes
   useEffect(() => {
@@ -92,15 +280,17 @@ export const ScenarioProvider = ({ children }) => {
           } else {
             if (data && data.length > 0) {
               // Convert Supabase format to app format
-              const normalizedScenarios = data.map(scenario => ({
-                id: scenario.id,
-                name: scenario.scenario_name,
-                createdAt: scenario.created_at,
-                tsp: scenario.tsp_data || createDefaultScenario().tsp,
-                fers: scenario.fers_data || createDefaultScenario().fers,
-                fire: scenario.fire_goal || createDefaultScenario().fire,
-                summary: { monthlyExpenses: 4000 } // Default value
-              }));
+              const normalizedScenarios = data.map(scenario =>
+                normalizeScenario({
+                  id: scenario.id,
+                  name: scenario.scenario_name,
+                  createdAt: scenario.created_at,
+                  tsp: scenario.tsp_data,
+                  fers: scenario.fers_data,
+                  fire: scenario.fire_goal,
+                  summary: scenario.summary_data,
+                })
+              );
               setScenarios(normalizedScenarios);
               setCurrentScenario(normalizedScenarios[0]);
             } else {
@@ -130,10 +320,7 @@ export const ScenarioProvider = ({ children }) => {
         try {
           const parsed = JSON.parse(savedScenarios);
           if (parsed && parsed.length > 0) {
-            const normalizedScenarios = parsed.map(scenario => ({
-              ...createDefaultScenario(scenario.name || 'Scenario'),
-              ...scenario
-            }));
+            const normalizedScenarios = parsed.map((scenario) => normalizeScenario(scenario));
             setScenarios(normalizedScenarios);
             setCurrentScenario(normalizedScenarios[0]);
           } else {
@@ -177,7 +364,8 @@ export const ScenarioProvider = ({ children }) => {
             scenario_name: scenario.name,
             tsp_data: scenario.tsp,
             fers_data: scenario.fers,
-            fire_goal: scenario.fire
+            fire_goal: scenario.fire,
+            summary_data: scenario.summary,
           }
         ])
         .select()
@@ -202,7 +390,8 @@ export const ScenarioProvider = ({ children }) => {
           scenario_name: scenario.name,
           tsp_data: scenario.tsp,
           fers_data: scenario.fers,
-          fire_goal: scenario.fire
+          fire_goal: scenario.fire,
+          summary_data: scenario.summary,
         })
         .eq('id', scenario.id)
         .eq('user_id', user.id)
@@ -246,13 +435,13 @@ export const ScenarioProvider = ({ children }) => {
       return { success: false, error };
     }
 
-    const scenario = {
-      ...createDefaultScenario(name),
+    const scenario = normalizeScenario({
       ...data,
       id: Date.now().toString(),
       name,
-      createdAt: new Date().toISOString()
-    };
+      createdAt: new Date().toISOString(),
+      meta: { ...(data?.meta ?? {}), updatedAt: new Date().toISOString() },
+    });
     
     // Save to Supabase first
     if (isSupabaseAvailable && user) {
@@ -279,15 +468,15 @@ export const ScenarioProvider = ({ children }) => {
     if (!currentScenario) return;
     
     // Ensure we deep merge the updates properly
-    const updatedScenario = {
+    const updatedScenario = normalizeScenario({
       ...currentScenario,
       ...updates,
-      // Ensure nested objects are properly merged
       tsp: updates.tsp ? { ...currentScenario.tsp, ...updates.tsp } : currentScenario.tsp,
       fers: updates.fers ? { ...currentScenario.fers, ...updates.fers } : currentScenario.fers,
       fire: updates.fire ? { ...currentScenario.fire, ...updates.fire } : currentScenario.fire,
-      summary: updates.summary ? { ...currentScenario.summary, ...updates.summary } : currentScenario.summary
-    };
+      summary: updates.summary ? { ...currentScenario.summary, ...updates.summary } : currentScenario.summary,
+      meta: { ...(currentScenario.meta ?? {}), ...(updates.meta ?? {}), updatedAt: new Date().toISOString() },
+    });
     
     setCurrentScenario(updatedScenario);
     
@@ -379,7 +568,8 @@ export const ScenarioProvider = ({ children }) => {
         ...scenario,
         id: Date.now().toString(),
         name: `${scenario.name} (Copy)`,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        meta: { ...(scenario.meta ?? {}), duplicatedFromId: scenario.id, updatedAt: new Date().toISOString() },
       };
       
       // Save to Supabase
@@ -402,6 +592,88 @@ export const ScenarioProvider = ({ children }) => {
     }
   };
 
+  const exportScenariosBundle = () => {
+    return {
+      app: 'FireFed',
+      type: 'scenarios_export',
+      schemaVersion: SCENARIO_SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      scenarios: scenarios.map(s => normalizeScenario(s)),
+    };
+  };
+
+  const importScenariosFromJsonText = async (jsonText, { mode = 'merge' } = {}) => {
+    setLastScenarioError(null);
+
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      const error = { code: 'IMPORT_PARSE_ERROR', message: 'Invalid JSON' };
+      setLastScenarioError(error);
+      return { success: false, error };
+    }
+
+    const incomingScenarios = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.scenarios)
+        ? parsed.scenarios
+        : null;
+
+    if (!incomingScenarios) {
+      const error = { code: 'IMPORT_FORMAT_ERROR', message: 'Expected an array of scenarios or { scenarios: [...] }' };
+      setLastScenarioError(error);
+      return { success: false, error };
+    }
+
+    const normalizedIncoming = incomingScenarios
+      .filter(Boolean)
+      .map((s) => normalizeScenario(s));
+
+    // Enforce scenario limits on import as well.
+    const existing = mode === 'replace' ? [] : scenarios.slice();
+    const existingIds = new Set(existing.map(s => s.id));
+
+    const canAdd = Number.isFinite(scenarioLimit) ? Math.max(0, scenarioLimit - existing.length) : normalizedIncoming.length;
+    const toImport = normalizedIncoming.slice(0, canAdd);
+    const skippedCount = Math.max(0, normalizedIncoming.length - toImport.length);
+
+    const imported = toImport.map((s) => {
+      let id = s.id;
+      if (!id || existingIds.has(id)) {
+        id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+      existingIds.add(id);
+      return {
+        ...s,
+        id,
+        name: s.name || 'Imported Scenario',
+        createdAt: s.createdAt || new Date().toISOString(),
+        meta: { ...(s.meta ?? {}), importedAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      };
+    });
+
+    const nextScenarios = [...existing, ...imported];
+    setScenarios(nextScenarios);
+    if (!currentScenario && nextScenarios.length > 0) {
+      setCurrentScenario(nextScenarios[0]);
+    }
+
+    // Persist to localStorage fallback when Supabase isn't available
+    if (!isSupabaseAvailable) {
+      localStorage.setItem('retirement-scenarios', JSON.stringify(nextScenarios));
+    }
+
+    trackEvent('scenario_imported', { importedCount: imported.length, skippedCount, mode });
+
+    if (skippedCount > 0) {
+      const error = { code: 'SCENARIO_LIMIT', scenarioLimit };
+      setLastScenarioError(error);
+    }
+
+    return { success: true, importedCount: imported.length, skippedCount };
+  };
+
   const value = {
     scenarios,
     currentScenario,
@@ -415,7 +687,12 @@ export const ScenarioProvider = ({ children }) => {
     renameScenario,
     loadScenario,
     duplicateScenario,
-    createDefaultScenario
+    createDefaultScenario,
+    getScenarioTemplates,
+    buildScenarioFromTemplate,
+    getScenarioDiff,
+    exportScenariosBundle,
+    importScenariosFromJsonText,
   };
 
   return (

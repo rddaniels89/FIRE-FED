@@ -17,8 +17,9 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       ...process.env,
-      VITE_BYPASS_AUTH: 'true',
-      VITE_BYPASS_PRO: 'true',
+      // Force guest-mode for e2e to avoid depending on a real Supabase project/credentials.
+      VITE_SUPABASE_URL: 'your_supabase_project_url',
+      VITE_SUPABASE_ANON_KEY: 'your_supabase_anon_key',
     },
   },
   projects: [

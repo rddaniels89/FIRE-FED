@@ -15,12 +15,16 @@
 }
 
 @layer components {
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900;
+  }
+
   .btn-primary {
-    @apply bg-navy-600 hover:bg-navy-700 text-white font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-200 hover:shadow-lg;
+    @apply focus-ring bg-navy-600 hover:bg-navy-700 text-white font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-200 hover:shadow-lg;
   }
   
   .btn-secondary {
-    @apply bg-slate-600 hover:bg-slate-700 text-white font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-200 hover:shadow-lg;
+    @apply focus-ring bg-slate-600 hover:bg-slate-700 text-white font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-200 hover:shadow-lg;
   }
   
   .card {
@@ -36,10 +40,14 @@
   }
   
   .tooltip {
-    @apply absolute z-10 px-3 py-2 text-sm text-white bg-slate-800 dark:bg-slate-700 rounded-lg shadow-lg opacity-0 invisible transition-all duration-200;
+    @apply absolute z-10 px-3 py-2 text-sm text-white bg-slate-800 dark:bg-slate-700 rounded-lg shadow-lg opacity-0 invisible transition-all duration-200 pointer-events-none;
   }
   
   .tooltip-trigger:hover .tooltip {
+    @apply opacity-100 visible;
+  }
+
+  .tooltip-trigger:focus-within .tooltip {
     @apply opacity-100 visible;
   }
   
@@ -91,5 +99,66 @@
   /* Custom chart background for dark mode */
   .dark canvas {
     filter: brightness(0.9);
+  }
+}
+
+@layer utilities {
+  /* Luxe flame animation: subtle flicker + glow pulse + inner shimmer */
+  @keyframes flameFlickerLuxe {
+    0% { transform: translateY(0) rotate(-1.5deg) scale(1); }
+    18% { transform: translateY(-0.8px) rotate(1.2deg) scale(1.02); }
+    44% { transform: translateY(0.4px) rotate(-0.6deg) scale(0.995); }
+    72% { transform: translateY(-0.4px) rotate(1deg) scale(1.01); }
+    100% { transform: translateY(0) rotate(-1.5deg) scale(1); }
+  }
+
+  @keyframes flameGlowPulse {
+    0% { opacity: 0.28; filter: blur(16px); transform: scale(0.98); }
+    40% { opacity: 0.42; filter: blur(18px); transform: scale(1.03); }
+    100% { opacity: 0.28; filter: blur(16px); transform: scale(0.98); }
+  }
+
+  @keyframes flameShimmer {
+    0% { opacity: 0.55; transform: translateY(0) scale(1); }
+    50% { opacity: 0.72; transform: translateY(-0.6px) scale(1.02); }
+    100% { opacity: 0.55; transform: translateY(0) scale(1); }
+  }
+
+  .flame-luxe {
+    width: 100%;
+    height: 100%;
+    transform-origin: 50% 88%;
+    animation: flameFlickerLuxe 2.2s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .flame-glow {
+    background: radial-gradient(circle at 45% 50%, rgba(251, 191, 36, 0.45), rgba(249, 115, 22, 0.24) 45%, rgba(244, 63, 94, 0.18) 70%, rgba(99, 102, 241, 0) 78%);
+    animation: flameGlowPulse 2.6s ease-in-out infinite;
+    will-change: opacity, filter, transform;
+  }
+
+  .flame-outer {
+    transform-origin: 50% 88%;
+  }
+
+  .flame-inner {
+    transform-origin: 52% 78%;
+    animation: flameFlickerLuxe 1.9s ease-in-out infinite reverse;
+    will-change: transform;
+  }
+
+  .flame-core {
+    animation: flameShimmer 2.4s ease-in-out infinite;
+    mix-blend-mode: screen;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .flame-luxe,
+    .flame-inner,
+    .flame-core,
+    .flame-glow {
+      animation: none !important;
+    }
   }
 }

@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { supabase, isSupabaseAvailable } from '../supabaseClient'
+import { useAuth } from '../contexts/AuthContext'
 import { trackEvent } from '../lib/telemetry'
 
 const Auth = ({ onAuthSuccess }) => {
+  const { login } = useAuth()
   const [loading, setLoading] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
@@ -14,14 +17,8 @@ const Auth = ({ onAuthSuccess }) => {
     
     if (!isSupabaseAvailable) {
       setMessage('Authentication service is not available. Using guest mode.')
-      // Create a mock user for localStorage fallback
-      const mockUser = {
-        id: 'guest-' + Date.now(),
-        email: email || 'guest@example.com',
-        user_metadata: { email: email || 'guest@example.com' }
-      }
-      localStorage.setItem('auth-user', JSON.stringify(mockUser))
-      onAuthSuccess?.(mockUser)
+      const result = await login(email || 'guest@example.com', password || '')
+      if (result?.success) onAuthSuccess?.(result.user)
       return
     }
 
@@ -58,6 +55,32 @@ const Auth = ({ onAuthSuccess }) => {
       setMessage(error.message || 'An error occurred')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleForgotPassword = async () => {
+    if (!isSupabaseAvailable) {
+      setMessage('Password reset is unavailable in guest mode.')
+      return
+    }
+
+    if (!email) {
+      setMessage('Enter your email above, then click “Forgot password?”')
+      return
+    }
+
+    setResetLoading(true)
+    setMessage('')
+    try {
+      const redirectTo = `${window.location.origin}/auth/reset`
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+      if (error) throw error
+      setMessage('If that email exists, a password reset link has been sent.')
+      trackEvent('password_reset_requested', { email_domain: (email || '').split('@')[1] || null })
+    } catch (error) {
+      setMessage(error.message || 'Failed to request a reset email')
+    } finally {
+      setResetLoading(false)
     }
   }
 
@@ -129,6 +152,19 @@ const Auth = ({ onAuthSuccess }) => {
             </button>
           </div>
 
+          {!isSignUp && isSupabaseAvailable && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={resetLoading}
+                className="text-indigo-600 hover:text-indigo-500 text-sm disabled:opacity-50"
+              >
+                {resetLoading ? 'Sending reset email…' : 'Forgot password?'}
+              </button>
+            </div>
+          )}
+
           <div className="text-center">
             <button
               type="button"
@@ -148,13 +184,9 @@ const Auth = ({ onAuthSuccess }) => {
                 type="button"
                 className="text-gray-600 hover:text-gray-500 text-sm underline"
                 onClick={() => {
-                  const mockUser = {
-                    id: 'guest-' + Date.now(),
-                    email: 'guest@example.com',
-                    user_metadata: { email: 'guest@example.com' }
-                  }
-                  localStorage.setItem('auth-user', JSON.stringify(mockUser))
-                  onAuthSuccess?.(mockUser)
+                  login('guest@example.com', '').then((result) => {
+                    if (result?.success) onAuthSuccess?.(result.user)
+                  })
                 }}
               >
                 Continue as Guest

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -14,10 +14,17 @@ import { useScenario } from '../contexts/ScenarioContext';
 import { useAuth } from '../contexts/AuthContext';
 import ScenarioManager from './ScenarioManager';
 import FIREGapCalculator from './FIREGapCalculator';
+import { useNavigate } from 'react-router-dom';
+import AdvancedAnalyticsPanel from './AdvancedAnalyticsPanel';
+import OptimizationPanel from './OptimizationPanel';
 import { calculateTspTraditionalVsRoth } from '../lib/calculations/tsp';
-import { calculateFersResults } from '../lib/calculations/fers';
+import { calculateFersResults, DEFAULT_MRA, findEarliestFersImmediateRetirementAge } from '../lib/calculations/fers';
+import { calculateFireGap } from '../lib/calculations/fire';
 import { FEATURES, hasEntitlement } from '../lib/entitlements';
 import { trackEvent } from '../lib/telemetry';
+import NumberStepper from './NumberStepper';
+import { FileDown, Lock } from 'lucide-react';
+import { createRetirementReportPdf } from '../lib/pdf/report';
 
 ChartJS.register(
   CategoryScale,
@@ -33,6 +40,7 @@ function SummaryDashboard() {
   const { isAuthenticated, entitlements } = useAuth();
   const { currentScenario, updateCurrentScenario } = useScenario();
   const canExportPdf = hasEntitlement(entitlements, FEATURES.PDF_EXPORT);
+  const navigate = useNavigate();
   
   const [tspData, setTspData] = useState({
     projectedBalance: 800000,
@@ -62,7 +70,19 @@ function SummaryDashboard() {
   });
 
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [isPdfSettingsOpen, setIsPdfSettingsOpen] = useState(false);
+  const [pdfSettings, setPdfSettings] = useState({
+    includeCharts: true,
+    detailLevel: 'detailed', // 'compact' | 'detailed'
+  });
   const summaryRef = useRef(null);
+  const pensionVsTspChartRef = useRef(null);
+  const netWorthChartRef = useRef(null);
+
+  const summary = currentScenario?.summary ?? {};
+  const summaryAssumptions = summary?.assumptions ?? {};
+
+  const swr = Number(summaryAssumptions.safeWithdrawalRate ?? 0.04);
 
   // Load data from current scenario
   useEffect(() => {
@@ -149,7 +169,7 @@ function SummaryDashboard() {
     }
   }, [fireData.monthlyExpenses, currentScenario, updateCurrentScenario]);
 
-  const calculateFireProjection = () => {
+  const calculateFireProjection = useCallback(() => {
     const totalNetWorth = tspData.projectedBalance + pensionData.lifetimePension;
 
     // Use the user's FIRE goal if provided; otherwise fall back to monthly expenses as a proxy.
@@ -172,7 +192,7 @@ function SummaryDashboard() {
       const balance = Number(point.balance ?? 0);
       if (!age) continue;
 
-      const tspMonthlyWithdrawal = balance * 0.04 / 12; // 4% SWR assumption
+      const tspMonthlyWithdrawal = balance * (Number(swr ?? 0.04) || 0.04) / 12;
       const pensionThisAge = age >= pensionStartAge ? pensionMonthly : 0;
       const totalMonthlyIncome = tspMonthlyWithdrawal + pensionThisAge + sideHustleIncome + spouseIncome;
 
@@ -192,18 +212,29 @@ function SummaryDashboard() {
       fireMessage = 'Projected FIRE age not available with current inputs.';
     }
 
-    setFireData(prev => ({
-      ...prev,
-      projectedFireAge,
-      fireMessage,
-      totalNetWorth,
-      fireGoalMonthly
-    }));
-  };
+    setFireData(prev => {
+      if (
+        prev.projectedFireAge === projectedFireAge &&
+        prev.fireMessage === fireMessage &&
+        prev.totalNetWorth === totalNetWorth &&
+        prev.fireGoalMonthly === fireGoalMonthly
+      ) {
+        return prev;
+      }
+
+      return ({
+        ...prev,
+        projectedFireAge,
+        fireMessage,
+        totalNetWorth,
+        fireGoalMonthly
+      });
+    });
+  }, [tspData, pensionData, currentScenario?.fire, currentScenario?.fers, fireData.monthlyExpenses, swr]);
 
   useEffect(() => {
     calculateFireProjection();
-  }, [tspData, pensionData, fireData.monthlyExpenses, currentScenario?.fire, currentScenario?.fers]);
+  }, [calculateFireProjection]);
 
   const handleExpenseChange = (value) => {
     setFireData(prev => ({
@@ -212,7 +243,7 @@ function SummaryDashboard() {
     }));
   };
 
-  const pensionVsTspData = {
+  const pensionVsTspData = useMemo(() => ({
     labels: ['FERS Pension (Lifetime)', 'TSP Balance'],
     datasets: [
       {
@@ -222,14 +253,14 @@ function SummaryDashboard() {
         borderWidth: 2
       }
     ]
-  };
+  }), [pensionData.lifetimePension, tspData.projectedBalance]);
 
-  const netWorthData = {
+  const netWorthData = useMemo(() => ({
     labels: ['Current', 'At Retirement'],
     datasets: [
       {
         label: 'TSP Balance',
-        data: [50000, tspData.projectedBalance],
+        data: [Number(currentScenario?.tsp?.currentBalance ?? 0), tspData.projectedBalance],
         backgroundColor: '#2e4a96',
         borderColor: '#253d7a',
         borderWidth: 1
@@ -242,9 +273,9 @@ function SummaryDashboard() {
         borderWidth: 1
       }
     ]
-  };
+  }), [currentScenario?.tsp?.currentBalance, tspData.projectedBalance, pensionData.lifetimePension]);
 
-  const chartOptions = {
+  const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -256,12 +287,8 @@ function SummaryDashboard() {
     },
     scales: {
       x: {
-        ticks: {
-          color: '#64748b'
-        },
-        grid: {
-          color: '#e2e8f0'
-        }
+        ticks: { color: '#64748b' },
+        grid: { color: '#e2e8f0' }
       },
       y: {
         ticks: {
@@ -270,14 +297,12 @@ function SummaryDashboard() {
             return '$' + (value / 1000).toFixed(0) + 'K';
           }
         },
-        grid: {
-          color: '#e2e8f0'
-        }
+        grid: { color: '#e2e8f0' }
       }
     }
-  };
+  }), []);
 
-  const doughnutOptions = {
+  const doughnutOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -289,62 +314,177 @@ function SummaryDashboard() {
         }
       }
     }
-  };
+  }), []);
 
-  const generatePDF = async () => {
-    if (!summaryRef.current) return;
-    
+  const generatePDF = async (settingsOverride) => {
+    if (!currentScenario) return;
+
+    const settings = settingsOverride || pdfSettings;
+
     setIsGeneratingPDF(true);
-    trackEvent('pdf_export_started', {});
-    
+    trackEvent('pdf_export_started', {
+      includeCharts: Boolean(settings?.includeCharts),
+      detailLevel: settings?.detailLevel || 'detailed',
+    });
+
     try {
-      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-        import('html2canvas'),
+      const [{ default: jsPDF }, html2canvasModule] = await Promise.all([
         import('jspdf'),
+        settings?.includeCharts ? import('html2canvas') : Promise.resolve(null),
       ]);
 
-      const canvas = await html2canvas(summaryRef.current, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff'
+      const summaryAssumptionsLocal = currentScenario?.summary?.assumptions ?? {};
+      const swrLocal = Number(summaryAssumptionsLocal.safeWithdrawalRate ?? 0.04);
+      const pensionEndAgeLocal = Number(summaryAssumptionsLocal.pensionEndAge ?? 85);
+
+      const totalYearsOfService =
+        Number(currentScenario?.fers?.yearsOfService ?? 0) + Number(currentScenario?.fers?.monthsOfService ?? 0) / 12;
+
+      const earliestFersImmediateAge = findEarliestFersImmediateRetirementAge({
+        currentAge: currentScenario?.fers?.currentAge,
+        totalYearsOfService,
+        mra: DEFAULT_MRA,
       });
-      
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF();
-      
-      const imgWidth = 190;
-      const pageHeight = 295;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
-      
-      pdf.setFontSize(16);
-      pdf.text('Federal Retirement Summary', 20, 20);
-      
-      pdf.setFontSize(8);
-      pdf.text('This estimate is educational and not official financial advice.', 20, 30);
-      
-      pdf.addImage(imgData, 'PNG', 10, 40, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-      
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+
+      const pensionStartAge = Number(currentScenario?.fers?.retirementAge ?? pensionData.retirementAge ?? tspData.retirementAge);
+
+      const fersResults = calculateFersResults({
+        yearsOfService: currentScenario?.fers?.yearsOfService,
+        monthsOfService: currentScenario?.fers?.monthsOfService,
+        high3Salary: currentScenario?.fers?.high3Salary,
+        currentAge: currentScenario?.fers?.currentAge,
+        retirementAge: pensionStartAge,
+        showComparison: false,
+        includeFutureService: true,
+        retirementEndAge: pensionEndAgeLocal,
+        mra: DEFAULT_MRA,
+      });
+
+      const ssLocal = currentScenario?.summary?.socialSecurity ?? {};
+      const ssModeLocal = ssLocal.mode ?? 'not_configured';
+      const ssClaimingAgeLocal = Number(ssLocal.claimingAge ?? 67);
+      const ssManualMonthlyLocal = Number(ssLocal.monthlyBenefit ?? 0);
+      const ssPctLocal = Number(ssLocal.percentOfSalary ?? 30);
+      const tspSalaryLocal = Number(currentScenario?.tsp?.annualSalary ?? 0);
+      const ssEstimatedMonthlyLocal =
+        ssModeLocal === 'estimate' && tspSalaryLocal > 0 ? (tspSalaryLocal * (ssPctLocal / 100)) / 12 : 0;
+      const ssMonthlyLocal =
+        ssModeLocal === 'manual' ? ssManualMonthlyLocal : ssModeLocal === 'estimate' ? ssEstimatedMonthlyLocal : 0;
+
+      const fireGap = calculateFireGap({
+        tspProjectedBalance: tspData.projectedBalance,
+        pensionMonthly: pensionData.monthlyPension,
+        fire: currentScenario?.fire ?? {},
+        safeWithdrawalRate: swrLocal,
+        desiredFireAge: fireData.desiredFireAge,
+        pensionStartAge,
+      });
+
+      const totalAnnualIncomeEstimate =
+        Number(pensionData.annualPension ?? 0) +
+        Number(tspData.projectedBalance ?? 0) * Number(swrLocal || 0.04) +
+        Number(ssMonthlyLocal ?? 0) * 12;
+
+      const incomeReplacementPct = (() => {
+        const high3 = Number(currentScenario?.fers?.high3Salary ?? pensionData.high3Salary ?? 0);
+        if (!high3) return null;
+        return Math.round((totalAnnualIncomeEstimate / high3) * 100);
+      })();
+
+      const chartImages = {};
+      if (settings?.includeCharts && html2canvasModule?.default) {
+        const html2canvas = html2canvasModule.default;
+        const capture = async (el) => {
+          if (!el) return null;
+          const canvas = await html2canvas(el, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#ffffff',
+          });
+          return canvas.toDataURL('image/png');
+        };
+
+        chartImages.pensionVsTsp = await capture(pensionVsTspChartRef.current);
+        chartImages.netWorth = await capture(netWorthChartRef.current);
       }
-      
-      const pageCount = pdf.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        pdf.setPage(i);
-        pdf.setFontSize(8);
-        pdf.text('Generated by Fed Retire Advisor - For Educational Use Only', 20, 285);
-        pdf.text(`Page ${i} of ${pageCount}`, 180, 285);
-      }
-      
-      pdf.save('federal-retirement-summary.pdf');
-      
+
+      const pdf = createRetirementReportPdf({
+        jsPDF,
+        scenario: currentScenario,
+        settings,
+        chartImages,
+        computed: {
+          generatedAt: new Date().toLocaleString(),
+          swr: swrLocal,
+          pensionEndAge: pensionEndAgeLocal,
+          mra: DEFAULT_MRA,
+          earliestFersImmediateAge,
+
+          totalNetWorthAtRetirement: fireData.totalNetWorth,
+          tspProjectedBalance: tspData.projectedBalance,
+          tspTotalContributions: tspData.totalContributions,
+          tspTotalGrowth: tspData.totalGrowth,
+          tspCurrentAge: currentScenario?.tsp?.currentAge ?? tspData.currentAge,
+          tspRetirementAge: currentScenario?.tsp?.retirementAge ?? tspData.retirementAge,
+          tspCurrentBalance: currentScenario?.tsp?.currentBalance ?? 0,
+          tspAnnualSalary: currentScenario?.tsp?.annualSalary ?? 0,
+          tspEmployeeContributionPct: currentScenario?.tsp?.monthlyContributionPercent ?? null,
+          tspAllocation: currentScenario?.tsp?.allocation ?? null,
+          tspContributionType: currentScenario?.tsp?.contributionType ?? 'traditional',
+          tspValueMode: currentScenario?.tsp?.valueMode ?? 'nominal',
+          tspInflationRate: currentScenario?.tsp?.inflationRate ?? 0,
+
+          fersCurrentAge: currentScenario?.fers?.currentAge ?? null,
+          plannedRetirementAge: pensionStartAge,
+          fersProjectedYearsOfService: Math.round((fersResults.projectedYears ?? fersResults.totalYears ?? 0) * 10) / 10,
+          fersHigh3Salary: currentScenario?.fers?.high3Salary ?? pensionData.high3Salary,
+          fersMultiplier: fersResults?.stayFed?.multiplier ?? null,
+          fersEligibilityMessages: (() => {
+            const lines = [];
+            const msg = fersResults?.stayFed?.eligibilityMessage;
+            if (msg) lines.push(msg);
+            if (earliestFersImmediateAge && Number.isFinite(earliestFersImmediateAge)) {
+              lines.push(`Earliest immediate retirement age (estimated): ${earliestFersImmediateAge}`);
+            }
+            return lines;
+          })(),
+
+          pensionAnnual: pensionData.annualPension,
+          pensionMonthly: pensionData.monthlyPension,
+          pensionLifetimeValue: pensionData.lifetimePension,
+
+          desiredFireAge: fireData.desiredFireAge,
+          projectedFireAge: fireData.projectedFireAge,
+          fireIncomeGoalMonthly: fireGap.fireIncomeGoal,
+          tspMonthlyWithdrawal: fireGap.tspMonthlyWithdrawal,
+          monthlyIncomeBeforePension: fireGap.bridge?.monthlyShortfall != null
+            ? Math.max(0, fireGap.fireIncomeGoal - fireGap.bridge.monthlyShortfall)
+            : fireGap.totalPassiveIncomeAtDesiredAge - (fireGap.pension?.pensionMonthlyAtDesiredAge ?? 0),
+          monthlyGapAtDesiredAge: fireGap.monthlyGapAtDesiredAge,
+          bridgeYearsToBridge: fireGap.bridge?.yearsToBridge ?? 0,
+          bridgeRequiredAssets: fireGap.bridge?.requiredBridgeAssets ?? 0,
+
+          socialSecurityMode: ssModeLocal,
+          socialSecurityClaimingAge: ssClaimingAgeLocal,
+          socialSecurityMonthly: ssMonthlyLocal,
+
+          totalAnnualIncomeEstimate,
+          incomeReplacementPct,
+        },
+      });
+
+      const safeName = String(currentScenario?.name || 'scenario')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '');
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      pdf.save(`firefed-report-${safeName || 'scenario'}-${dateStamp}.pdf`);
+
+      trackEvent('pdf_export_succeeded', {
+        includeCharts: Boolean(settings?.includeCharts),
+        detailLevel: settings?.detailLevel || 'detailed',
+      });
     } catch (error) {
       console.error('Error generating PDF:', error);
       trackEvent('pdf_export_failed', { message: error?.message || 'unknown' });
@@ -370,7 +510,7 @@ function SummaryDashboard() {
           
           {canExportPdf ? (
             <button
-              onClick={generatePDF}
+              onClick={() => setIsPdfSettingsOpen(true)}
               disabled={isGeneratingPDF}
               className="btn-primary flex items-center gap-2"
             >
@@ -381,18 +521,23 @@ function SummaryDashboard() {
                 </>
               ) : (
                 <>
-                  📄 Download PDF
+                  <FileDown className="h-4 w-4" />
+                  Export PDF
                 </>
               )}
             </button>
           ) : (
             <div className="relative group">
               <button
-                disabled
-                className="btn-primary opacity-50 cursor-not-allowed flex items-center gap-2"
+                className="btn-primary opacity-70 hover:opacity-100 flex items-center gap-2"
                 title={!isAuthenticated ? "Please log in to export PDF" : "Pro feature - join the waitlist to export PDF"}
+                onClick={() => {
+                  if (!isAuthenticated) return;
+                  navigate('/pro-features', { state: { reason: 'pdf_export_pro' } });
+                }}
               >
-                🔒 Download PDF
+                <Lock className="h-4 w-4" />
+                Export PDF (Pro)
               </button>
               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap z-50">
                 {!isAuthenticated ? '🔒 Please log in to save or export your FIRE scenario.' : '🔒 PDF export is a Pro feature. Join the waitlist in Pro Features.'}
@@ -401,6 +546,101 @@ function SummaryDashboard() {
           )}
         </div>
       </div>
+
+      {isPdfSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-slate-900/60"
+            onClick={() => !isGeneratingPDF && setIsPdfSettingsOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="relative w-full max-w-lg rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl p-6">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-xl font-semibold navy-text">Export PDF Report</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                  Choose report options. You’ll get a multi-page report (cover, assumptions, modules, timeline).
+                </p>
+              </div>
+              <button
+                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                onClick={() => !isGeneratingPDF && setIsPdfSettingsOpen(false)}
+                aria-label="Close export settings"
+                disabled={isGeneratingPDF}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4"
+                  checked={Boolean(pdfSettings.includeCharts)}
+                  onChange={(e) => setPdfSettings((prev) => ({ ...prev, includeCharts: e.target.checked }))}
+                  disabled={isGeneratingPDF}
+                />
+                <div>
+                  <div className="font-medium text-slate-800 dark:text-slate-200">Include charts</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Embeds the Summary charts as images (optional).</div>
+                </div>
+              </label>
+
+              <div>
+                <div className="font-medium text-slate-800 dark:text-slate-200 mb-2">Detail level</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    className={`px-3 py-2 rounded-lg border text-sm ${
+                      pdfSettings.detailLevel === 'compact'
+                        ? 'bg-navy-50 dark:bg-navy-900/30 border-navy-300 dark:border-navy-700 text-navy-700 dark:text-navy-300'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                    onClick={() => setPdfSettings((prev) => ({ ...prev, detailLevel: 'compact' }))}
+                    disabled={isGeneratingPDF}
+                  >
+                    Compact
+                  </button>
+                  <button
+                    type="button"
+                    className={`px-3 py-2 rounded-lg border text-sm ${
+                      pdfSettings.detailLevel === 'detailed'
+                        ? 'bg-navy-50 dark:bg-navy-900/30 border-navy-300 dark:border-navy-700 text-navy-700 dark:text-navy-300'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                    onClick={() => setPdfSettings((prev) => ({ ...prev, detailLevel: 'detailed' }))}
+                    disabled={isGeneratingPDF}
+                  >
+                    Detailed
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                className="btn-secondary"
+                onClick={() => setIsPdfSettingsOpen(false)}
+                disabled={isGeneratingPDF}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-primary flex items-center gap-2"
+                onClick={async () => {
+                  await generatePDF(pdfSettings);
+                  setIsPdfSettingsOpen(false);
+                }}
+                disabled={isGeneratingPDF}
+              >
+                <FileDown className="h-4 w-4" />
+                {isGeneratingPDF ? 'Generating…' : 'Generate PDF'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div ref={summaryRef} className="bg-white dark:bg-slate-900 p-6 rounded-lg">
         <div className="grid md:grid-cols-4 gap-6 mb-8">
@@ -510,12 +750,23 @@ function SummaryDashboard() {
           </div>
         </div>
 
+        <AdvancedAnalyticsPanel
+          scenario={currentScenario}
+          pensionMonthly={pensionData.monthlyPension}
+          pensionStartAge={Number(currentScenario?.fers?.retirementAge ?? pensionData.retirementAge ?? tspData.retirementAge ?? 62)}
+          entitlements={entitlements}
+        />
+
+        <OptimizationPanel />
+
         <div className="grid lg:grid-cols-2 gap-8">
           <div className="space-y-6">
             <div className="card p-6">
               <h3 className="text-xl font-semibold navy-text mb-6">Pension vs TSP Share</h3>
               <div className="h-64">
-                <Doughnut data={pensionVsTspData} options={doughnutOptions} />
+                <div ref={pensionVsTspChartRef} className="h-64">
+                  <Doughnut data={pensionVsTspData} options={doughnutOptions} />
+                </div>
               </div>
               <div className="mt-6 space-y-2">
                 <div className="flex justify-between items-center">
@@ -545,7 +796,9 @@ function SummaryDashboard() {
             <div className="card p-6">
               <h3 className="text-xl font-semibold navy-text mb-6">Net Worth Growth</h3>
               <div className="h-64">
-                <Bar data={netWorthData} options={chartOptions} />
+                <div ref={netWorthChartRef} className="h-64">
+                  <Bar data={netWorthData} options={chartOptions} />
+                </div>
               </div>
               <div className="disclaimer">
                 Estimates only. For educational use. Actual results may vary based on market performance.
@@ -559,13 +812,22 @@ function SummaryDashboard() {
               <div className="space-y-4">
                 <div>
                   <label className="label">Monthly Expenses</label>
-                  <input
-                    type="number"
-                    value={fireData.monthlyExpenses}
-                    onChange={(e) => handleExpenseChange(e.target.value)}
-                    className="input-field w-full"
-                    placeholder="4,000"
-                  />
+                  <div className="flex items-stretch gap-2">
+                    <input
+                      type="number"
+                      value={fireData.monthlyExpenses}
+                      onChange={(e) => handleExpenseChange(e.target.value)}
+                      className="input-field w-full"
+                      placeholder="4,000"
+                    />
+                    <NumberStepper
+                      incrementLabel="Increase monthly expenses"
+                      decrementLabel="Decrease monthly expenses"
+                      onIncrement={() => handleExpenseChange(String((Number(fireData.monthlyExpenses) || 0) + 100))}
+                      onDecrement={() => handleExpenseChange(String(Math.max(0, (Number(fireData.monthlyExpenses) || 0) - 100)))}
+                      disabledDecrement={(Number(fireData.monthlyExpenses) || 0) <= 0}
+                    />
+                  </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                     Annual expenses: ${(fireData.monthlyExpenses * 12).toLocaleString()}
                   </p>

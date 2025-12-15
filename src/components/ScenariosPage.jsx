@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useScenario } from '../contexts/ScenarioContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,19 +15,29 @@ function ScenariosPage() {
     scenarios, 
     currentScenario, 
     loadScenario, 
+    saveScenario,
     deleteScenario, 
     duplicateScenario, 
-    renameScenario 
+    renameScenario,
+    getScenarioTemplates,
+    buildScenarioFromTemplate,
+    getScenarioDiff,
+    exportScenariosBundle,
+    importScenariosFromJsonText,
   } = useScenario();
   
   const [selectedScenarios, setSelectedScenarios] = useState([]);
   const [isRenaming, setIsRenaming] = useState(null);
   const [renameValue, setRenameValue] = useState('');
+  const [isLoadPreviewOpen, setIsLoadPreviewOpen] = useState(false);
+  const [pendingLoadScenarioId, setPendingLoadScenarioId] = useState(null);
   
   // Pro feature gating using AuthContext
   const { entitlements } = useAuth();
   const canCompare = hasEntitlement(entitlements, FEATURES.SCENARIO_COMPARE);
+  const canExportImport = hasEntitlement(entitlements, FEATURES.SCENARIO_EXPORT_IMPORT);
   const navigate = useNavigate();
+  const importFileRef = useRef(null);
 
   const handleScenarioSelect = (scenarioId) => {
     setSelectedScenarios(prev => {
@@ -81,6 +91,40 @@ function ScenariosPage() {
     };
   };
 
+  const openLoadPreview = (scenarioId) => {
+    setPendingLoadScenarioId(scenarioId);
+    setIsLoadPreviewOpen(true);
+  };
+
+  const closeLoadPreview = () => {
+    setIsLoadPreviewOpen(false);
+    setPendingLoadScenarioId(null);
+  };
+
+  const formatDiffValue = (v) => {
+    if (v === null || v === undefined) return '—';
+    if (typeof v === 'number') return String(v);
+    if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+    if (typeof v === 'string') return v;
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return String(v);
+    }
+  };
+
+  const downloadTextFile = ({ filename, text, mimeType }) => {
+    const blob = new Blob([text], { type: mimeType || 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="animate-fade-in">
       {/* Header */}
@@ -100,6 +144,68 @@ function ScenariosPage() {
               ✨ PRO FEATURES
             </span>
           )}
+
+          {/* Export / Import (Pro) */}
+          <div className="flex items-center space-x-2">
+            <input
+              ref={importFileRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const text = await file.text();
+                  const result = await importScenariosFromJsonText(text, { mode: 'merge' });
+                  if (result?.success) {
+                    alert(`Imported ${result.importedCount} scenario(s)${result.skippedCount ? ` (skipped ${result.skippedCount} due to your scenario limit)` : ''}.`);
+                  } else {
+                    alert(result?.error?.message || 'Import failed.');
+                  }
+                } catch {
+                  alert('Import failed.');
+                } finally {
+                  // allow re-importing the same file
+                  e.target.value = '';
+                }
+              }}
+            />
+
+            <button
+              className="btn-secondary"
+              title={!canExportImport ? 'Pro feature - export/import scenarios' : 'Export scenarios as JSON'}
+              onClick={() => {
+                if (!canExportImport) {
+                  navigate('/pro-features', { state: { reason: 'export_import_pro' } });
+                  return;
+                }
+                const bundle = exportScenariosBundle();
+                downloadTextFile({
+                  filename: `firefed-scenarios-${new Date().toISOString().slice(0, 10)}.json`,
+                  text: JSON.stringify(bundle, null, 2),
+                  mimeType: 'application/json',
+                });
+              }}
+            >
+              {canExportImport ? '⬇️ Export' : '🔒 Export'}
+            </button>
+
+            <button
+              className="btn-secondary"
+              title={!canExportImport ? 'Pro feature - export/import scenarios' : 'Import scenarios from JSON'}
+              onClick={() => {
+                if (!canExportImport) {
+                  navigate('/pro-features', { state: { reason: 'export_import_pro' } });
+                  return;
+                }
+                importFileRef.current?.click();
+              }}
+            >
+              {canExportImport ? '⬆️ Import' : '🔒 Import'}
+            </button>
+          </div>
+
           <Link to="/" className="btn-secondary">
             ← Back to Home
           </Link>
@@ -154,6 +260,40 @@ function ScenariosPage() {
           </div>
         </div>
       )}
+
+      {/* Templates */}
+      <div className="card p-6 mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-semibold navy-text">⚡ Quick-start templates</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Start faster with a baseline scenario for your age band. You can tweak everything after creating it.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {getScenarioTemplates().map((t) => (
+            <div key={t.id} className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+              <div className="font-semibold navy-text">{t.name}</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">{t.description}</div>
+              <button
+                className="btn-primary w-full mt-4"
+                onClick={async () => {
+                  const scenarioData = buildScenarioFromTemplate(t.id);
+                  const result = await saveScenario(t.name, scenarioData);
+                  if (result?.success === false && result?.error?.code === 'SCENARIO_LIMIT') {
+                    navigate('/pro-features', { state: { reason: 'scenario_limit', limit: result.error.scenarioLimit } });
+                    return;
+                  }
+                }}
+              >
+                Create from template
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Scenarios List */}
       <div className="space-y-4">
@@ -273,7 +413,7 @@ function ScenariosPage() {
                   <div className="flex items-center space-x-2 ml-4">
                     {!isActive && (
                       <button
-                        onClick={() => loadScenario(scenario.id)}
+                        onClick={() => openLoadPreview(scenario.id)}
                         className="btn-secondary text-sm"
                       >
                         Load
@@ -329,6 +469,73 @@ function ScenariosPage() {
           >
             ⭐ Join Pro Waitlist
           </Link>
+        </div>
+      )}
+
+      {/* Load Preview Modal */}
+      {isLoadPreviewOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-lg w-[560px] max-w-[95vw]">
+            {(() => {
+              const target = scenarios.find(s => s.id === pendingLoadScenarioId);
+              const diffs = getScenarioDiff(currentScenario, target);
+
+              return (
+                <>
+                  <h3 className="text-lg font-semibold navy-text mb-2">
+                    Load scenario: {target?.name || 'Selected scenario'}
+                  </h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                    Here’s what will change if you switch scenarios.
+                  </p>
+
+                  <div className="max-h-72 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg">
+                    {diffs.length === 0 ? (
+                      <div className="p-4 text-sm text-slate-600 dark:text-slate-400">
+                        No key differences detected.
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-200 dark:divide-slate-700">
+                        {diffs.map((d) => (
+                          <div key={d.path} className="p-3 text-sm">
+                            <div className="font-medium text-slate-800 dark:text-slate-200">{d.label}</div>
+                            <div className="grid grid-cols-2 gap-3 mt-1">
+                              <div className="text-slate-600 dark:text-slate-400">
+                                <div className="text-xs uppercase tracking-wide">Current</div>
+                                <div className="font-mono text-xs">{formatDiffValue(d.from)}</div>
+                              </div>
+                              <div className="text-slate-600 dark:text-slate-400">
+                                <div className="text-xs uppercase tracking-wide">Selected</div>
+                                <div className="font-mono text-xs">{formatDiffValue(d.to)}</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 justify-end mt-5">
+                    <button
+                      onClick={closeLoadPreview}
+                      className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (pendingLoadScenarioId) loadScenario(pendingLoadScenarioId);
+                        closeLoadPreview();
+                      }}
+                      className="btn-primary"
+                    >
+                      Load Scenario
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
         </div>
       )}
     </div>

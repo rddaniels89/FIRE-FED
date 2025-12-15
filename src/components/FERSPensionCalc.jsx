@@ -16,6 +16,7 @@ import { useScenario } from '../contexts/ScenarioContext';
 import ScenarioManager from './ScenarioManager';
 import { calculateFersResults } from '../lib/calculations/fers';
 import TooltipWrapper from './TooltipWrapper';
+import NumberStepper from './NumberStepper';
 
 ChartJS.register(
   CategoryScale,
@@ -132,6 +133,19 @@ function FERSPensionCalc() {
       [field]: value
     }));
   }, []);
+
+  const stepField = useCallback((field, { step = 1, min = -Infinity, max = Infinity, integer = true } = {}) => {
+    const numeric = parseNumericInputs(inputs);
+    const current = Number(numeric?.[field] ?? 0);
+    const safeCurrent = Number.isFinite(current) ? current : 0;
+
+    return (direction) => {
+      const nextRaw = safeCurrent + direction * step;
+      const clamped = Math.min(max, Math.max(min, nextRaw));
+      const next = integer ? Math.round(clamped) : clamped;
+      handleInputChange(field, String(next));
+    };
+  }, [inputs, handleInputChange]);
 
   // Toggle comparison handler
   const handleToggleComparison = useCallback(() => {
@@ -382,17 +396,26 @@ function FERSPensionCalc() {
           <div className="card p-6">
             <h3 className="text-xl font-semibold navy-text mb-6">Service Information</h3>
             <div className="grid grid-cols-2 gap-6">
-              <TooltipWrapper text="Enter years you have already completed as of today (real-time service). This calculator will also project additional service from your Current Age to your Planned Retirement Age to estimate your total years at retirement.">
+              <TooltipWrapper text="Years completed so far. We'll project additional service from your current age to your planned retirement age to estimate total years at retirement.">
                 <div>
                   <label className="label">Years of Service</label>
-                  <input
-                    type="text"
-                    value={getDisplayValue('yearsOfService')}
-                    onChange={(e) => handleInputChange('yearsOfService', e.target.value)}
-                    className="input-field w-full"
-                    placeholder="20"
-                    inputMode="decimal"
-                  />
+                  <div className="flex items-stretch gap-2">
+                    <input
+                      type="text"
+                      value={getDisplayValue('yearsOfService')}
+                      onChange={(e) => handleInputChange('yearsOfService', e.target.value)}
+                      className="input-field w-full"
+                      placeholder="20"
+                      inputMode="decimal"
+                    />
+                    <NumberStepper
+                      incrementLabel="Increase years of service"
+                      decrementLabel="Decrease years of service"
+                      onIncrement={() => stepField('yearsOfService', { step: 1, min: 0, max: 50, integer: true })(+1)}
+                      onDecrement={() => stepField('yearsOfService', { step: 1, min: 0, max: 50, integer: true })(-1)}
+                      disabledDecrement={numericInputs.yearsOfService <= 0}
+                    />
+                  </div>
                   {validationErrors.yearsOfService && (
                     <p className="text-red-500 text-xs mt-1">{validationErrors.yearsOfService}</p>
                   )}
@@ -402,14 +425,23 @@ function FERSPensionCalc() {
               <TooltipWrapper text="Additional months of service (0-11)">
                 <div>
                   <label className="label">Additional Months</label>
-                  <input
-                    type="text"
-                    value={getDisplayValue('monthsOfService')}
-                    onChange={(e) => handleInputChange('monthsOfService', e.target.value)}
-                    className="input-field w-full"
-                    placeholder="0"
-                    inputMode="numeric"
-                  />
+                  <div className="flex items-stretch gap-2">
+                    <input
+                      type="text"
+                      value={getDisplayValue('monthsOfService')}
+                      onChange={(e) => handleInputChange('monthsOfService', e.target.value)}
+                      className="input-field w-full"
+                      placeholder="0"
+                      inputMode="numeric"
+                    />
+                    <NumberStepper
+                      incrementLabel="Increase months of service"
+                      decrementLabel="Decrease months of service"
+                      onIncrement={() => stepField('monthsOfService', { step: 1, min: 0, max: 11, integer: true })(+1)}
+                      onDecrement={() => stepField('monthsOfService', { step: 1, min: 0, max: 11, integer: true })(-1)}
+                      disabledDecrement={numericInputs.monthsOfService <= 0}
+                    />
+                  </div>
                   {validationErrors.monthsOfService && (
                     <p className="text-red-500 text-xs mt-1">{validationErrors.monthsOfService}</p>
                   )}
@@ -429,14 +461,23 @@ function FERSPensionCalc() {
               <TooltipWrapper text="Average of your highest 3 consecutive years of basic pay">
                 <div>
                   <label className="label">High-3 Average Salary</label>
-                  <input
-                    type="text"
-                    value={getDisplayValue('high3Salary')}
-                    onChange={(e) => handleInputChange('high3Salary', e.target.value)}
-                    className="input-field w-full"
-                    placeholder="1000000"
-                    inputMode="decimal"
-                  />
+                  <div className="flex items-stretch gap-2">
+                    <input
+                      type="text"
+                      value={getDisplayValue('high3Salary')}
+                      onChange={(e) => handleInputChange('high3Salary', e.target.value)}
+                      className="input-field w-full"
+                      placeholder="1000000"
+                      inputMode="decimal"
+                    />
+                    <NumberStepper
+                      incrementLabel="Increase high-3 average salary"
+                      decrementLabel="Decrease high-3 average salary"
+                      onIncrement={() => stepField('high3Salary', { step: 1000, min: 0, integer: true })(+1)}
+                      onDecrement={() => stepField('high3Salary', { step: 1000, min: 0, integer: true })(-1)}
+                      disabledDecrement={numericInputs.high3Salary <= 0}
+                    />
+                  </div>
                   {validationErrors.high3Salary && (
                     <p className="text-red-500 text-xs mt-1">{validationErrors.high3Salary}</p>
                   )}
@@ -444,17 +485,27 @@ function FERSPensionCalc() {
               </TooltipWrapper>
               
               <div className="grid grid-cols-2 gap-4">
-                <TooltipWrapper text="Your current age">
+                <TooltipWrapper text="Your current age in years">
                   <div>
-                    <label className="label">Current Age</label>
-                    <input
-                      type="text"
-                      value={getDisplayValue('currentAge')}
-                      onChange={(e) => handleInputChange('currentAge', e.target.value)}
-                      className="input-field w-full"
-                      placeholder="42"
-                      inputMode="numeric"
-                    />
+                    <label className="label" htmlFor="currentAge">Current Age</label>
+                    <div className="flex items-stretch gap-2">
+                      <input
+                        id="currentAge"
+                        type="text"
+                        value={getDisplayValue('currentAge')}
+                        onChange={(e) => handleInputChange('currentAge', e.target.value)}
+                        className="input-field w-full"
+                        placeholder="e.g. 35"
+                        inputMode="numeric"
+                      />
+                      <NumberStepper
+                        incrementLabel="Increase current age"
+                        decrementLabel="Decrease current age"
+                        onIncrement={() => stepField('currentAge', { step: 1, min: 18, max: 999, integer: true })(+1)}
+                        onDecrement={() => stepField('currentAge', { step: 1, min: 18, max: 999, integer: true })(-1)}
+                        disabledDecrement={numericInputs.currentAge <= 18}
+                      />
+                    </div>
                     {validationErrors.currentAge && (
                       <p className="text-red-500 text-xs mt-1">{validationErrors.currentAge}</p>
                     )}
@@ -464,14 +515,23 @@ function FERSPensionCalc() {
                 <TooltipWrapper text="Age when you plan to retire">
                   <div>
                     <label className="label">Planned Retirement Age</label>
-                    <input
-                      type="text"
-                      value={getDisplayValue('retirementAge')}
-                      onChange={(e) => handleInputChange('retirementAge', e.target.value)}
-                      className="input-field w-full"
-                      placeholder="62"
-                      inputMode="numeric"
-                    />
+                    <div className="flex items-stretch gap-2">
+                      <input
+                        type="text"
+                        value={getDisplayValue('retirementAge')}
+                        onChange={(e) => handleInputChange('retirementAge', e.target.value)}
+                        className="input-field w-full"
+                        placeholder="62"
+                        inputMode="numeric"
+                      />
+                      <NumberStepper
+                        incrementLabel="Increase planned retirement age"
+                        decrementLabel="Decrease planned retirement age"
+                        onIncrement={() => stepField('retirementAge', { step: 1, min: 19, max: 999, integer: true })(+1)}
+                        onDecrement={() => stepField('retirementAge', { step: 1, min: 19, max: 999, integer: true })(-1)}
+                        disabledDecrement={numericInputs.retirementAge <= 19}
+                      />
+                    </div>
                     {validationErrors.retirementAge && (
                       <p className="text-red-500 text-xs mt-1">{validationErrors.retirementAge}</p>
                     )}
@@ -501,14 +561,23 @@ function FERSPensionCalc() {
                 <TooltipWrapper text="Expected salary in private sector job">
                   <div>
                     <label className="label">Private Sector Salary</label>
-                    <input
-                      type="text"
-                      value={getDisplayValue('privateJobSalary')}
-                      onChange={(e) => handleInputChange('privateJobSalary', e.target.value)}
-                      className="input-field w-full"
-                      placeholder="1000000"
-                      inputMode="decimal"
-                    />
+                    <div className="flex items-stretch gap-2">
+                      <input
+                        type="text"
+                        value={getDisplayValue('privateJobSalary')}
+                        onChange={(e) => handleInputChange('privateJobSalary', e.target.value)}
+                        className="input-field w-full"
+                        placeholder="1000000"
+                        inputMode="decimal"
+                      />
+                      <NumberStepper
+                        incrementLabel="Increase private sector salary"
+                        decrementLabel="Decrease private sector salary"
+                        onIncrement={() => stepField('privateJobSalary', { step: 1000, min: 0, integer: true })(+1)}
+                        onDecrement={() => stepField('privateJobSalary', { step: 1000, min: 0, integer: true })(-1)}
+                        disabledDecrement={numericInputs.privateJobSalary <= 0}
+                      />
+                    </div>
                     {validationErrors.privateJobSalary && (
                       <p className="text-red-500 text-xs mt-1">{validationErrors.privateJobSalary}</p>
                     )}
@@ -518,14 +587,23 @@ function FERSPensionCalc() {
                 <TooltipWrapper text="Expected years working in private sector">
                   <div>
                     <label className="label">Private Sector Working Years</label>
-                    <input
-                      type="text"
-                      value={getDisplayValue('privateJobYears')}
-                      onChange={(e) => handleInputChange('privateJobYears', e.target.value)}
-                      className="input-field w-full"
-                      placeholder="20"
-                      inputMode="numeric"
-                    />
+                    <div className="flex items-stretch gap-2">
+                      <input
+                        type="text"
+                        value={getDisplayValue('privateJobYears')}
+                        onChange={(e) => handleInputChange('privateJobYears', e.target.value)}
+                        className="input-field w-full"
+                        placeholder="20"
+                        inputMode="numeric"
+                      />
+                      <NumberStepper
+                        incrementLabel="Increase private sector working years"
+                        decrementLabel="Decrease private sector working years"
+                        onIncrement={() => stepField('privateJobYears', { step: 1, min: 0, max: 40, integer: true })(+1)}
+                        onDecrement={() => stepField('privateJobYears', { step: 1, min: 0, max: 40, integer: true })(-1)}
+                        disabledDecrement={numericInputs.privateJobYears <= 0}
+                      />
+                    </div>
                     {validationErrors.privateJobYears && (
                       <p className="text-red-500 text-xs mt-1">{validationErrors.privateJobYears}</p>
                     )}

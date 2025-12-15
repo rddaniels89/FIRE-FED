@@ -9,6 +9,7 @@ CREATE TABLE scenarios (
   tsp_data JSONB,
   fers_data JSONB,
   fire_goal JSONB,
+  summary_data JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -62,6 +63,7 @@ SELECT
   tsp_data,
   fers_data,
   fire_goal,
+  summary_data,
   created_at,
   updated_at
 FROM scenarios
@@ -71,3 +73,4 @@ COMMENT ON TABLE scenarios IS 'Stores user retirement scenarios with TSP, FERS, 
 COMMENT ON COLUMN scenarios.tsp_data IS 'JSON data for TSP calculations (contributions, balances, etc.)';
 COMMENT ON COLUMN scenarios.fers_data IS 'JSON data for FERS pension calculations';
 COMMENT ON COLUMN scenarios.fire_goal IS 'JSON data for FIRE goals (target age, income, etc.)';
+COMMENT ON COLUMN scenarios.summary_data IS 'JSON data for Summary Dashboard configuration (expenses, SS estimate, assumptions, etc.)';

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, isSupabaseAvailable } from '../supabaseClient';
 import { getEntitlements, hasEntitlement } from '../lib/entitlements';
 
@@ -22,29 +22,13 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
-  // Never allow bypass in production builds.
-  const bypassAuth = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true';
-  const bypassPro = import.meta.env.DEV && import.meta.env.VITE_BYPASS_PRO === 'true';
+  const [subscription, setSubscription] = useState(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
 
   // Check for existing session on mount
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // Dev-only bypass to allow viewing the full UI without signing in
-        if (bypassAuth) {
-          const mockUser = {
-            id: 'dev-bypass',
-            email: 'dev@local',
-            user_metadata: {
-              email: 'dev@local',
-              ...(bypassPro ? { subscription_plan: 'pro' } : {}),
-            },
-          };
-          setUser(mockUser);
-          setIsAuthenticated(true);
-          return;
-        }
-
         if (isSupabaseAvailable) {
           // Check for existing Supabase session
           const { data: { session } } = await supabase.auth.getSession();
@@ -71,7 +55,7 @@ export const AuthProvider = ({ children }) => {
     initializeAuth();
 
     // Set up auth state listener for Supabase
-    if (!bypassAuth && isSupabaseAvailable) {
+    if (isSupabaseAvailable) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (event, session) => {
           if (session?.user) {
@@ -89,35 +73,74 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const isProUser = () => {
-    // Check if user has pro role/subscription
-    // This can be enhanced with Supabase user metadata or separate subscription table
+  // Load subscription status (Stripe-synced) from Supabase when authenticated.
+  useEffect(() => {
+    const loadSubscription = async () => {
+      if (!isSupabaseAvailable || !isAuthenticated || !user?.id) {
+        setSubscription(null);
+        setSubscriptionLoading(false);
+        return;
+      }
+
+      setSubscriptionLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (error) throw error;
+        setSubscription(data || null);
+      } catch (err) {
+        // If the table isn't deployed yet or RLS is misconfigured, fall back to metadata checks.
+        console.warn('Failed to load subscription row:', err?.message || err);
+        setSubscription(null);
+      } finally {
+        setSubscriptionLoading(false);
+      }
+    };
+
+    loadSubscription();
+  }, [isAuthenticated, user?.id]);
+
+  const isProUser = useMemo(() => {
     if (!user) return false;
-    
-    // Check user metadata for pro subscription
+
     const userMetadata = user.user_metadata || {};
     const appMetadata = user.app_metadata || {};
-    
-    // Check for pro subscription in metadata
-    return userMetadata.subscription_plan === 'pro' || 
+
+    const subscriptionStatus = (subscription?.status || '').toString().toLowerCase();
+    const subscriptionPlan = (subscription?.plan || '').toString().toLowerCase();
+    const subscriptionIsActive = subscriptionStatus === 'active' || subscriptionStatus === 'trialing';
+    const subscriptionIsPro = !subscriptionPlan || subscriptionPlan === 'pro';
+
+    // Prefer Stripe-synced subscription state when available.
+    if (isSupabaseAvailable && subscription) {
+      return subscriptionIsActive && subscriptionIsPro;
+    }
+
+    // Fallback: allow metadata-based Pro (dev/manual override).
+    return userMetadata.subscription_plan === 'pro' ||
            appMetadata.subscription_plan === 'pro' ||
            userMetadata.role === 'pro' ||
            appMetadata.role === 'pro';
-  };
+  }, [user, subscription]);
 
   // Helper functions for feature gating
-  const entitlements = getEntitlements({ isAuthenticated, isProUser: isProUser() });
+  const entitlements = useMemo(
+    () => getEntitlements({ isAuthenticated, isProUser }),
+    [isAuthenticated, isProUser]
+  );
 
-  const hasFeature = (feature) => {
-    return hasEntitlement(entitlements, feature);
-  };
+  const hasFeature = useCallback(
+    (feature) => hasEntitlement(entitlements, feature),
+    [entitlements]
+  );
 
-  const isPlanActive = () => {
-    return isAuthenticated;
-  };
+  const isPlanActive = isAuthenticated;
 
   // Authentication functions with Supabase integration
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     try {
       if (isSupabaseAvailable) {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -142,9 +165,9 @@ export const AuthProvider = ({ children }) => {
       console.error('Login error:', error);
       return { success: false, error: error.message };
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       if (isSupabaseAvailable) {
         await supabase.auth.signOut();
@@ -156,9 +179,9 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     }
-  };
+  }, []);
 
-  const upgradeToPro = async () => {
+  const upgradeToPro = useCallback(async () => {
     try {
       if (isSupabaseAvailable && user) {
         // Update user metadata in Supabase
@@ -199,20 +222,22 @@ export const AuthProvider = ({ children }) => {
       console.error('Upgrade error:', error);
       return { success: false, error: error.message };
     }
-  };
+  }, [user]);
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     isAuthenticated,
     loading,
-    isProUser: isProUser(),
+    isProUser,
+    subscription,
+    subscriptionLoading,
     entitlements,
     hasFeature,
-    isPlanActive: isPlanActive(),
+    isPlanActive,
     login,
     logout,
     upgradeToPro
-  };
+  }), [user, isAuthenticated, loading, isProUser, subscription, subscriptionLoading, entitlements, hasFeature, isPlanActive, login, logout, upgradeToPro]);
 
   return (
     <AuthContext.Provider value={value}>

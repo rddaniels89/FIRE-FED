@@ -105,6 +105,7 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
    - Open SQL Editor in Supabase dashboard
    - Run `supabase-schema.sql` to create tables and policies
    - Run `supabase-waitlist-schema.sql` for waitlist functionality
+   - Run `supabase-subscriptions-schema.sql` for Stripe subscription state (Pro entitlements)
 
 4. **Authentication**:
    - Go to Authentication > Providers
@@ -557,6 +558,25 @@ const hasFeature = (feature) => {
    // Update user metadata when subscription changes
    ```
 
+**Current repo implementation (Vercel serverless + Supabase)**:
+- Serverless endpoints live under `api/stripe/`:
+  - `POST /api/stripe/create-checkout-session`
+  - `POST /api/stripe/create-portal-session`
+  - `POST /api/stripe/webhook`
+- Webhooks upsert the `subscriptions` table (see `supabase-subscriptions-schema.sql`). The client reads this row to determine Pro access.
+
+**Vercel environment variables** (server-side):
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_PRO_MONTHLY`
+- `STRIPE_PRICE_PRO_ANNUAL`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+**Client environment variables** (optional; if you want to pass price IDs from the UI):
+- `VITE_STRIPE_PRICE_PRO_MONTHLY`
+- `VITE_STRIPE_PRICE_PRO_ANNUAL`
+
 #### Alternative: Supabase Billing (Beta)
 
 Supabase offers built-in billing integration:
@@ -908,6 +928,22 @@ CREATE TABLE waitlist (
   email TEXT UNIQUE NOT NULL,
   submitted_at TIMESTAMP,
   created_at TIMESTAMP
+);
+```
+
+#### Subscriptions Table (Stripe)
+```sql
+CREATE TABLE subscriptions (
+  id UUID PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) UNIQUE,
+  stripe_customer_id TEXT UNIQUE,
+  stripe_subscription_id TEXT UNIQUE,
+  plan TEXT,
+  status TEXT,
+  cancel_at_period_end BOOLEAN,
+  current_period_end TIMESTAMP,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
 );
 ```
 

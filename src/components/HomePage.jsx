@@ -1,7 +1,10 @@
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { Landmark, TrendingUp } from 'lucide-react';
 import { useScenario } from '../contexts/ScenarioContext';
 import OnboardingCard from './OnboardingCard';
+import NumberStepper from './NumberStepper';
+import AnimatedFlame from './AnimatedFlame';
 
 function HomePage() {
   const { scenarios, currentScenario, updateCurrentScenario } = useScenario();
@@ -26,6 +29,32 @@ function HomePage() {
       });
     }
   }, [currentScenario]);
+
+  // Deep-link support: opening the FIRE section from onboarding.
+  useEffect(() => {
+    const shouldOpen = (() => {
+      try {
+        return localStorage.getItem('firefed_open_fire_planning') === 'true';
+      } catch {
+        return false;
+      }
+    })();
+
+    const hasHash = typeof window !== 'undefined' && window.location?.hash === '#fire-planning';
+
+    if (shouldOpen || hasHash) {
+      setShowFireInputs(true);
+      try {
+        localStorage.removeItem('firefed_open_fire_planning');
+      } catch {
+        // ignore
+      }
+      setTimeout(() => {
+        const el = document.getElementById('fire-planning');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+    }
+  }, []);
 
   // Handle FIRE input changes
   const handleFireInputChange = (field, value) => {
@@ -76,7 +105,10 @@ function HomePage() {
     <div className="animate-fade-in">
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold navy-text mb-4">
-          🔥 FireFed - Federal FIRE Planning
+          <span className="inline-flex items-center justify-center gap-3">
+            <AnimatedFlame className="h-11 w-11" />
+            <span>FireFed - Federal FIRE Planning</span>
+          </span>
         </h1>
         <p className="text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto leading-relaxed">
           The premier SaaS platform for federal employees pursuing Financial Independence Retire Early (FIRE). 
@@ -107,7 +139,7 @@ function HomePage() {
       )}
 
       {/* 🔥 FIRE Planning Inputs - New FireFed Feature */}
-      <div className="mb-8 card p-6">
+      <div id="fire-planning" className="mb-8 card p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-xl font-semibold navy-text">🔥 FIRE Planning</h3>
@@ -130,17 +162,26 @@ function HomePage() {
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Desired FIRE Age
               </label>
-              <input
-                type="number"
-                min="40"
-                max="67"
-                value={fireInputs.desiredFireAge}
-                onChange={(e) => handleFireInputChange('desiredFireAge', e.target.value)}
-                className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
-                         bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 
-                         focus:ring-2 focus:ring-navy-500 focus:border-transparent transition-all"
-                placeholder="55"
-              />
+              <div className="flex items-stretch gap-2">
+                <input
+                  type="number"
+                  min="40"
+                  max="67"
+                  value={fireInputs.desiredFireAge}
+                  onChange={(e) => handleFireInputChange('desiredFireAge', e.target.value)}
+                  className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
+                           bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 
+                           focus:ring-2 focus:ring-navy-500 focus:border-transparent transition-all"
+                  placeholder="55"
+                />
+                <NumberStepper
+                  incrementLabel="Increase desired FIRE age"
+                  decrementLabel="Decrease desired FIRE age"
+                  onIncrement={() => handleFireInputChange('desiredFireAge', String(Math.min(67, (Number(fireInputs.desiredFireAge) || 0) + 1)))}
+                  onDecrement={() => handleFireInputChange('desiredFireAge', String(Math.max(40, (Number(fireInputs.desiredFireAge) || 0) - 1)))}
+                  disabledDecrement={(Number(fireInputs.desiredFireAge) || 0) <= 40}
+                />
+              </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 Age when you want to achieve financial independence
               </p>
@@ -151,18 +192,27 @@ function HomePage() {
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Monthly FIRE Income Goal
               </label>
-              <div className="relative">
-                <span className="absolute left-3 top-3 text-slate-500 dark:text-slate-400">$</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="100"
-                  value={fireInputs.monthlyFireIncomeGoal}
-                  onChange={(e) => handleFireInputChange('monthlyFireIncomeGoal', e.target.value)}
-                  className="w-full pl-8 p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
-                           bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 
-                           focus:ring-2 focus:ring-navy-500 focus:border-transparent transition-all"
-                  placeholder="6000"
+              <div className="flex items-stretch gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-3 text-slate-500 dark:text-slate-400">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={fireInputs.monthlyFireIncomeGoal}
+                    onChange={(e) => handleFireInputChange('monthlyFireIncomeGoal', e.target.value)}
+                    className="w-full pl-8 p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
+                             bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 
+                             focus:ring-2 focus:ring-navy-500 focus:border-transparent transition-all"
+                    placeholder="6000"
+                  />
+                </div>
+                <NumberStepper
+                  incrementLabel="Increase monthly FIRE income goal"
+                  decrementLabel="Decrease monthly FIRE income goal"
+                  onIncrement={() => handleFireInputChange('monthlyFireIncomeGoal', String((Number(fireInputs.monthlyFireIncomeGoal) || 0) + 100))}
+                  onDecrement={() => handleFireInputChange('monthlyFireIncomeGoal', String(Math.max(0, (Number(fireInputs.monthlyFireIncomeGoal) || 0) - 100)))}
+                  disabledDecrement={(Number(fireInputs.monthlyFireIncomeGoal) || 0) <= 0}
                 />
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -175,18 +225,27 @@ function HomePage() {
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Side Hustle Income
               </label>
-              <div className="relative">
-                <span className="absolute left-3 top-3 text-slate-500 dark:text-slate-400">$</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="50"
-                  value={fireInputs.sideHustleIncome}
-                  onChange={(e) => handleFireInputChange('sideHustleIncome', e.target.value)}
-                  className="w-full pl-8 p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
-                           bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 
-                           focus:ring-2 focus:ring-navy-500 focus:border-transparent transition-all"
-                  placeholder="500"
+              <div className="flex items-stretch gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-3 text-slate-500 dark:text-slate-400">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    value={fireInputs.sideHustleIncome}
+                    onChange={(e) => handleFireInputChange('sideHustleIncome', e.target.value)}
+                    className="w-full pl-8 p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
+                             bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 
+                             focus:ring-2 focus:ring-navy-500 focus:border-transparent transition-all"
+                    placeholder="500"
+                  />
+                </div>
+                <NumberStepper
+                  incrementLabel="Increase side hustle income"
+                  decrementLabel="Decrease side hustle income"
+                  onIncrement={() => handleFireInputChange('sideHustleIncome', String((Number(fireInputs.sideHustleIncome) || 0) + 50))}
+                  onDecrement={() => handleFireInputChange('sideHustleIncome', String(Math.max(0, (Number(fireInputs.sideHustleIncome) || 0) - 50)))}
+                  disabledDecrement={(Number(fireInputs.sideHustleIncome) || 0) <= 0}
                 />
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -199,18 +258,27 @@ function HomePage() {
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Spouse Income
               </label>
-              <div className="relative">
-                <span className="absolute left-3 top-3 text-slate-500 dark:text-slate-400">$</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="100"
-                  value={fireInputs.spouseIncome}
-                  onChange={(e) => handleFireInputChange('spouseIncome', e.target.value)}
-                  className="w-full pl-8 p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
-                           bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 
-                           focus:ring-2 focus:ring-navy-500 focus:border-transparent transition-all"
-                  placeholder="4000"
+              <div className="flex items-stretch gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-3 text-slate-500 dark:text-slate-400">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={fireInputs.spouseIncome}
+                    onChange={(e) => handleFireInputChange('spouseIncome', e.target.value)}
+                    className="w-full pl-8 p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
+                             bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 
+                             focus:ring-2 focus:ring-navy-500 focus:border-transparent transition-all"
+                    placeholder="4000"
+                  />
+                </div>
+                <NumberStepper
+                  incrementLabel="Increase spouse income"
+                  decrementLabel="Decrease spouse income"
+                  onIncrement={() => handleFireInputChange('spouseIncome', String((Number(fireInputs.spouseIncome) || 0) + 100))}
+                  onDecrement={() => handleFireInputChange('spouseIncome', String(Math.max(0, (Number(fireInputs.spouseIncome) || 0) - 100)))}
+                  disabledDecrement={(Number(fireInputs.spouseIncome) || 0) <= 0}
                 />
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -335,13 +403,19 @@ function HomePage() {
             to="/tsp-forecast" 
             className="btn-primary"
           >
-            📈 Start with TSP
+            <span className="inline-flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Start with TSP
+            </span>
           </Link>
           <Link 
             to="/fers-pension" 
             className="btn-secondary"
           >
-            💰 Calculate Pension
+            <span className="inline-flex items-center gap-2">
+              <Landmark className="h-4 w-4" />
+              Calculate Pension
+            </span>
           </Link>
         </div>
       </div>

@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 function ScenarioManager() {
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const {
     scenarios,
     currentScenario,
@@ -13,6 +13,7 @@ function ScenarioManager() {
     deleteScenario,
     renameScenario,
     duplicateScenario,
+    getScenarioDiff,
     isScenarioLimitReached,
     scenarioLimit
   } = useScenario();
@@ -23,6 +24,9 @@ function ScenarioManager() {
   const [inputValue, setInputValue] = useState('');
   const [targetScenarioId, setTargetScenarioId] = useState(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  const [isLoadPreviewOpen, setIsLoadPreviewOpen] = useState(false);
+  const [pendingLoadScenarioId, setPendingLoadScenarioId] = useState(null);
 
   const openSaveModal = () => {
     setModalType('save');
@@ -41,6 +45,28 @@ function ScenarioManager() {
     setIsModalOpen(false);
     setInputValue('');
     setTargetScenarioId(null);
+  };
+
+  const closeLoadPreview = () => {
+    setIsLoadPreviewOpen(false);
+    setPendingLoadScenarioId(null);
+  };
+
+  const openLoadPreview = (scenarioId) => {
+    setPendingLoadScenarioId(scenarioId);
+    setIsLoadPreviewOpen(true);
+  };
+
+  const formatDiffValue = (v) => {
+    if (v === null || v === undefined) return '—';
+    if (typeof v === 'number') return String(v);
+    if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+    if (typeof v === 'string') return v;
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return String(v);
+    }
   };
 
   const handleSave = async () => {
@@ -110,7 +136,9 @@ function ScenarioManager() {
                     <div
                       className="flex-1 cursor-pointer"
                       onClick={() => {
-                        loadScenario(scenario.id);
+                        if (scenario.id !== currentScenario?.id) {
+                          openLoadPreview(scenario.id);
+                        }
                         setIsDropdownOpen(false);
                       }}
                     >
@@ -233,6 +261,73 @@ function ScenarioManager() {
                 {modalType === 'save' ? 'Save' : 'Rename'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Load Preview Modal */}
+      {isLoadPreviewOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-lg w-[520px] max-w-[95vw]">
+            {(() => {
+              const target = scenarios.find(s => s.id === pendingLoadScenarioId);
+              const diffs = getScenarioDiff(currentScenario, target);
+
+              return (
+                <>
+                  <h3 className="text-lg font-semibold navy-text mb-2">
+                    Load scenario: {target?.name || 'Selected scenario'}
+                  </h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                    Here’s what will change if you switch scenarios.
+                  </p>
+
+                  <div className="max-h-64 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg">
+                    {diffs.length === 0 ? (
+                      <div className="p-4 text-sm text-slate-600 dark:text-slate-400">
+                        No key differences detected.
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-200 dark:divide-slate-700">
+                        {diffs.map((d) => (
+                          <div key={d.path} className="p-3 text-sm">
+                            <div className="font-medium text-slate-800 dark:text-slate-200">{d.label}</div>
+                            <div className="grid grid-cols-2 gap-3 mt-1">
+                              <div className="text-slate-600 dark:text-slate-400">
+                                <div className="text-xs uppercase tracking-wide">Current</div>
+                                <div className="font-mono text-xs">{formatDiffValue(d.from)}</div>
+                              </div>
+                              <div className="text-slate-600 dark:text-slate-400">
+                                <div className="text-xs uppercase tracking-wide">Selected</div>
+                                <div className="font-mono text-xs">{formatDiffValue(d.to)}</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 justify-end mt-5">
+                    <button
+                      onClick={closeLoadPreview}
+                      className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (pendingLoadScenarioId) loadScenario(pendingLoadScenarioId);
+                        closeLoadPreview();
+                      }}
+                      className="btn-primary"
+                    >
+                      Load Scenario
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}

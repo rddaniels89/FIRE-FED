@@ -2,7 +2,7 @@ function TooltipWrapper({ children, text }) {
   return (
     <div className="tooltip-trigger relative">
       {children}
-      <div className="tooltip -top-12 left-0 w-64">
+      <div className="tooltip bottom-full left-0 mb-3 w-64" role="tooltip">
         {text}
       </div>
     </div>

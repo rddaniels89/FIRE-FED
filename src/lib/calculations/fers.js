@@ -8,6 +8,84 @@ export function calculateFersMultiplier({ retirementAge, totalYearsOfService }) 
   return 0.01;
 }
 
+export function calculateMra10ReductionPercent({ annuityStartAge, mra = DEFAULT_MRA }) {
+  const startAge = Number(annuityStartAge ?? 0);
+  const mraAge = Number(mra ?? DEFAULT_MRA);
+  if (startAge <= 0) return 0;
+  if (startAge >= 62) return 0;
+  if (startAge < mraAge) return 0;
+
+  const yearsUnder62 = 62 - startAge;
+  // Simplified rule: 5% per year under 62 (pro-rated monthly in real life; we keep it simple here).
+  return Math.max(0, yearsUnder62 * 5);
+}
+
+export function evaluateFersRegularEligibility({
+  age,
+  totalYearsOfService,
+  mra = DEFAULT_MRA,
+}) {
+  const a = Number(age ?? 0);
+  const y = Number(totalYearsOfService ?? 0);
+  const mraAge = Number(mra ?? DEFAULT_MRA);
+
+  const immediateFull =
+    (a >= 62 && y >= 5) ||
+    (a >= 60 && y >= 20) ||
+    (a >= mraAge && y >= 30);
+
+  const immediateMra10 = !immediateFull && a >= mraAge && y >= 10;
+
+  const deferred = y >= 5;
+
+  const messages = [];
+  if (immediateFull) {
+    messages.push('Eligible for immediate retirement (unreduced annuity)');
+  } else if (immediateMra10) {
+    const reduction = calculateMra10ReductionPercent({ annuityStartAge: a, mra: mraAge });
+    messages.push(
+      `Eligible for immediate retirement under MRA+10 (simplified reduction: ~${reduction.toFixed(1)}%)`
+    );
+    messages.push('You may be able to postpone the annuity start to reduce/eliminate the reduction (not fully modeled).');
+  } else if (deferred) {
+    messages.push('Not eligible for immediate retirement; may be eligible for deferred retirement (FEHB rules differ).');
+  } else {
+    messages.push('Not eligible yet (needs at least 5 years of service for deferred options).');
+  }
+
+  return {
+    age: a,
+    totalYearsOfService: y,
+    mra: mraAge,
+    isEligibleImmediate: immediateFull || immediateMra10,
+    isEligibleImmediateUnreduced: immediateFull,
+    isEligibleImmediateMra10: immediateMra10,
+    isEligibleDeferred: deferred,
+    messages,
+  };
+}
+
+export function findEarliestFersImmediateRetirementAge({
+  currentAge,
+  totalYearsOfService,
+  mra = DEFAULT_MRA,
+  maxAgeToCheck = 70,
+}) {
+  const ageNow = Number(currentAge ?? 0);
+  const yearsNow = Number(totalYearsOfService ?? 0);
+  const maxAge = Number(maxAgeToCheck ?? 70);
+
+  if (!Number.isFinite(ageNow) || !Number.isFinite(yearsNow)) return null;
+  if (ageNow <= 0 || maxAge < ageNow) return null;
+
+  for (let a = Math.ceil(ageNow); a <= maxAge; a++) {
+    const projectedYears = yearsNow + Math.max(0, a - ageNow);
+    const res = evaluateFersRegularEligibility({ age: a, totalYearsOfService: projectedYears, mra });
+    if (res.isEligibleImmediate) return a;
+  }
+  return null;
+}
+
 export function calculateFersEligibility({ retirementAge, totalYearsOfService }) {
   const age = Number(retirementAge ?? 0);
   const years = Number(totalYearsOfService ?? 0);
