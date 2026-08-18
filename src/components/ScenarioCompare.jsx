@@ -91,6 +91,7 @@ function buildDefaultFlags(scenario) {
   if (Number(tsp.annualEmployeeDeferralLimit ?? DEFAULTS.annualEmployeeDeferralLimit) === DEFAULTS.annualEmployeeDeferralLimit) flags.push(`Employee deferral limit is $${DEFAULTS.annualEmployeeDeferralLimit.toLocaleString()} (app default)`);
   if (Number(tsp.annualCatchUpLimit ?? DEFAULTS.annualCatchUpLimit) === DEFAULTS.annualCatchUpLimit) flags.push(`Catch-up limit is $${DEFAULTS.annualCatchUpLimit.toLocaleString()} (app default)`);
   if (Number(tsp.catchUpAge ?? DEFAULTS.catchUpAge) === DEFAULTS.catchUpAge) flags.push(`Catch-up age is ${DEFAULTS.catchUpAge} (app default)`);
+  if (tsp.priorYearWages === undefined || tsp.priorYearWages === null) flags.push('Prior-year wages estimated from salary (app default)');
   if (isFundReturnsDefault(tsp.fundReturns)) flags.push('Fund returns are defaults (G/F/C/S/I)');
   if ((tsp.contributionType ?? DEFAULTS.contributionType) === DEFAULTS.contributionType) flags.push('Contribution type is Traditional (app default)');
   if (Number(tsp.currentTaxRate ?? DEFAULTS.currentTaxRate) === DEFAULTS.currentTaxRate) flags.push('Current tax rate is 22% (app default)');
@@ -179,6 +180,7 @@ function ScenarioCompare() {
         annualEmployeeDeferralLimit: tsp.annualEmployeeDeferralLimit ?? DEFAULTS.annualEmployeeDeferralLimit,
         annualCatchUpLimit: tsp.annualCatchUpLimit ?? DEFAULTS.annualCatchUpLimit,
         catchUpAge: tsp.catchUpAge ?? DEFAULTS.catchUpAge,
+        priorYearWages: tsp.priorYearWages,
         fundReturns: tsp.fundReturns
           ? {
               G: Number(tsp.fundReturns.G ?? DEFAULTS.fundReturns.G) / 100,

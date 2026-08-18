@@ -41,6 +41,16 @@ export function calculateFersTspEmployerPercent(employeeDeferralPercent) {
   return clampNumber(automatic + matchDollarsForDollars + matchHalf, { min: 0, max: 5, fallback: 0 });
 }
 
+/**
+ * For inputs where "not provided" must stay distinct from zero. A blank form
+ * field means "estimate it for me", whereas 0 would mean "wages of zero".
+ */
+function toOptionalNumber(value) {
+  if (value === null || value === undefined || value === '') return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 function deflateNominalToReal(amountNominal, inflationRate, yearsFromStart) {
   const inf = clampNumber(inflationRate, { min: 0, max: 1, fallback: 0 });
   const y = clampNumber(yearsFromStart, { min: 0, max: 200, fallback: 0 });
@@ -83,7 +93,11 @@ function calculateDualBucketTspProjection({
   const superMaxAge = clampNumber(superCatchUpMaxAge, { min: 0, max: 200, fallback: SUPER_CATCH_UP_MAX_AGE });
 
   const applyRothCatchUpRule = applyMandatoryRothCatchUp !== false;
-  const wages0 = clampNumber(priorYearWages, { min: 0, max: 1e9, fallback: salary0 });
+  const wages0 = clampNumber(toOptionalNumber(priorYearWages) ?? salary0, {
+    min: 0,
+    max: 1e9,
+    fallback: salary0,
+  });
 
   const catchUpAtAge = (age) =>
     getCatchUpLimitForAge({
@@ -323,7 +337,7 @@ export function calculateTspTraditionalVsRoth({
   const rothCatchUpRequired0 =
     applyMandatoryRothCatchUp !== false &&
     catchUp0 > 0 &&
-    requiresRothCatchUp({ priorYearWages: priorYearWages ?? salary0 });
+    requiresRothCatchUp({ priorYearWages: toOptionalNumber(priorYearWages) ?? salary0 });
   const effectiveAnnualEmployee = Math.min(desiredAnnualEmployee, limit0);
 
   return {
@@ -374,6 +388,7 @@ export function calculateTspTraditionalVsRoth({
       // SECURE 2.0 section 603 status for the first projected year.
       rothCatchUpRequired: rothCatchUpRequired0,
       rothCatchUpWageThreshold: ROTH_CATCH_UP_WAGE_THRESHOLD,
+      priorYearWagesProvided: toOptionalNumber(priorYearWages) !== undefined,
     },
   };
 }

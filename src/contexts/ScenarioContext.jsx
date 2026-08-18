@@ -120,6 +120,8 @@ export const ScenarioProvider = ({ children }) => {
       annualEmployeeDeferralLimit: ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
       annualCatchUpLimit: ANNUAL_CATCH_UP_LIMIT,
       catchUpAge: CATCH_UP_AGE,
+      // Left undefined so the model estimates it from salary.
+      priorYearWages: undefined,
       inflationRate: 2.5,
       valueMode: 'nominal', // 'nominal' | 'real'
       allocation: {

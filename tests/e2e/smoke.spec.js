@@ -74,6 +74,32 @@ test.describe('Smoke: core flows', () => {
     await expect(notice).toHaveCount(0);
   });
 
+  test('Prior-year wages field overrides the salary estimate', async ({ page }) => {
+    const guestOk = await tryContinueAsGuest(page);
+    test.skip(!guestOk, 'Guest-mode is unavailable; skipping calculator UI checks.');
+    await page.goto('/tsp-forecast');
+
+    await page.getByRole('textbox', { name: 'Current Age' }).fill('55');
+    await page.getByRole('textbox', { name: 'Target Retirement Age' }).fill('62');
+    await page.getByRole('textbox', { name: 'Monthly Contribution %' }).fill('30');
+    await page.getByRole('textbox', { name: 'Annual Salary' }).fill('90000');
+
+    const notice = page.getByText('Your catch-up contributions must be Roth.');
+    const wages = page.getByRole('textbox', { name: /Prior-year wages/ });
+
+    // Salary alone is under the threshold, so no notice.
+    await expect(notice).toHaveCount(0);
+
+    // Last year's wages were above it — the rule applies despite the lower salary.
+    await wages.fill('250000');
+    await expect(notice).toBeVisible();
+    await expect(page.getByText('Based on the prior-year wages you entered.')).toBeVisible();
+
+    // Clearing it returns to the salary estimate.
+    await wages.fill('');
+    await expect(notice).toHaveCount(0);
+  });
+
   test('Unknown URLs render a 404 instead of a blank page', async ({ page }) => {
     const guestOk = await tryContinueAsGuest(page);
     test.skip(!guestOk, 'Guest-mode is unavailable; skipping in-app routing checks.');

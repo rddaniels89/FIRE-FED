@@ -102,6 +102,7 @@ export function buildOptimizationSuggestions(scenario) {
       annualEmployeeDeferralLimit: tsp.annualEmployeeDeferralLimit ?? ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
       annualCatchUpLimit: tsp.annualCatchUpLimit ?? ANNUAL_CATCH_UP_LIMIT,
       catchUpAge: tsp.catchUpAge ?? CATCH_UP_AGE,
+      priorYearWages: tsp.priorYearWages,
       fundReturns: tsp.fundReturns
         ? {
             G: Number(tsp.fundReturns.G ?? 2) / 100,

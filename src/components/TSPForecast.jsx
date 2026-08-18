@@ -59,6 +59,7 @@ function TSPForecast() {
     annualEmployeeDeferralLimit: String(ANNUAL_ELECTIVE_DEFERRAL_LIMIT),
     annualCatchUpLimit: String(ANNUAL_CATCH_UP_LIMIT),
     catchUpAge: String(CATCH_UP_AGE),
+    priorYearWages: '',
     inflationRate: '2.5',
     valueMode: 'nominal', // 'nominal' | 'real'
     allocation: {
@@ -102,6 +103,8 @@ function TSPForecast() {
       annualEmployeeDeferralLimit: toNumber(inputs.annualEmployeeDeferralLimit),
       annualCatchUpLimit: toNumber(inputs.annualCatchUpLimit),
       catchUpAge: toNumber(inputs.catchUpAge),
+      // Blank means "estimate from salary"; 0 is a real answer, so keep them apart.
+      priorYearWages: String(inputs.priorYearWages ?? '').trim() === '' ? undefined : toNumber(inputs.priorYearWages),
       inflationRate: toNumber(inputs.inflationRate),
       valueMode: inputs.valueMode === 'real' ? 'real' : 'nominal',
       allocation: {
@@ -183,6 +186,7 @@ function TSPForecast() {
       annualEmployeeDeferralLimit: String(tsp.annualEmployeeDeferralLimit ?? ANNUAL_ELECTIVE_DEFERRAL_LIMIT),
       annualCatchUpLimit: String(tsp.annualCatchUpLimit ?? ANNUAL_CATCH_UP_LIMIT),
       catchUpAge: String(tsp.catchUpAge ?? 50),
+      priorYearWages: tsp.priorYearWages === undefined || tsp.priorYearWages === null ? '' : String(tsp.priorYearWages),
       inflationRate: String(tsp.inflationRate ?? 2.5),
       valueMode: tsp.valueMode === 'real' ? 'real' : 'nominal',
       allocation: {
@@ -401,6 +405,9 @@ function TSPForecast() {
     if (numericInputs.annualCatchUpLimit < 0) {
       errors.annualCatchUpLimit = 'Catch-up limit must be 0 or greater';
     }
+    if (numericInputs.priorYearWages !== undefined && numericInputs.priorYearWages < 0) {
+      errors.priorYearWages = 'Prior-year wages must be 0 or greater';
+    }
     if (numericInputs.catchUpAge < 0 || numericInputs.catchUpAge > 200) {
       errors.catchUpAge = 'Catch-up age must be between 0 and 200';
     }
@@ -446,6 +453,7 @@ function TSPForecast() {
       annualEmployeeDeferralLimit: numericInputs.annualEmployeeDeferralLimit,
       annualCatchUpLimit: numericInputs.annualCatchUpLimit,
       catchUpAge: numericInputs.catchUpAge,
+      priorYearWages: numericInputs.priorYearWages,
     });
 
     setResults({ traditional: res.traditional, roth: res.roth });
@@ -616,7 +624,10 @@ function TSPForecast() {
   const employeeLimitThisYear = calcMeta?.limits?.annualEmployeeDeferralLimit ?? 0;
   const effectiveAnnualEmployeeContribution = calcMeta?.limits?.effectiveAnnualEmployeeContribution ?? desiredAnnualEmployeeContribution;
   const isOverLimit = Boolean(calcMeta?.limits?.isOverLimit);
+  // What the model falls back to when the prior-year wages field is left blank.
+  const estimatedPriorYearWages = numericInputs.annualSalary ?? 0;
   const rothCatchUpRequired = Boolean(calcMeta?.limits?.rothCatchUpRequired);
+  const priorYearWagesProvided = Boolean(calcMeta?.limits?.priorYearWagesProvided);
   const rothCatchUpThreshold = calcMeta?.limits?.rothCatchUpWageThreshold ?? 0;
 
   return (
@@ -1073,9 +1084,9 @@ function TSPForecast() {
               </TooltipWrapper>
             </div>
 
-            <div className="mt-4">
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-6">
               <TooltipWrapper text="Age at which catch-up is applied in this model (editable)">
-                <div className="max-w-xs">
+                <div>
                   <label className="label" htmlFor="catchUpAge">Catch-up age</label>
                   <div className="flex items-stretch gap-2">
                     <input
@@ -1101,6 +1112,37 @@ function TSPForecast() {
                 </div>
               </TooltipWrapper>
 
+              <TooltipWrapper text="Last year's FICA wages with your agency. Leave blank to estimate from your salary. SECURE 2.0 uses this to decide whether catch-up contributions must be Roth.">
+                <div>
+                  <label className="label" htmlFor="priorYearWages">
+                    Prior-year wages ($) <span className="font-normal text-slate-500">— optional</span>
+                  </label>
+                  <div className="flex items-stretch gap-2">
+                    <input
+                      id="priorYearWages"
+                      type="text"
+                      value={getDisplayValue('priorYearWages')}
+                      onChange={(e) => handleInputChange('priorYearWages', e.target.value)}
+                      className="input-field w-full"
+                      placeholder={`Estimated: ${formatDollars(estimatedPriorYearWages)}`}
+                      inputMode="decimal"
+                    />
+                    <NumberStepper
+                      incrementLabel="Increase prior-year wages"
+                      decrementLabel="Decrease prior-year wages"
+                      onIncrement={() => stepField('priorYearWages', { step: 1000, min: 0, max: 100000000, integer: true })(+1)}
+                      onDecrement={() => stepField('priorYearWages', { step: 1000, min: 0, max: 100000000, integer: true })(-1)}
+                      disabledDecrement={(numericInputs.priorYearWages ?? 0) <= 0}
+                    />
+                  </div>
+                  {validationErrors.priorYearWages && (
+                    <p className="text-red-500 text-xs mt-1">{validationErrors.priorYearWages}</p>
+                  )}
+                </div>
+              </TooltipWrapper>
+            </div>
+
+            <div className="mt-4">
               {isOverLimit && (
                 <div className="mt-4 p-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
                   <div className="text-sm font-medium text-amber-800 dark:text-amber-200">
@@ -1120,8 +1162,10 @@ function TSPForecast() {
                   <div className="text-xs text-navy-700 dark:text-navy-300 mt-1">
                     Under SECURE 2.0, participants whose prior-year FICA wages exceed{' '}
                     {formatDollars(rothCatchUpThreshold)} must make catch-up contributions as Roth. This forecast routes
-                    the catch-up portion to Roth even when Traditional is selected, and estimates prior-year wages from
-                    your salary and growth rate.
+                    the catch-up portion to Roth even when Traditional is selected.{' '}
+                    {priorYearWagesProvided
+                      ? 'Based on the prior-year wages you entered.'
+                      : 'Prior-year wages are estimated from your salary and growth rate — enter them below for an exact answer.'}
                   </div>
                 </div>
               )}

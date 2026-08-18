@@ -230,6 +230,38 @@ describe('SECURE 2.0 mandatory Roth catch-up', () => {
     expect(mandated.traditional.projectedBalance).toBeGreaterThan(allRoth.projectedBalance);
   });
 
+  it('treats a blank prior-year wages field as "estimate from salary"', () => {
+    // Blank must not read as wages of zero, which would silently exempt a
+    // high earner from the rule.
+    for (const blank of ['', null, undefined]) {
+      const { limits } = calculateTspTraditionalVsRoth({ ...base, priorYearWages: blank });
+      expect(limits.priorYearWagesProvided).toBe(false);
+      // base salary is 200000, above the threshold
+      expect(limits.rothCatchUpRequired).toBe(true);
+    }
+  });
+
+  it('lets an explicit figure override the salary estimate in both directions', () => {
+    // High salary now, but last year's wages were below the threshold.
+    const belowLastYear = calculateTspTraditionalVsRoth({ ...base, priorYearWages: 100000 });
+    expect(belowLastYear.limits.priorYearWagesProvided).toBe(true);
+    expect(belowLastYear.limits.rothCatchUpRequired).toBe(false);
+
+    // Modest salary now, but last year's wages were above it.
+    const aboveLastYear = calculateTspTraditionalVsRoth({
+      ...base,
+      annualSalary: 90000,
+      priorYearWages: 250000,
+    });
+    expect(aboveLastYear.limits.rothCatchUpRequired).toBe(true);
+  });
+
+  it('honours an explicit zero rather than falling back to salary', () => {
+    const { limits } = calculateTspTraditionalVsRoth({ ...base, priorYearWages: 0 });
+    expect(limits.priorYearWagesProvided).toBe(true);
+    expect(limits.rothCatchUpRequired).toBe(false);
+  });
+
   it('can be switched off for scenarios that predate the rule', () => {
     const { limits } = calculateTspTraditionalVsRoth({
       ...base,
