@@ -55,3 +55,4 @@ COMMENT ON COLUMN subscriptions.status IS 'Stripe subscription status (active/tr
 COMMENT ON COLUMN subscriptions.current_period_end IS 'Stripe current_period_end (billing period end).';
 
 
+

@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Signed-in areas hold nothing crawlable and should not be indexed.
+Disallow: /auth/
+Disallow: /scenarios
+Disallow: /summary

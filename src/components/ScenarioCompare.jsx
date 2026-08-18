@@ -7,6 +7,11 @@ import { calculateTspTraditionalVsRoth } from '../lib/calculations/tsp';
 import { calculateFersResults, findEarliestFersImmediateRetirementAge } from '../lib/calculations/fers';
 import { calculateFireGap } from '../lib/calculations/fire';
 import { trackEvent } from '../lib/telemetry';
+import {
+  ANNUAL_CATCH_UP_LIMIT,
+  ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
+  CATCH_UP_AGE,
+} from '../lib/calculations/contributionLimits';
 
 const DEFAULTS = Object.freeze({
   swr: 0.04,
@@ -14,9 +19,9 @@ const DEFAULTS = Object.freeze({
   annualSalaryGrowthRate: 3,
   includeEmployerMatch: true,
   includeAutomatic1Percent: true,
-  annualEmployeeDeferralLimit: 23500,
-  annualCatchUpLimit: 7500,
-  catchUpAge: 50,
+  annualEmployeeDeferralLimit: ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
+  annualCatchUpLimit: ANNUAL_CATCH_UP_LIMIT,
+  catchUpAge: CATCH_UP_AGE,
   fundReturns: { G: 2, F: 3, C: 7, S: 8, I: 6 },
   valueMode: 'nominal',
   contributionType: 'traditional',
@@ -83,9 +88,9 @@ function buildDefaultFlags(scenario) {
   if (Number(tsp.annualSalaryGrowthRate ?? DEFAULTS.annualSalaryGrowthRate) === DEFAULTS.annualSalaryGrowthRate) flags.push('Salary growth is 3% (app default)');
   if (Boolean(tsp.includeEmployerMatch ?? DEFAULTS.includeEmployerMatch) === DEFAULTS.includeEmployerMatch) flags.push('Employer match is enabled (app default)');
   if (Boolean(tsp.includeAutomatic1Percent ?? DEFAULTS.includeAutomatic1Percent) === DEFAULTS.includeAutomatic1Percent) flags.push('Automatic 1% is enabled (app default)');
-  if (Number(tsp.annualEmployeeDeferralLimit ?? DEFAULTS.annualEmployeeDeferralLimit) === DEFAULTS.annualEmployeeDeferralLimit) flags.push('Employee deferral limit is $23,500 (app default)');
-  if (Number(tsp.annualCatchUpLimit ?? DEFAULTS.annualCatchUpLimit) === DEFAULTS.annualCatchUpLimit) flags.push('Catch-up limit is $7,500 (app default)');
-  if (Number(tsp.catchUpAge ?? DEFAULTS.catchUpAge) === DEFAULTS.catchUpAge) flags.push('Catch-up age is 50 (app default)');
+  if (Number(tsp.annualEmployeeDeferralLimit ?? DEFAULTS.annualEmployeeDeferralLimit) === DEFAULTS.annualEmployeeDeferralLimit) flags.push(`Employee deferral limit is $${DEFAULTS.annualEmployeeDeferralLimit.toLocaleString()} (app default)`);
+  if (Number(tsp.annualCatchUpLimit ?? DEFAULTS.annualCatchUpLimit) === DEFAULTS.annualCatchUpLimit) flags.push(`Catch-up limit is $${DEFAULTS.annualCatchUpLimit.toLocaleString()} (app default)`);
+  if (Number(tsp.catchUpAge ?? DEFAULTS.catchUpAge) === DEFAULTS.catchUpAge) flags.push(`Catch-up age is ${DEFAULTS.catchUpAge} (app default)`);
   if (isFundReturnsDefault(tsp.fundReturns)) flags.push('Fund returns are defaults (G/F/C/S/I)');
   if ((tsp.contributionType ?? DEFAULTS.contributionType) === DEFAULTS.contributionType) flags.push('Contribution type is Traditional (app default)');
   if (Number(tsp.currentTaxRate ?? DEFAULTS.currentTaxRate) === DEFAULTS.currentTaxRate) flags.push('Current tax rate is 22% (app default)');
@@ -321,7 +326,7 @@ function ScenarioCompare() {
       <div className="card p-8 text-center">
         <h1 className="text-2xl font-bold navy-text mb-2">Scenario Comparison</h1>
         <p className="text-slate-600 dark:text-slate-400 mb-6">
-          Scenario comparison is a Pro feature. Join the waitlist to get notified when Pro launches.
+          Scenario comparison is a Pro feature. Upgrade on the Pro Features page to unlock it.
         </p>
         <div className="flex justify-center gap-3">
           <Link className="btn-secondary" to="/scenarios">Back to Scenarios</Link>

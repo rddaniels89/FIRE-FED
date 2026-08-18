@@ -530,7 +530,7 @@ function SummaryDashboard() {
             <div className="relative group">
               <button
                 className="btn-primary opacity-70 hover:opacity-100 flex items-center gap-2"
-                title={!isAuthenticated ? "Please log in to export PDF" : "Pro feature - join the waitlist to export PDF"}
+                title={!isAuthenticated ? "Please log in to export PDF" : "Pro feature — upgrade to export PDF"}
                 onClick={() => {
                   if (!isAuthenticated) return;
                   navigate('/pro-features', { state: { reason: 'pdf_export_pro' } });
@@ -540,7 +540,7 @@ function SummaryDashboard() {
                 Export PDF (Pro)
               </button>
               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap z-50">
-                {!isAuthenticated ? '🔒 Please log in to save or export your FIRE scenario.' : '🔒 PDF export is a Pro feature. Join the waitlist in Pro Features.'}
+                {!isAuthenticated ? '🔒 Please log in to save or export your FIRE scenario.' : '🔒 PDF export is a Pro feature. Upgrade on the Pro Features page.'}
               </div>
             </div>
           )}

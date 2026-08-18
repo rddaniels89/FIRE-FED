@@ -29,6 +29,7 @@ export default defineConfig({
       'playwright-report/**',
       'test-results/**',
       'node_modules/**',
+      '.claude/**',
     ],
   },
 })

@@ -17,9 +17,14 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       ...process.env,
-      // Force guest-mode for e2e to avoid depending on a real Supabase project/credentials.
+      // Placeholder Supabase + guest preview so e2e does not need real credentials.
       VITE_SUPABASE_URL: 'your_supabase_project_url',
       VITE_SUPABASE_ANON_KEY: 'your_supabase_anon_key',
+      VITE_ALLOW_GUEST_PREVIEW: 'true',
+      // Neutralize a developer's .env.local dev bypasses; otherwise the suite
+      // boots already signed in and every auth-dependent test fails locally.
+      VITE_BYPASS_AUTH: 'false',
+      VITE_BYPASS_PRO: 'false',
     },
   },
   projects: [

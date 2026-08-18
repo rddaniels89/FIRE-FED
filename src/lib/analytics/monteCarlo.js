@@ -1,5 +1,11 @@
 import { mulberry32, normal01 } from './random';
 import { summarizePercentiles } from './stats';
+import {
+  ANNUAL_CATCH_UP_LIMIT,
+  ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
+  CATCH_UP_AGE,
+  getCatchUpLimitForAge,
+} from '../calculations/contributionLimits';
 
 const FUND_STDDEV = Object.freeze({
   // Coarse volatility assumptions (annualized), used to approximate portfolio volatility.
@@ -71,8 +77,12 @@ function annualContribution({
   const pct = Math.max(0, clampNumber(employeePct, 0));
 
   const rawEmployee = sal * (pct / 100);
-  const limit = Math.max(0, clampNumber(annualEmployeeDeferralLimit, 23500));
-  const catchUp = age >= Math.max(0, clampNumber(catchUpAge, 50)) ? Math.max(0, clampNumber(annualCatchUpLimit, 7500)) : 0;
+  const limit = Math.max(0, clampNumber(annualEmployeeDeferralLimit, ANNUAL_ELECTIVE_DEFERRAL_LIMIT));
+  const catchUp = getCatchUpLimitForAge({
+    age,
+    catchUpAge: Math.max(0, clampNumber(catchUpAge, CATCH_UP_AGE)),
+    catchUpLimit: Math.max(0, clampNumber(annualCatchUpLimit, ANNUAL_CATCH_UP_LIMIT)),
+  });
 
   const employee = Math.min(rawEmployee, limit + catchUp);
 
@@ -141,9 +151,12 @@ export function runMonteCarloAnalytics({
 
   const includeEmployerMatch = Boolean(tsp.includeEmployerMatch ?? true);
   const includeAutomatic1Percent = Boolean(tsp.includeAutomatic1Percent ?? true);
-  const annualEmployeeDeferralLimit = clampNumber(tsp.annualEmployeeDeferralLimit ?? 23500, 23500);
-  const annualCatchUpLimit = clampNumber(tsp.annualCatchUpLimit ?? 7500, 7500);
-  const catchUpAge = clampNumber(tsp.catchUpAge ?? 50, 50);
+  const annualEmployeeDeferralLimit = clampNumber(
+    tsp.annualEmployeeDeferralLimit ?? ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
+    ANNUAL_ELECTIVE_DEFERRAL_LIMIT
+  );
+  const annualCatchUpLimit = clampNumber(tsp.annualCatchUpLimit ?? ANNUAL_CATCH_UP_LIMIT, ANNUAL_CATCH_UP_LIMIT);
+  const catchUpAge = clampNumber(tsp.catchUpAge ?? CATCH_UP_AGE, CATCH_UP_AGE);
 
   const baseBalance = Math.max(0, clampNumber(tsp.currentBalance, 0));
   const sideHustleIncome = Math.max(0, clampNumber(fire.sideHustleIncome, 0));

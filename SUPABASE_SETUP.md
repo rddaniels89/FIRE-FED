@@ -38,6 +38,18 @@ This will create:
 - Row Level Security (RLS) policies to ensure users can only access their own data
 - Proper indexes for performance
 
+Then run the remaining schema files the same way:
+
+| File | Creates | Needed for |
+| --- | --- | --- |
+| `supabase-subscriptions-schema.sql` | `subscriptions` | Pro entitlements (written by the Stripe webhook) |
+| `supabase-stripe-events-schema.sql` | `stripe_events` | Dropping duplicate Stripe webhook deliveries |
+| `supabase-waitlist-schema.sql` | `waitlist` | Pro waitlist signups |
+
+`subscriptions` and `stripe_events` are written only by the server-side webhook
+using the service role key, so neither has an INSERT/UPDATE policy. Never expose
+`SUPABASE_SERVICE_ROLE_KEY` to the client.
+
 ### 4. Configure Authentication
 
 Authentication is automatically configured through Supabase Auth. The app supports:

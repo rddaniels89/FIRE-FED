@@ -3,6 +3,12 @@ import { supabase, isSupabaseAvailable } from '../supabaseClient';
 import { useAuth } from './AuthContext';
 import { DEFAULT_FREE_SCENARIO_LIMIT } from '../lib/entitlements';
 import { trackEvent } from '../lib/telemetry';
+import { isLocalOnlyUser } from '../lib/auth/session';
+import {
+  ANNUAL_CATCH_UP_LIMIT,
+  ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
+  CATCH_UP_AGE,
+} from '../lib/calculations/contributionLimits';
 
 const ScenarioContext = createContext();
 
@@ -94,6 +100,7 @@ export const ScenarioProvider = ({ children }) => {
 
   const scenarioLimit = entitlements?.scenarioLimit ?? DEFAULT_FREE_SCENARIO_LIMIT;
   const isScenarioLimitReached = Number.isFinite(scenarioLimit) ? scenarios.length >= scenarioLimit : false;
+  const canUseCloudScenarios = isSupabaseAvailable && user && !isLocalOnlyUser(user);
 
   // Default scenario structure
   const createDefaultScenario = (name = 'New Scenario') => ({
@@ -110,9 +117,9 @@ export const ScenarioProvider = ({ children }) => {
       annualSalaryGrowthRate: 3,
       includeEmployerMatch: true,
       includeAutomatic1Percent: true,
-      annualEmployeeDeferralLimit: 23500,
-      annualCatchUpLimit: 7500,
-      catchUpAge: 50,
+      annualEmployeeDeferralLimit: ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
+      annualCatchUpLimit: ANNUAL_CATCH_UP_LIMIT,
+      catchUpAge: CATCH_UP_AGE,
       inflationRate: 2.5,
       valueMode: 'nominal', // 'nominal' | 'real'
       allocation: {
@@ -265,7 +272,7 @@ export const ScenarioProvider = ({ children }) => {
       }
 
       try {
-        if (isSupabaseAvailable && user) {
+        if (canUseCloudScenarios) {
           // Load scenarios from Supabase
           const { data, error } = await supabase
             .from('scenarios')
@@ -346,14 +353,18 @@ export const ScenarioProvider = ({ children }) => {
 
   // Save scenarios to localStorage whenever they change (fallback)
   useEffect(() => {
-    if (!isLoadingScenarios && scenarios.length > 0 && !isSupabaseAvailable) {
+    const persistLocally =
+      !isLoadingScenarios &&
+      scenarios.length > 0 &&
+      (!isSupabaseAvailable || isLocalOnlyUser(user));
+    if (persistLocally) {
       localStorage.setItem('retirement-scenarios', JSON.stringify(scenarios));
     }
-  }, [scenarios, isLoadingScenarios]);
+  }, [scenarios, isLoadingScenarios, user]);
 
   // Helper function to save scenario to Supabase
   const saveScenarioToSupabase = async (scenario) => {
-    if (!isSupabaseAvailable || !user) return null;
+    if (!isSupabaseAvailable || !user || isLocalOnlyUser(user)) return null;
 
     try {
       const { data, error } = await supabase
@@ -381,7 +392,7 @@ export const ScenarioProvider = ({ children }) => {
 
   // Helper function to update scenario in Supabase
   const updateScenarioInSupabase = async (scenario) => {
-    if (!isSupabaseAvailable || !user) return null;
+    if (!isSupabaseAvailable || !user || isLocalOnlyUser(user)) return null;
 
     try {
       const { data, error } = await supabase
@@ -408,7 +419,7 @@ export const ScenarioProvider = ({ children }) => {
 
   // Helper function to delete scenario from Supabase
   const deleteScenarioFromSupabase = async (scenarioId) => {
-    if (!isSupabaseAvailable || !user) return null;
+    if (!isSupabaseAvailable || !user || isLocalOnlyUser(user)) return null;
 
     try {
       const { error } = await supabase
@@ -444,7 +455,7 @@ export const ScenarioProvider = ({ children }) => {
     });
     
     // Save to Supabase first
-    if (isSupabaseAvailable && user) {
+    if (canUseCloudScenarios) {
       const supabaseResult = await saveScenarioToSupabase(scenario);
       if (supabaseResult) {
         scenario.id = supabaseResult.id; // Use Supabase-generated ID
@@ -456,11 +467,10 @@ export const ScenarioProvider = ({ children }) => {
     setCurrentScenario(scenario);
     trackEvent('scenario_created', { count: scenarios.length + 1 });
     
-    // Fallback to localStorage if Supabase not available
-    if (!isSupabaseAvailable) {
+    if (!canUseCloudScenarios) {
       localStorage.setItem('retirement-scenarios', JSON.stringify([...scenarios, scenario]));
     }
-    
+
     return scenario;
   };
 
@@ -485,14 +495,12 @@ export const ScenarioProvider = ({ children }) => {
     );
 
     // Sync with Supabase if available
-    if (isSupabaseAvailable && user) {
-      // Debounce updates to avoid too many API calls
+    if (canUseCloudScenarios) {
       clearTimeout(updateCurrentScenario.timeoutId);
       updateCurrentScenario.timeoutId = setTimeout(async () => {
         await updateScenarioInSupabase(updatedScenario);
-      }, 1000); // 1 second debounce
+      }, 1000);
     } else {
-      // Update localStorage if Supabase not available
       const updatedScenarios = scenarios.map(s => s.id === currentScenario.id ? updatedScenario : s);
       localStorage.setItem('retirement-scenarios', JSON.stringify(updatedScenarios));
     }
@@ -500,13 +508,12 @@ export const ScenarioProvider = ({ children }) => {
 
   const deleteScenario = async (id) => {
     // Delete from Supabase first
-    if (isSupabaseAvailable && user) {
+    if (canUseCloudScenarios) {
       await deleteScenarioFromSupabase(id);
     }
 
     setScenarios(prev => {
       const filtered = prev.filter(s => s.id !== id);
-      // If we deleted the current scenario, switch to the first remaining one
       if (currentScenario?.id === id) {
         const newCurrent = filtered.length > 0 ? filtered[0] : createDefaultScenario('Default Scenario');
         setCurrentScenario(newCurrent);
@@ -514,12 +521,11 @@ export const ScenarioProvider = ({ children }) => {
           return [newCurrent];
         }
       }
-      
-      // Update localStorage if Supabase not available
-      if (!isSupabaseAvailable) {
+
+      if (!canUseCloudScenarios) {
         localStorage.setItem('retirement-scenarios', JSON.stringify(filtered));
       }
-      
+
       return filtered;
     });
   };
@@ -529,18 +535,17 @@ export const ScenarioProvider = ({ children }) => {
     const targetScenario = updatedScenarios.find(s => s.id === id);
     
     // Update Supabase
-    if (isSupabaseAvailable && user && targetScenario) {
+    if (canUseCloudScenarios && targetScenario) {
       await updateScenarioInSupabase(targetScenario);
     }
-    
+
     setScenarios(updatedScenarios);
-    
+
     if (currentScenario?.id === id) {
       setCurrentScenario(prev => ({ ...prev, name: newName }));
     }
-    
-    // Update localStorage if Supabase not available
-    if (!isSupabaseAvailable) {
+
+    if (!canUseCloudScenarios) {
       localStorage.setItem('retirement-scenarios', JSON.stringify(updatedScenarios));
     }
   };
@@ -573,18 +578,17 @@ export const ScenarioProvider = ({ children }) => {
       };
       
       // Save to Supabase
-      if (isSupabaseAvailable && user) {
+      if (canUseCloudScenarios) {
         const supabaseResult = await saveScenarioToSupabase(duplicated);
         if (supabaseResult) {
           duplicated.id = supabaseResult.id;
           duplicated.createdAt = supabaseResult.created_at;
         }
       }
-      
+
       setScenarios(prev => [...prev, duplicated]);
-      
-      // Update localStorage if Supabase not available
-      if (!isSupabaseAvailable) {
+
+      if (!canUseCloudScenarios) {
         localStorage.setItem('retirement-scenarios', JSON.stringify([...scenarios, duplicated]));
       }
       

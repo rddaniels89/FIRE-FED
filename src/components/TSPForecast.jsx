@@ -19,6 +19,11 @@ import { calculateTspTraditionalVsRoth } from '../lib/calculations/tsp';
 import TooltipWrapper from './TooltipWrapper';
 import NumberStepper from './NumberStepper';
 import { FEATURES, hasEntitlement } from '../lib/entitlements';
+import {
+  ANNUAL_CATCH_UP_LIMIT,
+  ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
+  CATCH_UP_AGE,
+} from '../lib/calculations/contributionLimits';
 
 ChartJS.register(
   CategoryScale,
@@ -51,9 +56,9 @@ function TSPForecast() {
     annualSalaryGrowthRate: '3',
     includeEmployerMatch: true,
     includeAutomatic1Percent: true,
-    annualEmployeeDeferralLimit: '23500',
-    annualCatchUpLimit: '7500',
-    catchUpAge: '50',
+    annualEmployeeDeferralLimit: String(ANNUAL_ELECTIVE_DEFERRAL_LIMIT),
+    annualCatchUpLimit: String(ANNUAL_CATCH_UP_LIMIT),
+    catchUpAge: String(CATCH_UP_AGE),
     inflationRate: '2.5',
     valueMode: 'nominal', // 'nominal' | 'real'
     allocation: {
@@ -175,8 +180,8 @@ function TSPForecast() {
       annualSalaryGrowthRate: String(tsp.annualSalaryGrowthRate ?? 3),
       includeEmployerMatch: Boolean(tsp.includeEmployerMatch ?? true),
       includeAutomatic1Percent: Boolean(tsp.includeAutomatic1Percent ?? true),
-      annualEmployeeDeferralLimit: String(tsp.annualEmployeeDeferralLimit ?? 23500),
-      annualCatchUpLimit: String(tsp.annualCatchUpLimit ?? 7500),
+      annualEmployeeDeferralLimit: String(tsp.annualEmployeeDeferralLimit ?? ANNUAL_ELECTIVE_DEFERRAL_LIMIT),
+      annualCatchUpLimit: String(tsp.annualCatchUpLimit ?? ANNUAL_CATCH_UP_LIMIT),
       catchUpAge: String(tsp.catchUpAge ?? 50),
       inflationRate: String(tsp.inflationRate ?? 2.5),
       valueMode: tsp.valueMode === 'real' ? 'real' : 'nominal',
@@ -1021,7 +1026,7 @@ function TSPForecast() {
                       value={getDisplayValue('annualEmployeeDeferralLimit')}
                       onChange={(e) => handleInputChange('annualEmployeeDeferralLimit', e.target.value)}
                       className="input-field w-full"
-                      placeholder="23500"
+                      placeholder={String(ANNUAL_ELECTIVE_DEFERRAL_LIMIT)}
                       inputMode="decimal"
                     />
                     <NumberStepper
@@ -1048,7 +1053,7 @@ function TSPForecast() {
                       value={getDisplayValue('annualCatchUpLimit')}
                       onChange={(e) => handleInputChange('annualCatchUpLimit', e.target.value)}
                       className="input-field w-full"
-                      placeholder="7500"
+                      placeholder={String(ANNUAL_CATCH_UP_LIMIT)}
                       inputMode="decimal"
                     />
                     <NumberStepper

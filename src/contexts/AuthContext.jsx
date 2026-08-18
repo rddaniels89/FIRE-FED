@@ -1,12 +1,12 @@
-import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase, isSupabaseAvailable } from '../supabaseClient';
 import { getEntitlements, hasEntitlement } from '../lib/entitlements';
+import { isActiveSubscriptionStatus, isLocalOnlyUser, isProFromTrustedMetadata } from '../lib/auth/session';
 
 /**
  * AuthContext - Authentication context for FireFed SaaS with Supabase integration
- * 
- * Provides user authentication state and Pro feature gating
- * Uses Supabase for real authentication with localStorage fallback
+ *
+ * Provides user authentication state, Stripe subscription state, and Pro feature gating.
  */
 const AuthContext = createContext();
 
@@ -24,23 +24,62 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
-  // DEV-only bypass (never active in production builds)
+
   const bypassAuth = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true';
   const bypassPro = import.meta.env.DEV && import.meta.env.VITE_BYPASS_PRO === 'true';
 
-  // Check for existing session on mount
+  const refreshSubscription = useCallback(async (userId) => {
+    const id = userId;
+    if (!id || !isSupabaseAvailable || isLocalOnlyUser({ id })) {
+      setSubscription(null);
+      setSubscriptionLoading(false);
+      return;
+    }
+
+    setSubscriptionLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error loading subscription:', error);
+        setSubscription(null);
+      } else {
+        setSubscription(data || null);
+      }
+    } catch (error) {
+      console.error('Subscription fetch error:', error);
+      setSubscription(null);
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  }, []);
+
+  const isProUser = () => {
+    if (!user) return false;
+    if (bypassPro) return true;
+    if (subscription && isActiveSubscriptionStatus(subscription.status)) return true;
+    return isProFromTrustedMetadata(user);
+  };
+
+  const entitlements = getEntitlements({ isAuthenticated, isProUser: isProUser() });
+
+  const hasFeature = (feature) => hasEntitlement(entitlements, feature);
+
+  const isPlanActive = () => isAuthenticated;
+
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // Dev-only bypass to allow viewing the full UI without signing in
         if (bypassAuth) {
           const mockUser = {
             id: 'dev-bypass',
             email: 'dev@local',
-            user_metadata: {
-              email: 'dev@local',
-              ...(bypassPro ? { subscription_plan: 'pro' } : {}),
-            },
+            user_metadata: { email: 'dev@local' },
+            app_metadata: bypassPro ? { subscription_plan: 'pro' } : {},
           };
           setUser(mockUser);
           setIsAuthenticated(true);
@@ -48,14 +87,13 @@ export const AuthProvider = ({ children }) => {
         }
 
         if (isSupabaseAvailable) {
-          // Check for existing Supabase session
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
             setUser(session.user);
             setIsAuthenticated(true);
+            await refreshSubscription(session.user.id);
           }
         } else {
-          // Check localStorage for fallback auth
           const savedUser = localStorage.getItem('auth-user');
           if (savedUser) {
             const parsedUser = JSON.parse(savedUser);
@@ -72,99 +110,28 @@ export const AuthProvider = ({ children }) => {
 
     initializeAuth();
 
-    // Set up auth state listener for Supabase
     if (!bypassAuth && isSupabaseAvailable) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
+      const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(
+        async (_event, session) => {
           if (session?.user) {
             setUser(session.user);
             setIsAuthenticated(true);
+            await refreshSubscription(session.user.id);
           } else {
             setUser(null);
             setIsAuthenticated(false);
+            setSubscription(null);
           }
           setLoading(false);
         }
       );
 
-      return () => subscription.unsubscribe();
+      return () => authListener.unsubscribe();
     }
-  }, [bypassAuth, bypassPro]);
+  }, [bypassAuth, bypassPro, refreshSubscription]);
+  // refreshSubscription is stable (empty deps); bypass flags are dev-only constants per build.
 
-  // Load subscription status (Stripe-synced) from Supabase when authenticated.
-  useEffect(() => {
-    const loadSubscription = async () => {
-      if (bypassAuth) {
-        setSubscription(bypassPro ? { status: 'active', plan: 'pro' } : null);
-        setSubscriptionLoading(false);
-        return;
-      }
-
-      if (!isSupabaseAvailable || !isAuthenticated || !user?.id) {
-        setSubscription(null);
-        setSubscriptionLoading(false);
-        return;
-      }
-
-      setSubscriptionLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('subscriptions')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        if (error) throw error;
-        setSubscription(data || null);
-      } catch (err) {
-        // If the table isn't deployed yet or RLS is misconfigured, fall back to metadata checks.
-        console.warn('Failed to load subscription row:', err?.message || err);
-        setSubscription(null);
-      } finally {
-        setSubscriptionLoading(false);
-      }
-    };
-
-    loadSubscription();
-  }, [bypassAuth, bypassPro, isAuthenticated, user?.id]);
-
-  const isProUser = useMemo(() => {
-    if (!user) return false;
-
-    const userMetadata = user.user_metadata || {};
-    const appMetadata = user.app_metadata || {};
-
-    const subscriptionStatus = (subscription?.status || '').toString().toLowerCase();
-    const subscriptionPlan = (subscription?.plan || '').toString().toLowerCase();
-    const subscriptionIsActive = subscriptionStatus === 'active' || subscriptionStatus === 'trialing';
-    const subscriptionIsPro = !subscriptionPlan || subscriptionPlan === 'pro';
-
-    // Prefer Stripe-synced subscription state when available.
-    if (isSupabaseAvailable && subscription) {
-      return subscriptionIsActive && subscriptionIsPro;
-    }
-
-    // Fallback: allow metadata-based Pro (dev/manual override).
-    return userMetadata.subscription_plan === 'pro' ||
-           appMetadata.subscription_plan === 'pro' ||
-           userMetadata.role === 'pro' ||
-           appMetadata.role === 'pro';
-  }, [user, subscription]);
-
-  // Helper functions for feature gating
-  const entitlements = useMemo(
-    () => getEntitlements({ isAuthenticated, isProUser }),
-    [isAuthenticated, isProUser]
-  );
-
-  const hasFeature = useCallback(
-    (feature) => hasEntitlement(entitlements, feature),
-    [entitlements]
-  );
-
-  const isPlanActive = isAuthenticated;
-
-  // Authentication functions with Supabase integration
-  const login = useCallback(async (email, password) => {
+  const login = async (email, password) => {
     try {
       if (isSupabaseAvailable) {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -172,26 +139,44 @@ export const AuthProvider = ({ children }) => {
           password,
         });
         if (error) throw error;
+        await refreshSubscription(data.user?.id);
         return { success: true, user: data.user };
-      } else {
-        // Fallback to localStorage
-        const mockUser = {
-          id: 'guest-' + Date.now(),
-          email: email || 'guest@example.com',
-          user_metadata: { email: email || 'guest@example.com' }
-        };
-        localStorage.setItem('auth-user', JSON.stringify(mockUser));
-        setUser(mockUser);
-        setIsAuthenticated(true);
-        return { success: true, user: mockUser };
       }
+
+      const mockUser = {
+        id: 'guest-' + Date.now(),
+        email: email || 'guest@example.com',
+        user_metadata: { email: email || 'guest@example.com' },
+      };
+      localStorage.setItem('auth-user', JSON.stringify(mockUser));
+      setUser(mockUser);
+      setIsAuthenticated(true);
+      return { success: true, user: mockUser };
     } catch (error) {
       console.error('Login error:', error);
       return { success: false, error: error.message };
     }
-  }, []);
+  };
 
-  const logout = useCallback(async () => {
+  const loginAsGuest = async () => {
+    try {
+      const mockUser = {
+        id: 'guest-' + Date.now(),
+        email: 'guest@local',
+        user_metadata: { email: 'guest@local', guest: true },
+      };
+      localStorage.setItem('auth-user', JSON.stringify(mockUser));
+      setUser(mockUser);
+      setIsAuthenticated(true);
+      setSubscription(null);
+      return { success: true, user: mockUser };
+    } catch (error) {
+      console.error('Guest login error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const logout = async () => {
     try {
       if (isSupabaseAvailable) {
         await supabase.auth.signOut();
@@ -200,72 +185,27 @@ export const AuthProvider = ({ children }) => {
       }
       setUser(null);
       setIsAuthenticated(false);
+      setSubscription(null);
     } catch (error) {
       console.error('Logout error:', error);
     }
-  }, []);
+  };
 
-  const upgradeToPro = useCallback(async () => {
-    try {
-      if (isSupabaseAvailable && user) {
-        // Update user metadata in Supabase
-        const { error } = await supabase.auth.updateUser({
-          data: { 
-            subscription_plan: 'pro',
-            upgraded_at: new Date().toISOString()
-          }
-        });
-        
-        if (error) throw error;
-        
-        // Update local user state
-        setUser(prev => ({
-          ...prev,
-          user_metadata: {
-            ...prev.user_metadata,
-            subscription_plan: 'pro',
-            upgraded_at: new Date().toISOString()
-          }
-        }));
-      } else {
-        // Fallback for localStorage
-        const updatedUser = {
-          ...user,
-          user_metadata: {
-            ...user.user_metadata,
-            subscription_plan: 'pro',
-            upgraded_at: new Date().toISOString()
-          }
-        };
-        localStorage.setItem('auth-user', JSON.stringify(updatedUser));
-        setUser(updatedUser);
-      }
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Upgrade error:', error);
-      return { success: false, error: error.message };
-    }
-  }, [user]);
-
-  const value = useMemo(() => ({
+  const value = {
     user,
     isAuthenticated,
     loading,
-    isProUser,
     subscription,
     subscriptionLoading,
+    refreshSubscription,
+    isProUser: isProUser(),
     entitlements,
     hasFeature,
-    isPlanActive,
+    isPlanActive: isPlanActive(),
     login,
+    loginAsGuest,
     logout,
-    upgradeToPro
-  }), [user, isAuthenticated, loading, isProUser, subscription, subscriptionLoading, entitlements, hasFeature, isPlanActive, login, logout, upgradeToPro]);
+  };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
-}; 
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};

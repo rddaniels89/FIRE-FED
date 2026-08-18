@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { calculateTspTraditionalVsRoth, calculateWeightedReturn } from '../tsp';
+import {
+  ANNUAL_CATCH_UP_LIMIT,
+  ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
+  SUPER_CATCH_UP_LIMIT,
+} from '../contributionLimits';
 
 describe('tsp calculations', () => {
   it('weighted return respects allocation and default returns', () => {
@@ -94,4 +99,57 @@ describe('tsp calculations', () => {
   });
 });
 
+describe('tsp contribution limits by age', () => {
+  const highEarner = {
+    currentBalance: 0,
+    annualSalary: 400000, // high enough that the deferral cap always binds
+    monthlyContributionPercent: 50,
+    allocation: { G: 100, F: 0, C: 0, S: 0, I: 0 },
+    currentTaxRate: 22,
+    retirementTaxRate: 15,
+  };
 
+  const limitAtAge = (age) => {
+    const { traditional } = calculateTspTraditionalVsRoth({
+      ...highEarner,
+      currentAge: age,
+      retirementAge: age + 1,
+    });
+    return traditional.yearlyData[0].employeeLimit;
+  };
+
+  it('caps a young saver at the elective deferral limit', () => {
+    expect(limitAtAge(40)).toBe(ANNUAL_ELECTIVE_DEFERRAL_LIMIT);
+  });
+
+  it('adds the regular catch-up at 50', () => {
+    expect(limitAtAge(50)).toBe(ANNUAL_ELECTIVE_DEFERRAL_LIMIT + ANNUAL_CATCH_UP_LIMIT);
+  });
+
+  it('adds the higher catch-up between 60 and 63', () => {
+    expect(limitAtAge(61)).toBe(ANNUAL_ELECTIVE_DEFERRAL_LIMIT + SUPER_CATCH_UP_LIMIT);
+  });
+
+  it('steps the limit back down at 64', () => {
+    expect(limitAtAge(64)).toBe(ANNUAL_ELECTIVE_DEFERRAL_LIMIT + ANNUAL_CATCH_UP_LIMIT);
+  });
+
+  it('applies the band per projection year, not just at the start age', () => {
+    const startAge = 58;
+    const { traditional } = calculateTspTraditionalVsRoth({
+      ...highEarner,
+      currentAge: startAge,
+      retirementAge: 65,
+    });
+
+    // yearlyData[0] is the "now" snapshot; each later row is an end-of-year
+    // balance, so row i (i >= 1) holds the contribution year lived at
+    // startAge + i - 1. Look rows up by contribution age, not by row label.
+    const limitDuringAge = (age) => traditional.yearlyData[age - startAge + 1]?.employeeLimit;
+
+    expect(limitDuringAge(59)).toBe(ANNUAL_ELECTIVE_DEFERRAL_LIMIT + ANNUAL_CATCH_UP_LIMIT);
+    expect(limitDuringAge(60)).toBe(ANNUAL_ELECTIVE_DEFERRAL_LIMIT + SUPER_CATCH_UP_LIMIT);
+    expect(limitDuringAge(63)).toBe(ANNUAL_ELECTIVE_DEFERRAL_LIMIT + SUPER_CATCH_UP_LIMIT);
+    expect(limitDuringAge(64)).toBe(ANNUAL_ELECTIVE_DEFERRAL_LIMIT + ANNUAL_CATCH_UP_LIMIT);
+  });
+});

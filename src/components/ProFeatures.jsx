@@ -8,7 +8,7 @@ const PRO_MONTHLY_PRICE_ID = import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY || ''
 const PRO_ANNUAL_PRICE_ID = import.meta.env.VITE_STRIPE_PRICE_PRO_ANNUAL || '';
 
 const ProFeatures = () => {
-  const { isAuthenticated, isProUser, subscription, subscriptionLoading } = useAuth();
+  const { isAuthenticated, isProUser, subscription, subscriptionLoading, refreshSubscription } = useAuth();
   const location = useLocation();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -84,11 +84,12 @@ const ProFeatures = () => {
     if (checkout === 'success') {
       setMessage('✅ Payment complete. Your Pro access should unlock shortly.');
       trackEvent('pro_checkout_return', { status: 'success' });
+      refreshSubscription?.();
     } else if (checkout === 'canceled') {
       setMessage('ℹ️ Checkout canceled. You can upgrade anytime.');
       trackEvent('pro_checkout_return', { status: 'canceled' });
     }
-  }, []);
+  }, [refreshSubscription]);
 
   const reasonHint = useMemo(() => {
     const reason = location.state?.reason;

@@ -3,8 +3,10 @@ import { supabase, isSupabaseAvailable } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { trackEvent } from '../lib/telemetry'
 
+const allowGuestPreview = import.meta.env.VITE_ALLOW_GUEST_PREVIEW === 'true'
+
 const Auth = ({ onAuthSuccess }) => {
-  const { login } = useAuth()
+  const { login, loginAsGuest } = useAuth()
   const [loading, setLoading] = useState(false)
   const [resetLoading, setResetLoading] = useState(false)
   const [email, setEmail] = useState('')
@@ -178,19 +180,25 @@ const Auth = ({ onAuthSuccess }) => {
             </button>
           </div>
 
-          {!isSupabaseAvailable && (
+          {(!isSupabaseAvailable || allowGuestPreview) && (
             <div className="text-center">
               <button
                 type="button"
                 className="text-gray-600 hover:text-gray-500 text-sm underline"
                 onClick={() => {
-                  login('guest@example.com', '').then((result) => {
+                  const run = isSupabaseAvailable ? loginAsGuest : () => login('guest@example.com', '')
+                  run().then((result) => {
                     if (result?.success) onAuthSuccess?.(result.user)
                   })
                 }}
               >
                 Continue as Guest
               </button>
+              {allowGuestPreview && isSupabaseAvailable && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Guest mode saves scenarios on this device only. Sign up to sync across devices.
+                </p>
+              )}
             </div>
           )}
         </form>

@@ -14,12 +14,13 @@ export function getBaseUrl(req) {
   return `${proto}://${host}`;
 }
 
+// Pinned so an SDK upgrade cannot silently reshape webhook payloads.
+// Changing this requires re-checking field paths in api/stripe/webhook.js.
+export const STRIPE_API_VERSION = '2025-08-27.basil';
+
 export function getStripe() {
   const key = mustGetEnv('STRIPE_SECRET_KEY');
-  return new Stripe(key, {
-    // Use Stripe's default API version for the installed SDK.
-    // If you need strict pinning later, add apiVersion here.
-  });
+  return new Stripe(key, { apiVersion: STRIPE_API_VERSION });
 }
 
 export function getSupabaseAdmin() {

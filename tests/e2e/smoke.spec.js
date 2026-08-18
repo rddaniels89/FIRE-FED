@@ -9,8 +9,9 @@ test.describe('Smoke: core flows', () => {
       await guestButton.click();
       return true;
     } catch {
-      // Supabase is configured (or guest mode hidden); don't hard-fail tests that depend on guest mode.
-      await expect(page.getByRole('heading', { name: /Sign in to your account/i })).toBeVisible();
+      // Guest mode is unavailable. That is expected when Supabase is configured
+      // (auth screen shown) or when a dev bypass signed us straight in; skip the
+      // guest-dependent assertions rather than failing on the wrong screen.
       return false;
     }
   }
@@ -55,10 +56,25 @@ test.describe('Smoke: core flows', () => {
     }
   });
 
+  test('Unknown URLs render a 404 instead of a blank page', async ({ page }) => {
+    const guestOk = await tryContinueAsGuest(page);
+    test.skip(!guestOk, 'Guest-mode is unavailable; skipping in-app routing checks.');
+    await page.goto('/this-route-does-not-exist');
+
+    await expect(page.getByRole('heading', { name: /Page not found/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Back to dashboard/i })).toBeVisible();
+  });
+
+  test('Password reset route renders', async ({ page }) => {
+    await page.goto('/auth/reset');
+    await expect(page.getByRole('heading', { name: /Reset your password/i })).toBeVisible();
+  });
+
   test('Unauthed users see the auth screen', async ({ page }) => {
     await page.goto('/');
-    // App routes unauthenticated sessions to Auth.
-    await expect(page.getByRole('heading', { name: /Sign in|Log in|Authentication/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Sign in to your account/i })).toBeVisible();
+    // Nothing behind the gate should be reachable before signing in.
+    await expect(page.getByRole('link', { name: /Scenarios/ })).toHaveCount(0);
   });
 });
 

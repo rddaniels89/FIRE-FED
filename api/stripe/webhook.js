@@ -1,5 +1,11 @@
 /* eslint-env node */
 import { getStripe, getSupabaseAdmin, sendError, sendJson } from './_shared.js';
+import {
+  claimEvent,
+  getInvoiceSubscriptionId,
+  getSubscriptionPeriodEnd,
+  releaseEvent,
+} from './_events.js';
 
 export const config = {
   api: {
@@ -48,6 +54,25 @@ async function upsertSubscriptionRow(supabaseAdmin, row) {
   await supabaseAdmin.from('subscriptions').upsert(row, { onConflict: 'user_id' });
 }
 
+/**
+ * Writes subscription state straight from the Stripe object, which is the
+ * authoritative status. Used by every event type so that events arriving out of
+ * order cannot leave a stale status behind.
+ */
+async function syncSubscriptionFromStripe({ supabaseAdmin, sub, userId, fallbackCustomerId = null }) {
+  if (!userId || !sub) return;
+
+  await upsertSubscriptionRow(supabaseAdmin, {
+    user_id: userId,
+    stripe_customer_id: typeof sub.customer === 'string' ? sub.customer : fallbackCustomerId,
+    stripe_subscription_id: sub.id,
+    plan: (sub?.metadata?.plan || 'pro').toString(),
+    status: sub.status,
+    cancel_at_period_end: Boolean(sub.cancel_at_period_end),
+    current_period_end: toIsoFromUnixSeconds(getSubscriptionPeriodEnd(sub)),
+  });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -75,62 +100,75 @@ export default async function handler(req, res) {
       throw err;
     }
 
+    const { alreadyProcessed } = await claimEvent(supabaseAdmin, event);
+    if (alreadyProcessed) {
+      return sendJson(res, 200, { received: true, duplicate: true });
+    }
+
     // Handle relevant events by upserting Supabase subscription state.
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object;
-        const userId = session.client_reference_id || session?.metadata?.user_id || null;
-        const customerId = typeof session.customer === 'string' ? session.customer : null;
-        const subscriptionId = typeof session.subscription === 'string' ? session.subscription : null;
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          const session = event.data.object;
+          const userId = session.client_reference_id || session?.metadata?.user_id || null;
+          const customerId = typeof session.customer === 'string' ? session.customer : null;
+          const subscriptionId = typeof session.subscription === 'string' ? session.subscription : null;
 
-        if (userId) {
-          await upsertSubscriptionRow(supabaseAdmin, {
-            user_id: userId,
-            stripe_customer_id: customerId,
-            stripe_subscription_id: subscriptionId,
-            plan: 'pro',
-            status: 'incomplete',
-          });
+          if (!userId) break;
+
+          if (subscriptionId) {
+            // Read the real status rather than assuming 'incomplete'. If
+            // customer.subscription.updated already landed, writing a guessed
+            // status here would knock an active subscriber back to unpaid.
+            const sub = await stripe.subscriptions.retrieve(subscriptionId);
+            await syncSubscriptionFromStripe({
+              supabaseAdmin,
+              sub,
+              userId,
+              fallbackCustomerId: customerId,
+            });
+          } else {
+            await upsertSubscriptionRow(supabaseAdmin, {
+              user_id: userId,
+              stripe_customer_id: customerId,
+              stripe_subscription_id: null,
+              plan: 'pro',
+              status: 'incomplete',
+            });
+          }
+          break;
         }
-        break;
-      }
 
-      case 'customer.subscription.created':
-      case 'customer.subscription.updated':
-      case 'customer.subscription.deleted': {
-        const sub = event.data.object;
-        const stripeSubscriptionId = sub.id;
-        const stripeCustomerId = typeof sub.customer === 'string' ? sub.customer : null;
-        const metadataUserId = sub?.metadata?.user_id || null;
+        case 'customer.subscription.created':
+        case 'customer.subscription.updated':
+        case 'customer.subscription.deleted': {
+          const sub = event.data.object;
+          const stripeCustomerId = typeof sub.customer === 'string' ? sub.customer : null;
 
-        const userId = await resolveUserId({
-          supabaseAdmin,
-          stripeCustomerId,
-          stripeSubscriptionId,
-          metadataUserId,
-        });
-
-        if (userId) {
-          await upsertSubscriptionRow(supabaseAdmin, {
-            user_id: userId,
-            stripe_customer_id: stripeCustomerId,
-            stripe_subscription_id: stripeSubscriptionId,
-            plan: (sub?.metadata?.plan || 'pro').toString(),
-            status: sub.status,
-            cancel_at_period_end: Boolean(sub.cancel_at_period_end),
-            current_period_end: toIsoFromUnixSeconds(sub.current_period_end),
+          const userId = await resolveUserId({
+            supabaseAdmin,
+            stripeCustomerId,
+            stripeSubscriptionId: sub.id,
+            metadataUserId: sub?.metadata?.user_id || null,
           });
+
+          await syncSubscriptionFromStripe({
+            supabaseAdmin,
+            sub,
+            userId,
+            fallbackCustomerId: stripeCustomerId,
+          });
+          break;
         }
-        break;
-      }
 
-      case 'invoice.paid':
-      case 'invoice.payment_failed': {
-        const invoice = event.data.object;
-        const stripeCustomerId = typeof invoice.customer === 'string' ? invoice.customer : null;
-        const stripeSubscriptionId = typeof invoice.subscription === 'string' ? invoice.subscription : null;
+        case 'invoice.paid':
+        case 'invoice.payment_failed': {
+          const invoice = event.data.object;
+          const stripeCustomerId = typeof invoice.customer === 'string' ? invoice.customer : null;
+          const stripeSubscriptionId = getInvoiceSubscriptionId(invoice);
 
-        if (stripeSubscriptionId) {
+          if (!stripeSubscriptionId) break;
+
           const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
           const userId = await resolveUserId({
             supabaseAdmin,
@@ -138,24 +176,23 @@ export default async function handler(req, res) {
             stripeSubscriptionId,
             metadataUserId: sub?.metadata?.user_id || null,
           });
-          if (userId) {
-            await upsertSubscriptionRow(supabaseAdmin, {
-              user_id: userId,
-              stripe_customer_id: typeof sub.customer === 'string' ? sub.customer : stripeCustomerId,
-              stripe_subscription_id: sub.id,
-              plan: (sub?.metadata?.plan || 'pro').toString(),
-              status: sub.status,
-              cancel_at_period_end: Boolean(sub.cancel_at_period_end),
-              current_period_end: toIsoFromUnixSeconds(sub.current_period_end),
-            });
-          }
-        }
-        break;
-      }
 
-      default:
-        // Ignore other event types.
-        break;
+          await syncSubscriptionFromStripe({
+            supabaseAdmin,
+            sub,
+            userId,
+            fallbackCustomerId: stripeCustomerId,
+          });
+          break;
+        }
+
+        default:
+          // Ignore other event types.
+          break;
+      }
+    } catch (handlerError) {
+      await releaseEvent(supabaseAdmin, event);
+      throw handlerError;
     }
 
     return sendJson(res, 200, { received: true });
@@ -163,5 +200,3 @@ export default async function handler(req, res) {
     return sendError(res, error);
   }
 }
-
-

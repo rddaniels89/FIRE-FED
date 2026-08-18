@@ -1,5 +1,10 @@
 import { calculateTspTraditionalVsRoth } from '../calculations/tsp';
 import { calculateFersResults } from '../calculations/fers';
+import {
+  ANNUAL_CATCH_UP_LIMIT,
+  ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
+  CATCH_UP_AGE,
+} from '../calculations/contributionLimits';
 
 function clampNumber(value, { min = -Infinity, max = Infinity, fallback = 0 } = {}) {
   const n = Number(value);
@@ -94,9 +99,9 @@ export function buildOptimizationSuggestions(scenario) {
       inflationRate,
       includeEmployerMatch: tsp.includeEmployerMatch ?? false,
       includeAutomatic1Percent: tsp.includeAutomatic1Percent ?? true,
-      annualEmployeeDeferralLimit: tsp.annualEmployeeDeferralLimit ?? 23500,
-      annualCatchUpLimit: tsp.annualCatchUpLimit ?? 7500,
-      catchUpAge: tsp.catchUpAge ?? 50,
+      annualEmployeeDeferralLimit: tsp.annualEmployeeDeferralLimit ?? ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
+      annualCatchUpLimit: tsp.annualCatchUpLimit ?? ANNUAL_CATCH_UP_LIMIT,
+      catchUpAge: tsp.catchUpAge ?? CATCH_UP_AGE,
       fundReturns: tsp.fundReturns
         ? {
             G: Number(tsp.fundReturns.G ?? 2) / 100,
@@ -234,5 +239,6 @@ export function buildOptimizationSuggestions(scenario) {
     })),
   };
 }
+
 
 
