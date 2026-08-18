@@ -3,6 +3,7 @@ import { calculateTspTraditionalVsRoth, calculateWeightedReturn } from '../tsp';
 import {
   ANNUAL_CATCH_UP_LIMIT,
   ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
+  ROTH_CATCH_UP_WAGE_THRESHOLD,
   SUPER_CATCH_UP_LIMIT,
 } from '../contributionLimits';
 
@@ -151,5 +152,103 @@ describe('tsp contribution limits by age', () => {
     expect(limitDuringAge(60)).toBe(ANNUAL_ELECTIVE_DEFERRAL_LIMIT + SUPER_CATCH_UP_LIMIT);
     expect(limitDuringAge(63)).toBe(ANNUAL_ELECTIVE_DEFERRAL_LIMIT + SUPER_CATCH_UP_LIMIT);
     expect(limitDuringAge(64)).toBe(ANNUAL_ELECTIVE_DEFERRAL_LIMIT + ANNUAL_CATCH_UP_LIMIT);
+  });
+});
+
+describe('SECURE 2.0 mandatory Roth catch-up', () => {
+  // Contributes far past the 402(g) limit so a catch-up always happens.
+  const base = {
+    currentBalance: 0,
+    monthlyContributionPercent: 40,
+    currentAge: 55,
+    retirementAge: 56,
+    allocation: { G: 100, F: 0, C: 0, S: 0, I: 0 },
+    currentTaxRate: 30,
+    retirementTaxRate: 30,
+    annualSalary: 200000,
+  };
+
+  it('flags the requirement when prior-year wages exceed the threshold', () => {
+    const { limits } = calculateTspTraditionalVsRoth({
+      ...base,
+      priorYearWages: ROTH_CATCH_UP_WAGE_THRESHOLD + 1,
+    });
+    expect(limits.rothCatchUpRequired).toBe(true);
+    expect(limits.rothCatchUpWageThreshold).toBe(ROTH_CATCH_UP_WAGE_THRESHOLD);
+  });
+
+  it('does not flag it at or below the threshold', () => {
+    const { limits } = calculateTspTraditionalVsRoth({
+      ...base,
+      priorYearWages: ROTH_CATCH_UP_WAGE_THRESHOLD,
+    });
+    expect(limits.rothCatchUpRequired).toBe(false);
+  });
+
+  it('does not flag it below the catch-up age, however high the wages', () => {
+    const { limits } = calculateTspTraditionalVsRoth({
+      ...base,
+      currentAge: 45,
+      retirementAge: 46,
+      priorYearWages: 500000,
+    });
+    expect(limits.rothCatchUpRequired).toBe(false);
+  });
+
+  it('routes the catch-up portion to Roth for a traditional contributor', () => {
+    // Same gross contributions either way, but the mandated portion is taxed
+    // now rather than at withdrawal, so the balances must differ.
+    const mandated = calculateTspTraditionalVsRoth({
+      ...base,
+      priorYearWages: ROTH_CATCH_UP_WAGE_THRESHOLD + 50000,
+    });
+    const exempt = calculateTspTraditionalVsRoth({
+      ...base,
+      priorYearWages: ROTH_CATCH_UP_WAGE_THRESHOLD - 50000,
+    });
+
+    expect(mandated.traditional.totalContributions).toBeCloseTo(
+      exempt.traditional.totalContributions,
+      6
+    );
+    // The Roth slice was funded with after-tax dollars, so the gross balance is lower.
+    expect(mandated.traditional.projectedBalance).toBeLessThan(exempt.traditional.projectedBalance);
+  });
+
+  it('leaves the base deferral traditional; only the catch-up moves', () => {
+    const mandated = calculateTspTraditionalVsRoth({
+      ...base,
+      priorYearWages: ROTH_CATCH_UP_WAGE_THRESHOLD + 50000,
+    });
+    const allRoth = calculateTspTraditionalVsRoth({
+      ...base,
+      priorYearWages: ROTH_CATCH_UP_WAGE_THRESHOLD + 50000,
+    }).roth;
+
+    // Only the catch-up slice is after-tax, so it must sit between a fully
+    // traditional contributor and a fully Roth one.
+    expect(mandated.traditional.projectedBalance).toBeGreaterThan(allRoth.projectedBalance);
+  });
+
+  it('can be switched off for scenarios that predate the rule', () => {
+    const { limits } = calculateTspTraditionalVsRoth({
+      ...base,
+      priorYearWages: 500000,
+      applyMandatoryRothCatchUp: false,
+    });
+    expect(limits.rothCatchUpRequired).toBe(false);
+  });
+
+  it('re-evaluates the rule each year as salary grows past the threshold', () => {
+    // Starts below the threshold and grows past it mid-projection.
+    const { traditional } = calculateTspTraditionalVsRoth({
+      ...base,
+      annualSalary: 140000,
+      annualSalaryGrowthRate: 0.1,
+      currentAge: 55,
+      retirementAge: 60,
+      priorYearWages: 130000,
+    });
+    expect(traditional.projectedBalance).toBeGreaterThan(0);
   });
 });

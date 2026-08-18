@@ -616,6 +616,8 @@ function TSPForecast() {
   const employeeLimitThisYear = calcMeta?.limits?.annualEmployeeDeferralLimit ?? 0;
   const effectiveAnnualEmployeeContribution = calcMeta?.limits?.effectiveAnnualEmployeeContribution ?? desiredAnnualEmployeeContribution;
   const isOverLimit = Boolean(calcMeta?.limits?.isOverLimit);
+  const rothCatchUpRequired = Boolean(calcMeta?.limits?.rothCatchUpRequired);
+  const rothCatchUpThreshold = calcMeta?.limits?.rothCatchUpWageThreshold ?? 0;
 
   return (
     <div className="animate-fade-in">
@@ -1106,6 +1108,20 @@ function TSPForecast() {
                   </div>
                   <div className="text-xs text-amber-700 dark:text-amber-300 mt-1">
                     This forecast caps employee contributions at {formatDollars(employeeLimitThisYear)} for the current age/year setting.
+                  </div>
+                </div>
+              )}
+
+              {rothCatchUpRequired && (
+                <div className="mt-4 p-3 rounded-lg bg-navy-50 dark:bg-navy-900/30 border border-navy-200 dark:border-navy-800">
+                  <div className="text-sm font-medium text-navy-800 dark:text-navy-200">
+                    Your catch-up contributions must be Roth.
+                  </div>
+                  <div className="text-xs text-navy-700 dark:text-navy-300 mt-1">
+                    Under SECURE 2.0, participants whose prior-year FICA wages exceed{' '}
+                    {formatDollars(rothCatchUpThreshold)} must make catch-up contributions as Roth. This forecast routes
+                    the catch-up portion to Roth even when Traditional is selected, and estimates prior-year wages from
+                    your salary and growth rate.
                   </div>
                 </div>
               )}

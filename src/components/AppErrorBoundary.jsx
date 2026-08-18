@@ -3,7 +3,6 @@ import * as Sentry from '@sentry/react';
 const STORAGE_KEYS_TO_CLEAR = Object.freeze([
   'retirement-scenarios',
   'auth-user',
-  'pro-waitlist',
   'theme',
   'firefed_onboarding_v1_dismissed',
   'firefed_onboarding_v1_prefs',

@@ -104,8 +104,8 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 3. **Database Schema**:
    - Open SQL Editor in Supabase dashboard
    - Run `supabase-schema.sql` to create tables and policies
-   - Run `supabase-waitlist-schema.sql` for waitlist functionality
    - Run `supabase-subscriptions-schema.sql` for Stripe subscription state (Pro entitlements)
+   - Run `supabase-stripe-events-schema.sql` for webhook idempotency
 
 4. **Authentication**:
    - Go to Authentication > Providers
@@ -152,7 +152,8 @@ fed-fire/
 ├── tailwind.config.js     # Tailwind CSS configuration
 ├── eslint.config.js       # ESLint configuration
 ├── supabase-schema.sql    # Database schema
-├── supabase-waitlist-schema.sql # Waitlist table schema
+├── supabase-subscriptions-schema.sql # Stripe subscription state
+├── supabase-stripe-events-schema.sql # Webhook idempotency ledger
 └── README.md              # Basic project info
 ```
 
@@ -618,17 +619,11 @@ Supabase offers built-in billing integration:
    - Handle cancellations
    - Prorate billing
 
-### Waitlist Management
+### Waitlist
 
-Current waitlist implementation:
-- Users can join waitlist via `ProFeatures.jsx`
-- Emails stored in `waitlist` table
-- Can be used for email marketing campaigns
-
-**Future Enhancements**:
-- Email notifications when Pro launches
-- Special discount codes for waitlist members
-- Early access invitations
+Removed. Pro is sold directly through Stripe checkout on `ProFeatures.jsx`, so
+there is no pre-launch signup list. The `waitlist` table and its schema file were
+dropped; export any addresses already collected before deleting the table.
 
 ### Revenue Tracking
 
@@ -918,16 +913,6 @@ CREATE TABLE scenarios (
   fire_goal JSONB,
   created_at TIMESTAMP,
   updated_at TIMESTAMP
-);
-```
-
-#### Waitlist Table
-```sql
-CREATE TABLE waitlist (
-  id UUID PRIMARY KEY,
-  email TEXT UNIQUE NOT NULL,
-  submitted_at TIMESTAMP,
-  created_at TIMESTAMP
 );
 ```
 

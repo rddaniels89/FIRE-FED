@@ -4,72 +4,22 @@ import { supabase, isSupabaseAvailable } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { trackEvent } from '../lib/telemetry';
 
+// Every status message is prefixed with one of these markers; the leading glyph
+// decides the banner tone so the copy and the styling cannot drift apart.
+const messageToneClasses = (message) => {
+  if (message.startsWith('❌')) return 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300';
+  if (message.startsWith('✅')) return 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300';
+  return 'bg-slate-100 dark:bg-slate-700/40 text-slate-800 dark:text-slate-200';
+};
+
 const PRO_MONTHLY_PRICE_ID = import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY || '';
 const PRO_ANNUAL_PRICE_ID = import.meta.env.VITE_STRIPE_PRICE_PRO_ANNUAL || '';
 
 const ProFeatures = () => {
   const { isAuthenticated, isProUser, subscription, subscriptionLoading, refreshSubscription } = useAuth();
   const location = useLocation();
-  const [email, setEmail] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBillingAction, setIsBillingAction] = useState(false);
   const [message, setMessage] = useState('');
-
-  const handleWaitlistSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!email.trim()) {
-      setMessage('Please enter a valid email address');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setMessage('');
-
-    try {
-      if (isSupabaseAvailable) {
-        const { error } = await supabase
-          .from('waitlist')
-          .insert([{ 
-            email: email.trim(),
-            submitted_at: new Date().toISOString()
-          }]);
-
-        if (error) {
-          // Check if email already exists
-          if (error.code === '23505') {
-            setMessage('✅ You\'re already on the waitlist! We\'ll notify you when Pro features launch.');
-            trackEvent('pro_waitlist_submit', { status: 'duplicate' });
-          } else {
-            throw error;
-          }
-        } else {
-          setMessage('🎉 Success! You\'ve been added to the Pro features waitlist.');
-          trackEvent('pro_waitlist_submit', { status: 'success' });
-          setEmail('');
-        }
-      } else {
-        // Fallback when Supabase not available
-        const existingWaitlist = JSON.parse(localStorage.getItem('pro-waitlist') || '[]');
-        
-        if (existingWaitlist.includes(email.trim())) {
-          setMessage('✅ You\'re already on the waitlist! We\'ll notify you when Pro features launch.');
-          trackEvent('pro_waitlist_submit', { status: 'duplicate', storage: 'local' });
-        } else {
-          existingWaitlist.push(email.trim());
-          localStorage.setItem('pro-waitlist', JSON.stringify(existingWaitlist));
-          setMessage('🎉 Success! You\'ve been added to the Pro features waitlist.');
-          trackEvent('pro_waitlist_submit', { status: 'success', storage: 'local' });
-          setEmail('');
-        }
-      }
-    } catch (error) {
-      console.error('Error adding to waitlist:', error);
-      setMessage('❌ Something went wrong. Please try again later.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const subscriptionStatus = (subscription?.status || '').toString().toLowerCase();
   const isSubscriptionActive = subscriptionStatus === 'active' || subscriptionStatus === 'trialing';
@@ -389,53 +339,15 @@ const ProFeatures = () => {
               </div>
             )}
 
-            {/* Optional waitlist (discounts / early access) */}
-            {!isProUser && (
-              <div className="mt-10 pt-8 border-t border-slate-200 dark:border-slate-700">
-                <div className="text-center mb-4">
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Get launch promos</h3>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Want a discount or beta access? Join the waitlist.
-                  </p>
-                </div>
-
-                <form onSubmit={handleWaitlistSubmit} className="max-w-md mx-auto space-y-4">
-                  <div>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Enter your email address"
-                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:text-white"
-                      required
-                      disabled={isSubmitting}
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium py-3 px-6 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSubmitting ? 'Adding…' : 'Join waitlist'}
-                  </button>
-                </form>
-              </div>
-            )}
-
             {message && (
-              <div className={`mt-4 p-3 rounded-lg text-sm ${
-                message.includes('Success') || message.includes('already') 
-                  ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300'
-                  : 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300'
-              }`}>
+              <div className={`mt-4 p-3 rounded-lg text-sm ${messageToneClasses(message)}`}>
                 {message}
               </div>
             )}
 
             {!isProUser && (
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-4 text-center">
-                We respect your privacy. Your email will only be used for Pro-related updates.
+                Payments are handled by Stripe. Cancel anytime from the billing portal.
               </p>
             )}
           </div>

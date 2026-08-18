@@ -2,10 +2,12 @@ import {
   ANNUAL_CATCH_UP_LIMIT,
   ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
   CATCH_UP_AGE,
+  ROTH_CATCH_UP_WAGE_THRESHOLD,
   SUPER_CATCH_UP_LIMIT,
   SUPER_CATCH_UP_MAX_AGE,
   SUPER_CATCH_UP_MIN_AGE,
   getCatchUpLimitForAge,
+  requiresRothCatchUp,
 } from './contributionLimits';
 
 export const DEFAULT_FUND_RETURNS = Object.freeze({
@@ -58,6 +60,8 @@ function calculateDualBucketTspProjection({
   superCatchUpLimit,
   superCatchUpMinAge,
   superCatchUpMaxAge,
+  applyMandatoryRothCatchUp,
+  priorYearWages,
   includeEmployerMatch,
   includeAutomatic1Percent,
   annualReturn,
@@ -77,6 +81,9 @@ function calculateDualBucketTspProjection({
   const superLimit = clampNumber(superCatchUpLimit, { min: 0, max: 1e9, fallback: SUPER_CATCH_UP_LIMIT });
   const superMinAge = clampNumber(superCatchUpMinAge, { min: 0, max: 200, fallback: SUPER_CATCH_UP_MIN_AGE });
   const superMaxAge = clampNumber(superCatchUpMaxAge, { min: 0, max: 200, fallback: SUPER_CATCH_UP_MAX_AGE });
+
+  const applyRothCatchUpRule = applyMandatoryRothCatchUp !== false;
+  const wages0 = clampNumber(priorYearWages, { min: 0, max: 1e9, fallback: salary0 });
 
   const catchUpAtAge = (age) =>
     getCatchUpLimitForAge({
@@ -125,6 +132,13 @@ function calculateDualBucketTspProjection({
     const monthlySalary = salary / 12;
     const annualLimit = baseLimit + catchUpAtAge(age);
 
+    // SECURE 2.0 section 603 keys off the PRIOR year's wages. For the first
+    // projected year we have no modelled history, so fall back to the caller's
+    // figure and finally to the starting salary as a proxy.
+    const priorWages = y > 0 ? salary0 * Math.pow(1 + salaryGrowth, y - 1) : wages0;
+    const catchUpMustBeRoth =
+      applyRothCatchUpRule && requiresRothCatchUp({ priorYearWages: priorWages });
+
     let employeeGrossThisYear = 0;
     let employerThisYear = 0;
 
@@ -144,10 +158,21 @@ function calculateDualBucketTspProjection({
         employerGross = monthlySalary * ((automaticPct + matchedPct) / 100);
       }
 
+      // Contributions fill the 402(g) limit first; anything above it is catch-up.
+      const baseRemaining = Math.max(0, baseLimit - employeeGrossThisYear);
+      const basePortion = Math.min(employeeGross, baseRemaining);
+      const catchUpPortion = employeeGross - basePortion;
+
       if (employeeContributionType === 'traditional') {
-        trad += employeeGross;
+        trad += basePortion;
+        // Roth employee deferrals are made with after-tax dollars (simplified:
+        // same gross percent, reduced by current marginal tax rate).
+        if (catchUpMustBeRoth) {
+          roth += catchUpPortion * (1 - taxNow);
+        } else {
+          trad += catchUpPortion;
+        }
       } else {
-        // Roth employee deferrals are made with after-tax dollars (simplified: same gross percent, reduced by current marginal tax rate)
         roth += employeeGross * (1 - taxNow);
       }
 
@@ -224,6 +249,8 @@ export function calculateTspTraditionalVsRoth({
   superCatchUpLimit = SUPER_CATCH_UP_LIMIT,
   superCatchUpMinAge = SUPER_CATCH_UP_MIN_AGE,
   superCatchUpMaxAge = SUPER_CATCH_UP_MAX_AGE,
+  applyMandatoryRothCatchUp = true,
+  priorYearWages = undefined,
 }) {
   const years = Number(retirementAge ?? 0) - Number(currentAge ?? 0);
 
@@ -241,6 +268,8 @@ export function calculateTspTraditionalVsRoth({
     superCatchUpLimit,
     superCatchUpMinAge,
     superCatchUpMaxAge,
+    applyMandatoryRothCatchUp,
+    priorYearWages,
     includeEmployerMatch,
     includeAutomatic1Percent,
     annualReturn: weightedReturn,
@@ -264,6 +293,8 @@ export function calculateTspTraditionalVsRoth({
     superCatchUpLimit,
     superCatchUpMinAge,
     superCatchUpMaxAge,
+    applyMandatoryRothCatchUp,
+    priorYearWages,
     includeEmployerMatch,
     includeAutomatic1Percent,
     annualReturn: weightedReturn,
@@ -278,16 +309,21 @@ export function calculateTspTraditionalVsRoth({
   const salary0 = clampNumber(annualSalary, { min: 0, max: 1e9, fallback: 0 });
   const desiredAnnualEmployee = (salary0 * clampNumber(monthlyContributionPercent, { min: 0, max: 100, fallback: 0 })) / 100;
   const age0 = clampNumber(currentAge, { min: 0, max: 200, fallback: 0 });
-  const limit0 =
-    clampNumber(annualEmployeeDeferralLimit, { min: 0, max: 1e9, fallback: 0 }) +
-    getCatchUpLimitForAge({
-      age: age0,
-      catchUpAge,
-      catchUpLimit: clampNumber(annualCatchUpLimit, { min: 0, max: 1e9, fallback: 0 }),
-      superCatchUpLimit,
-      superCatchUpMinAge,
-      superCatchUpMaxAge,
-    });
+  const catchUp0 = getCatchUpLimitForAge({
+    age: age0,
+    catchUpAge,
+    catchUpLimit: clampNumber(annualCatchUpLimit, { min: 0, max: 1e9, fallback: 0 }),
+    superCatchUpLimit,
+    superCatchUpMinAge,
+    superCatchUpMaxAge,
+  });
+  const limit0 = clampNumber(annualEmployeeDeferralLimit, { min: 0, max: 1e9, fallback: 0 }) + catchUp0;
+
+  // Only meaningful when a catch-up is actually available at this age.
+  const rothCatchUpRequired0 =
+    applyMandatoryRothCatchUp !== false &&
+    catchUp0 > 0 &&
+    requiresRothCatchUp({ priorYearWages: priorYearWages ?? salary0 });
   const effectiveAnnualEmployee = Math.min(desiredAnnualEmployee, limit0);
 
   return {
@@ -334,6 +370,10 @@ export function calculateTspTraditionalVsRoth({
       effectiveAnnualEmployeeContribution: effectiveAnnualEmployee,
       annualEmployeeDeferralLimit: limit0,
       isOverLimit: desiredAnnualEmployee > limit0,
+      catchUpAvailable: catchUp0,
+      // SECURE 2.0 section 603 status for the first projected year.
+      rothCatchUpRequired: rothCatchUpRequired0,
+      rothCatchUpWageThreshold: ROTH_CATCH_UP_WAGE_THRESHOLD,
     },
   };
 }

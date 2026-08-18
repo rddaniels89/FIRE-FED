@@ -56,6 +56,24 @@ test.describe('Smoke: core flows', () => {
     }
   });
 
+  test('Roth catch-up notice tracks the SECURE 2.0 wage threshold', async ({ page }) => {
+    const guestOk = await tryContinueAsGuest(page);
+    test.skip(!guestOk, 'Guest-mode is unavailable; skipping calculator UI checks.');
+    await page.goto('/tsp-forecast');
+
+    await page.getByRole('textbox', { name: 'Current Age' }).fill('55');
+    await page.getByRole('textbox', { name: 'Target Retirement Age' }).fill('62');
+    await page.getByRole('textbox', { name: 'Monthly Contribution %' }).fill('30');
+
+    const notice = page.getByText('Your catch-up contributions must be Roth.');
+
+    await page.getByRole('textbox', { name: 'Annual Salary' }).fill('200000');
+    await expect(notice).toBeVisible();
+
+    await page.getByRole('textbox', { name: 'Annual Salary' }).fill('90000');
+    await expect(notice).toHaveCount(0);
+  });
+
   test('Unknown URLs render a 404 instead of a blank page', async ({ page }) => {
     const guestOk = await tryContinueAsGuest(page);
     test.skip(!guestOk, 'Guest-mode is unavailable; skipping in-app routing checks.');

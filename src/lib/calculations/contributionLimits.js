@@ -47,3 +47,27 @@ export function getCatchUpLimitForAge({
   const limit = inSuperBand ? Number(superCatchUpLimit) : Number(catchUpLimit);
   return Number.isFinite(limit) && limit > 0 ? limit : 0;
 }
+
+/**
+ * SECURE 2.0 section 603: from 2026, catch-up contributions must be Roth for
+ * participants whose PRIOR-year FICA wages with the same employer exceeded this
+ * threshold. The threshold started at $145,000 for 2023 wages and is indexed.
+ *
+ * https://www.tsp.gov/bulletins/23-5/
+ */
+export const ROTH_CATCH_UP_WAGE_THRESHOLD = 150000;
+
+/**
+ * Whether catch-up contributions must be made as Roth in a given year.
+ * `priorYearWages` is the participant's wages in the year BEFORE the
+ * contribution year, not their current salary.
+ */
+export function requiresRothCatchUp({
+  priorYearWages,
+  threshold = ROTH_CATCH_UP_WAGE_THRESHOLD,
+} = {}) {
+  const wages = Number(priorYearWages);
+  const limit = Number(threshold);
+  if (!Number.isFinite(wages) || !Number.isFinite(limit)) return false;
+  return wages > limit;
+}

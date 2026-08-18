@@ -44,7 +44,6 @@ Then run the remaining schema files the same way:
 | --- | --- | --- |
 | `supabase-subscriptions-schema.sql` | `subscriptions` | Pro entitlements (written by the Stripe webhook) |
 | `supabase-stripe-events-schema.sql` | `stripe_events` | Dropping duplicate Stripe webhook deliveries |
-| `supabase-waitlist-schema.sql` | `waitlist` | Pro waitlist signups |
 
 `subscriptions` and `stripe_events` are written only by the server-side webhook
 using the service role key, so neither has an INSERT/UPDATE policy. Never expose
