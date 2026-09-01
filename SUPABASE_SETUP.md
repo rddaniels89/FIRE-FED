@@ -70,6 +70,12 @@ Run `supabase-scenarios-columns-migration.sql` against any existing project. It
 is idempotent and additive, so it is safe on a database already in the right
 shape.
 
+The same risk applies to `subscriptions`, with money attached: if the Stripe
+webhook writes a column that table lacks, the charge succeeds and the customer
+never receives Pro. Run `supabase-subscriptions-columns-migration.sql` as well —
+it also adds the `UNIQUE (user_id)` constraint the webhook's upsert requires,
+without which every event fails with `42P10`.
+
 Two habits that keep this from recurring:
 
 - **Whenever you add a field to a scenario, add the column to every project**,

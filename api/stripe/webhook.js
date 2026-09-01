@@ -49,9 +49,17 @@ async function resolveUserId({ supabaseAdmin, stripeCustomerId, stripeSubscripti
   return null;
 }
 
-async function upsertSubscriptionRow(supabaseAdmin, row) {
+export async function upsertSubscriptionRow(supabaseAdmin, row) {
   // Service role bypasses RLS; do not expose this key to the client.
-  await supabaseAdmin.from('subscriptions').upsert(row, { onConflict: 'user_id' });
+  const { error } = await supabaseAdmin
+    .from('subscriptions')
+    .upsert(row, { onConflict: 'user_id' });
+
+  // supabase-js resolves rather than rejects on a database error, so an
+  // unchecked call here loses the write silently: Stripe gets a 200, the event
+  // is recorded as processed, and a customer who paid never receives Pro.
+  // Throwing releases the event claim and returns 5xx, so Stripe retries.
+  if (error) throw error;
 }
 
 /**
@@ -60,7 +68,19 @@ async function upsertSubscriptionRow(supabaseAdmin, row) {
  * order cannot leave a stale status behind.
  */
 async function syncSubscriptionFromStripe({ supabaseAdmin, sub, userId, fallbackCustomerId = null }) {
-  if (!userId || !sub) return;
+  if (!sub) return;
+
+  // An unresolvable user means a live Stripe subscription with no row to grant
+  // Pro from. Logged rather than thrown: retrying cannot invent the mapping,
+  // and a permanently failing endpoint is one Stripe eventually disables.
+  if (!userId) {
+    console.error('Stripe subscription could not be mapped to a user', {
+      stripe_subscription_id: sub.id,
+      stripe_customer_id: typeof sub.customer === 'string' ? sub.customer : fallbackCustomerId,
+      status: sub.status,
+    });
+    return;
+  }
 
   await upsertSubscriptionRow(supabaseAdmin, {
     user_id: userId,
