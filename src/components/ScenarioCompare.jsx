@@ -207,6 +207,8 @@ function ScenarioCompare() {
         privateJobSalary: fers.privateJobSalary ?? 0,
         privateJobYears: fers.privateJobYears ?? 0,
         includeFutureService: true,
+        unusedSickLeaveHours: fers.unusedSickLeaveHours ?? 0,
+        survivorElection: fers.survivorElection,
       });
 
       const plannedRetAge = tsp.retirementAge ?? fers.retirementAge ?? 0;

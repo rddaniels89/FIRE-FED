@@ -14,7 +14,8 @@ import {
 } from 'chart.js';
 import { useScenario } from '../contexts/ScenarioContext';
 import ScenarioManager from './ScenarioManager';
-import { calculateFersResults } from '../lib/calculations/fers';
+import { SURVIVOR_ELECTIONS, calculateFersResults } from '../lib/calculations/fers';
+import { calculateSrs } from '../lib/calculations/srs';
 import TooltipWrapper from './TooltipWrapper';
 import NumberStepper from './NumberStepper';
 
@@ -42,7 +43,10 @@ function FERSPensionCalc() {
     retirementAge: '62',
     showComparison: false,
     privateJobSalary: '95000',
-    privateJobYears: '20'
+    privateJobYears: '20',
+    unusedSickLeaveHours: '0',
+    survivorElection: SURVIVOR_ELECTIONS.NONE,
+    socialSecurityAt62Monthly: '0'
   });
 
   // Utility function to parse numeric inputs only when needed
@@ -54,7 +58,11 @@ function FERSPensionCalc() {
     retirementAge: inputs.retirementAge === '' ? 0 : parseFloat(inputs.retirementAge) || 0,
     showComparison: inputs.showComparison,
     privateJobSalary: inputs.privateJobSalary === '' ? 0 : parseFloat(inputs.privateJobSalary) || 0,
-    privateJobYears: inputs.privateJobYears === '' ? 0 : parseFloat(inputs.privateJobYears) || 0
+    privateJobYears: inputs.privateJobYears === '' ? 0 : parseFloat(inputs.privateJobYears) || 0,
+    unusedSickLeaveHours: inputs.unusedSickLeaveHours === '' ? 0 : parseFloat(inputs.unusedSickLeaveHours) || 0,
+    survivorElection: inputs.survivorElection,
+    socialSecurityAt62Monthly:
+      inputs.socialSecurityAt62Monthly === '' ? 0 : parseFloat(inputs.socialSecurityAt62Monthly) || 0
   });
 
   // Results state
@@ -74,6 +82,30 @@ function FERSPensionCalc() {
       lifetimeDeferred: 0,
       totalLifetimeEarnings: 0,
       breakEvenAge: 0
+    },
+    service: { eligibilityYears: 0, sickLeaveYears: 0, computationYears: 0, unusedSickLeaveHours: 0 },
+    survivor: {
+      election: SURVIVOR_ELECTIONS.NONE,
+      reductionPercent: 0,
+      survivorPercent: 0,
+      annualReduction: 0,
+      monthlyReduction: 0,
+      annualPensionAfterReduction: 0,
+      survivorAnnualBenefit: 0,
+      survivorMonthlyBenefit: 0
+    },
+    srs: {
+      isEligible: false,
+      isPayableNow: false,
+      payableFromAge: null,
+      reason: null,
+      monthlyBeforeEarningsTest: 0,
+      monthlyAfterEarningsTest: 0,
+      annualBeforeEarningsTest: 0,
+      annualAfterEarningsTest: 0,
+      earningsTest: null,
+      yearsPayable: 0,
+      lifetimeTotal: 0
     }
   });
 
@@ -95,7 +127,10 @@ function FERSPensionCalc() {
         retirementAge: String(fers.retirementAge || 62),
         showComparison: fers.showComparison || false,
         privateJobSalary: String(fers.privateJobSalary || 95000),
-        privateJobYears: String(fers.privateJobYears || 20)
+        privateJobYears: String(fers.privateJobYears || 20),
+        unusedSickLeaveHours: String(fers.unusedSickLeaveHours ?? 0),
+        survivorElection: fers.survivorElection || SURVIVOR_ELECTIONS.NONE,
+        socialSecurityAt62Monthly: String(fers.socialSecurityAt62Monthly ?? 0)
       };
       
       // Only update if different to prevent unnecessary re-renders
@@ -208,11 +243,24 @@ function FERSPensionCalc() {
       privateJobSalary: numericInputs.privateJobSalary,
       privateJobYears: numericInputs.privateJobYears,
       includeFutureService: true,
+      unusedSickLeaveHours: numericInputs.unusedSickLeaveHours,
+      survivorElection: numericInputs.survivorElection,
+    });
+
+    // The supplement is a separate benefit, not part of the annuity: it stops at
+    // 62, is not reduced by the survivor election, and ignores sick leave.
+    const srs = calculateSrs({
+      retirementAge: numericInputs.retirementAge,
+      creditableYearsOfService: fers.service.eligibilityYears,
+      socialSecurityAt62Monthly: numericInputs.socialSecurityAt62Monthly,
     });
 
     setResults({
       stayFed: fers.stayFed,
-      leaveEarly: fers.leaveEarly
+      leaveEarly: fers.leaveEarly,
+      service: fers.service,
+      survivor: fers.survivor,
+      srs,
     });
   }, [inputs, validateInputs]);
 
@@ -542,6 +590,87 @@ function FERSPensionCalc() {
           </div>
 
           <div className="card p-6">
+            <h3 className="text-xl font-semibold navy-text mb-4">Credits &amp; Elections</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
+              Three federal rules that change the result materially. Leave them at zero and none are applied.
+            </p>
+
+            <div className="space-y-5">
+              <TooltipWrapper text="Unused sick leave adds to the service used to compute your annuity. It cannot make you eligible to retire and does not raise your high-3.">
+                <div>
+                  <label className="label" htmlFor="unusedSickLeaveHours">Unused Sick Leave (hours)</label>
+                  <div className="flex items-stretch gap-2">
+                    <input
+                      id="unusedSickLeaveHours"
+                      type="text"
+                      value={getDisplayValue('unusedSickLeaveHours')}
+                      onChange={(e) => handleInputChange('unusedSickLeaveHours', e.target.value)}
+                      className="input-field w-full"
+                      placeholder="0"
+                      inputMode="numeric"
+                    />
+                    <NumberStepper
+                      incrementLabel="Increase unused sick leave hours"
+                      decrementLabel="Decrease unused sick leave hours"
+                      onIncrement={() => stepField('unusedSickLeaveHours', { step: 100, min: 0, integer: true })(+1)}
+                      onDecrement={() => stepField('unusedSickLeaveHours', { step: 100, min: 0, integer: true })(-1)}
+                      disabledDecrement={numericInputs.unusedSickLeaveHours <= 0}
+                    />
+                  </div>
+                  {results.service.sickLeaveYears > 0 && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      Adds {results.service.sickLeaveYears.toFixed(2)} years of service credit at 2,087 hours per year.
+                    </p>
+                  )}
+                </div>
+              </TooltipWrapper>
+
+              <TooltipWrapper text="A survivor annuity reduces your own annuity for life and pays your survivor a percentage after your death. Electing none requires spousal consent if you are married, and ends your spouse's ability to keep FEHB.">
+                <div>
+                  <label className="label" htmlFor="survivorElection">Survivor Annuity Election</label>
+                  <select
+                    id="survivorElection"
+                    value={inputs.survivorElection}
+                    onChange={(e) => handleInputChange('survivorElection', e.target.value)}
+                    className="input-field w-full"
+                  >
+                    <option value={SURVIVOR_ELECTIONS.NONE}>None &mdash; no reduction, no survivor benefit</option>
+                    <option value={SURVIVOR_ELECTIONS.PARTIAL}>Partial &mdash; 5% cost, survivor receives 25%</option>
+                    <option value={SURVIVOR_ELECTIONS.FULL}>Full &mdash; 10% cost, survivor receives 50%</option>
+                  </select>
+                </div>
+              </TooltipWrapper>
+
+              <TooltipWrapper text="Your estimated Social Security benefit at age 62, from your Social Security statement. Used only to estimate the Special Retirement Supplement.">
+                <div>
+                  <label className="label" htmlFor="socialSecurityAt62Monthly">Estimated Social Security at 62 (monthly)</label>
+                  <div className="flex items-stretch gap-2">
+                    <input
+                      id="socialSecurityAt62Monthly"
+                      type="text"
+                      value={getDisplayValue('socialSecurityAt62Monthly')}
+                      onChange={(e) => handleInputChange('socialSecurityAt62Monthly', e.target.value)}
+                      className="input-field w-full"
+                      placeholder="0"
+                      inputMode="decimal"
+                    />
+                    <NumberStepper
+                      incrementLabel="Increase estimated Social Security at 62"
+                      decrementLabel="Decrease estimated Social Security at 62"
+                      onIncrement={() => stepField('socialSecurityAt62Monthly', { step: 50, min: 0, integer: true })(+1)}
+                      onDecrement={() => stepField('socialSecurityAt62Monthly', { step: 50, min: 0, integer: true })(-1)}
+                      disabledDecrement={numericInputs.socialSecurityAt62Monthly <= 0}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    From ssa.gov. Needed to estimate the Special Retirement Supplement.
+                  </p>
+                </div>
+              </TooltipWrapper>
+            </div>
+          </div>
+
+          <div className="card p-6">
             <h3 className="text-xl font-semibold navy-text mb-4">Comparison Analysis</h3>
             <div className="flex items-center space-x-3 mb-6">
               <input
@@ -669,6 +798,104 @@ function FERSPensionCalc() {
                 <div className={`text-sm font-medium ${results.stayFed.isEligible ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                   {results.stayFed.eligibilityMessage}
                 </div>
+              </div>
+
+              {results.service.sickLeaveYears > 0 && (
+                <div className="mt-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="font-medium text-slate-900 dark:text-white text-sm mb-2">Unused sick leave credit</div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <div className="text-slate-500 dark:text-slate-400">Service for eligibility</div>
+                      <div className="font-medium text-slate-900 dark:text-white">{results.service.eligibilityYears.toFixed(2)} years</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 dark:text-slate-400">Service for computation</div>
+                      <div className="font-medium text-slate-900 dark:text-white">{results.service.computationYears.toFixed(2)} years</div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                    Sick leave raises the annuity only. It cannot make you eligible to retire, and it does not count
+                    toward the Special Retirement Supplement.
+                  </p>
+                </div>
+              )}
+
+              {results.survivor.reductionPercent > 0 && (
+                <div className="mt-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="font-medium text-slate-900 dark:text-white text-sm mb-2">
+                    Survivor election &mdash; {results.survivor.survivorPercent}% benefit
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <div className="text-slate-500 dark:text-slate-400">Annuity before reduction</div>
+                      <div className="font-medium text-slate-900 dark:text-white">
+                        ${Math.round(results.stayFed.annualPensionBeforeSurvivorReduction).toLocaleString()}/yr
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 dark:text-slate-400">Cost of the election</div>
+                      <div className="font-medium text-amber-700 dark:text-amber-400">
+                        &minus;${Math.round(results.survivor.annualReduction).toLocaleString()}/yr
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 dark:text-slate-400">Your annuity</div>
+                      <div className="font-medium text-slate-900 dark:text-white">
+                        ${Math.round(results.stayFed.annualPension).toLocaleString()}/yr
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 dark:text-slate-400">Survivor receives</div>
+                      <div className="font-medium text-slate-900 dark:text-white">
+                        ${Math.round(results.survivor.survivorAnnualBenefit).toLocaleString()}/yr
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                    The survivor benefit is a share of the annuity before the reduction. Electing a survivor annuity
+                    is also what lets a spouse keep FEHB after your death.
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="font-medium text-slate-900 dark:text-white text-sm mb-2">Special Retirement Supplement</div>
+                {results.srs.isEligible ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <div className="text-slate-500 dark:text-slate-400">Monthly supplement</div>
+                        <div className="font-medium text-green-700 dark:text-green-400">
+                          ${Math.round(results.srs.monthlyBeforeEarningsTest).toLocaleString()}/mo
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500 dark:text-slate-400">Paid until 62</div>
+                        <div className="font-medium text-slate-900 dark:text-white">
+                          {results.srs.yearsPayable} years
+                          {!results.srs.isPayableNow && results.srs.payableFromAge
+                            ? ` (from age ${results.srs.payableFromAge})`
+                            : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                      Approximately ${Math.round(results.srs.lifetimeTotal).toLocaleString()} in total. It stops the
+                      month you turn 62 whether or not you claim Social Security, and it is reduced if you earn above
+                      the Social Security annual limit.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    {results.srs.reason === 'age_62_or_over'
+                      ? 'Not payable: the supplement bridges the gap to age 62, and this retirement age is already 62 or later.'
+                      : results.srs.reason === 'deferred_or_postponed'
+                      ? 'Not payable on a deferred or postponed retirement.'
+                      : 'Not payable: the supplement requires an immediate, unreduced annuity — MRA with 30 years, or age 60 with 20. MRA+10 is a reduced annuity and does not qualify.'}
+                    {numericInputs.socialSecurityAt62Monthly <= 0 &&
+                      ' Enter your estimated Social Security at 62 above to model it when you are eligible.'}
+                  </p>
+                )}
               </div>
             </div>
           ) : (

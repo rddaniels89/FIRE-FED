@@ -127,6 +127,8 @@ function SummaryDashboard() {
           privateJobSalary: fersScenario.privateJobSalary ?? 0,
           privateJobYears: fersScenario.privateJobYears ?? 0,
           includeFutureService: true,
+          unusedSickLeaveHours: fersScenario.unusedSickLeaveHours ?? 0,
+          survivorElection: fersScenario.survivorElection,
         });
 
         setPensionData({
@@ -358,6 +360,8 @@ function SummaryDashboard() {
         includeFutureService: true,
         retirementEndAge: pensionEndAgeLocal,
         mra: DEFAULT_MRA,
+        unusedSickLeaveHours: currentScenario?.fers?.unusedSickLeaveHours ?? 0,
+        survivorElection: currentScenario?.fers?.survivorElection,
       });
 
       const ssLocal = currentScenario?.summary?.socialSecurity ?? {};
