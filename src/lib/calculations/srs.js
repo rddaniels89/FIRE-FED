@@ -13,6 +13,8 @@
  */
 
 import { DEFAULT_MRA } from './fers';
+import { CURRENT_PARAMETER_YEAR, getAnnualParameters } from './annualParameters';
+import { calculateEarningsTestWithholding } from './ssaEarningsTest';
 
 /** The supplement stops the month the retiree turns 62, claimed or not. */
 export const SRS_END_AGE = 62;
@@ -21,18 +23,15 @@ export const SRS_END_AGE = 62;
 export const SRS_SERVICE_DIVISOR = 40;
 
 /**
- * SSA annual earnings test exempt amount for beneficiaries under full
- * retirement age. Statutory and indexed annually.
- *
- * VERIFY EACH JANUARY against https://www.ssa.gov/oact/cola/rtea.html and bump
- * SRS_EARNINGS_TEST_YEAR with it. A stale figure understates or overstates the
- * withholding rather than failing loudly.
+ * The supplement is subject to the same earnings test as Social Security, and
+ * always the under-FRA case: it ends at 62 and full retirement age is 67, so a
+ * supplement recipient can never be in their FRA year. The higher FRA-year
+ * exempt amount and its $1-per-$3 ratio exist in ssaEarningsTest.js for
+ * modelling Social Security itself, and are deliberately unreachable from here.
  */
-export const SRS_EARNINGS_TEST_YEAR = 2026;
-export const SRS_EARNINGS_TEST_EXEMPT_AMOUNT = 24360;
-
-/** $1 of supplement withheld for every $2 of earnings above the exempt amount. */
-export const SRS_EARNINGS_TEST_WITHHOLDING_DIVISOR = 2;
+export function getSrsEarningsTestExemptAmount(year = CURRENT_PARAMETER_YEAR) {
+  return getAnnualParameters(year).ssaEarningsTest.underFraExemptAmount;
+}
 
 export const SRS_INELIGIBILITY_REASONS = Object.freeze({
   AGE_62_OR_OVER: 'age_62_or_over',
@@ -130,22 +129,29 @@ export function calculateSrsMonthly({ socialSecurityAt62Monthly, civilianYearsOf
 export function applySrsEarningsTest({
   srsAnnual,
   annualEarnedIncome,
-  exemptAmount = SRS_EARNINGS_TEST_EXEMPT_AMOUNT,
+  exemptAmount,
+  year = CURRENT_PARAMETER_YEAR,
 } = {}) {
   const gross = Math.max(0, toNumber(srsAnnual));
-  const earnings = Math.max(0, toNumber(annualEarnedIncome));
-  const exempt = Math.max(0, toNumber(exemptAmount, SRS_EARNINGS_TEST_EXEMPT_AMOUNT));
 
-  const excessEarnings = Math.max(0, earnings - exempt);
-  const withheld = Math.min(gross, excessEarnings / SRS_EARNINGS_TEST_WITHHOLDING_DIVISOR);
+  const result = calculateEarningsTestWithholding({
+    benefitAnnual: gross,
+    earnedIncome: annualEarnedIncome,
+    reachesFraThisYear: false,
+    year,
+    exemptAmount,
+  });
 
   return {
     srsAnnualBeforeTest: gross,
-    excessEarnings,
-    withheld,
-    srsAnnualAfterTest: gross - withheld,
-    exemptAmount: exempt,
-    isFullyOffset: gross > 0 && withheld >= gross,
+    excessEarnings: result.excessEarnings,
+    withheld: result.withheld,
+    srsAnnualAfterTest: result.benefitAfterTest,
+    exemptAmount: result.exemptAmount,
+    withholdingDivisor: result.withholdingDivisor,
+    isFullyOffset: result.isFullyOffset,
+    parameterYear: result.parameterYear,
+    usesExactYearParameters: result.usesExactYearParameters,
   };
 }
 
@@ -161,7 +167,8 @@ export function calculateSrs({
   isVoluntaryEarlyRetirement = false,
   isDeferredOrPostponed = false,
   annualEarnedIncome = 0,
-  exemptAmount = SRS_EARNINGS_TEST_EXEMPT_AMOUNT,
+  exemptAmount,
+  year = CURRENT_PARAMETER_YEAR,
 } = {}) {
   const eligibility = evaluateSrsEligibility({
     retirementAge,
@@ -194,6 +201,7 @@ export function calculateSrs({
     srsAnnual: annual,
     annualEarnedIncome,
     exemptAmount,
+    year,
   });
 
   const startAge = eligibility.payableFromAge ?? toNumber(retirementAge);

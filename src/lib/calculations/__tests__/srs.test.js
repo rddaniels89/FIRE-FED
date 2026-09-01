@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SRS_EARNINGS_TEST_EXEMPT_AMOUNT,
   SRS_INELIGIBILITY_REASONS,
   applySrsEarningsTest,
   calculateSrs,
   calculateSrsMonthly,
   evaluateSrsEligibility,
+  getSrsEarningsTestExemptAmount,
 } from '../srs';
+
+const EXEMPT = getSrsEarningsTestExemptAmount();
+
+// Verified against https://www.ssa.gov/oact/cola/rtea.html for 2026.
+const SSA_2026_UNDER_FRA = 24480;
 
 describe('SRS eligibility', () => {
   it('qualifies MRA+30', () => {
@@ -89,7 +94,7 @@ describe('SRS earnings test', () => {
   it('withholds nothing at or below the exempt amount', () => {
     const res = applySrsEarningsTest({
       srsAnnual: 18000,
-      annualEarnedIncome: SRS_EARNINGS_TEST_EXEMPT_AMOUNT,
+      annualEarnedIncome: EXEMPT,
     });
     expect(res.withheld).toBe(0);
     expect(res.srsAnnualAfterTest).toBe(18000);
@@ -98,8 +103,8 @@ describe('SRS earnings test', () => {
   it('withholds $1 for every $2 above the exempt amount', () => {
     const res = applySrsEarningsTest({
       srsAnnual: 18000,
-      annualEarnedIncome: SRS_EARNINGS_TEST_EXEMPT_AMOUNT + 10000,
-      exemptAmount: SRS_EARNINGS_TEST_EXEMPT_AMOUNT,
+      annualEarnedIncome: EXEMPT + 10000,
+      exemptAmount: EXEMPT,
     });
     expect(res.withheld).toBeCloseTo(5000, 6);
     expect(res.srsAnnualAfterTest).toBeCloseTo(13000, 6);
@@ -108,7 +113,7 @@ describe('SRS earnings test', () => {
   it('cannot withhold more than the supplement itself', () => {
     const res = applySrsEarningsTest({
       srsAnnual: 12000,
-      annualEarnedIncome: SRS_EARNINGS_TEST_EXEMPT_AMOUNT + 100000,
+      annualEarnedIncome: EXEMPT + 100000,
     });
     expect(res.withheld).toBe(12000);
     expect(res.srsAnnualAfterTest).toBe(0);
@@ -163,9 +168,32 @@ describe('calculateSrs', () => {
       creditableYearsOfService: 30,
       socialSecurityAt62Monthly: 2000,
       mra: 57,
-      annualEarnedIncome: SRS_EARNINGS_TEST_EXEMPT_AMOUNT + 20000,
+      annualEarnedIncome: EXEMPT + 20000,
     });
     expect(res.annualBeforeEarningsTest).toBeCloseTo(18000, 6);
     expect(res.annualAfterEarningsTest).toBeCloseTo(8000, 6);
+  });
+});
+
+describe('SRS earnings-test parameters', () => {
+  // The supplement ends at 62 and full retirement age is 67, so a recipient can
+  // never be in their FRA year. Only the under-FRA figure is reachable here.
+  it('uses the under-FRA exempt amount for 2026', () => {
+    expect(getSrsEarningsTestExemptAmount(2026)).toBe(SSA_2026_UNDER_FRA);
+  });
+
+  it('always withholds at $1 per $2, never the FRA-year ratio', () => {
+    const res = applySrsEarningsTest({
+      srsAnnual: 18000,
+      annualEarnedIncome: SSA_2026_UNDER_FRA + 10000,
+      year: 2026,
+    });
+    expect(res.withholdingDivisor).toBe(2);
+    expect(res.withheld).toBeCloseTo(5000, 6);
+  });
+
+  it('reports when a projection used carried-forward parameters', () => {
+    const res = applySrsEarningsTest({ srsAnnual: 18000, annualEarnedIncome: 40000, year: 2031 });
+    expect(res.usesExactYearParameters).toBe(false);
   });
 });
