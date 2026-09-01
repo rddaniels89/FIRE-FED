@@ -5,6 +5,7 @@ import { ScenarioProvider } from './contexts/ScenarioContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Footer from './components/Footer';
 import AppErrorBoundary from './components/AppErrorBoundary';
+import CloudSyncBanner from './components/CloudSyncBanner';
 
 const HomePage = lazy(() => import('./components/HomePage'));
 const TSPForecast = lazy(() => import('./components/TSPForecast'));
@@ -182,6 +183,7 @@ function AuthenticatedApp() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-200">
       <Navigation />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <CloudSyncBanner />
         <Suspense fallback={<RouteLoading />}>
           <Routes>
             <Route path="/" element={<HomePage />} />

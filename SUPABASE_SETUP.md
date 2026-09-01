@@ -44,10 +44,54 @@ Then run the remaining schema files the same way:
 | --- | --- | --- |
 | `supabase-subscriptions-schema.sql` | `subscriptions` | Pro entitlements (written by the Stripe webhook) |
 | `supabase-stripe-events-schema.sql` | `stripe_events` | Dropping duplicate Stripe webhook deliveries |
+| `supabase-snapshots-schema.sql` | `scenario_snapshots` | Daily plan history (one row per scenario per UTC day) |
 
 `subscriptions` and `stripe_events` are written only by the server-side webhook
 using the service role key, so neither has an INSERT/UPDATE policy. Never expose
 `SUPABASE_SERVICE_ROLE_KEY` to the client.
+
+### 3b. Keeping an existing project in sync
+
+Schema files above create tables from scratch. A project created before a column
+was added keeps working until the app sends that column, at which point
+PostgREST rejects the entire write:
+
+```
+PGRST204: Could not find the 'summary_data' column of 'scenarios' in the schema cache
+```
+
+**This fails silently in the UI.** Scenario writes fall back to on-device
+storage, so the app looks healthy while nothing reaches the database. Exactly
+this went unnoticed in production for roughly eight months — `scenarios` stopped
+accepting writes in December and no one saw it until the row count was checked
+directly.
+
+Run `supabase-scenarios-columns-migration.sql` against any existing project. It
+is idempotent and additive, so it is safe on a database already in the right
+shape.
+
+Two habits that keep this from recurring:
+
+- **Whenever you add a field to a scenario, add the column to every project**,
+  not just the newest one. Check with:
+
+  ```sql
+  select column_name, data_type from information_schema.columns
+  where table_name = 'scenarios' order by ordinal_position;
+  ```
+
+- **Confirm writes are actually landing** after any schema change, rather than
+  trusting the UI:
+
+  ```sql
+  select count(*), max(updated_at) from scenarios;
+  ```
+
+  A `max(updated_at)` that stopped moving is the signature of this failure.
+
+Since the app now surfaces rejected writes with an in-app banner (see
+`src/components/CloudSyncBanner.jsx`), a future drift should announce itself —
+but the queries above remain the fastest way to confirm.
 
 ### 4. Configure Authentication
 
@@ -110,9 +154,15 @@ Each scenario in Supabase contains:
 - Check the browser console for error messages
 
 **Scenarios not saving?**
-- Verify the database schema was created correctly
+- Look for the in-app banner: a rejected write now names the reason
+- `PGRST204` in the console means the database is missing a column — run
+  `supabase-scenarios-columns-migration.sql` (see "Keeping an existing project
+  in sync" above)
+- Confirm writes are landing with `select count(*), max(updated_at) from scenarios;`
+  rather than trusting the UI
 - Check the RLS policies are enabled
-- Look for errors in the browser console
+- Confirm the app and your SQL Editor are pointed at the *same* Supabase
+  project — `VITE_SUPABASE_URL` must match the project ref in the dashboard URL
 
 **Guest mode issues?**
 - The app will automatically fall back to localStorage

@@ -98,6 +98,9 @@ export const ScenarioProvider = ({ children }) => {
   const [currentScenario, setCurrentScenario] = useState(null);
   const [isLoadingScenarios, setIsLoadingScenarios] = useState(true);
   const [lastScenarioError, setLastScenarioError] = useState(null);
+  // A rejected cloud write still leaves the scenario in local state, so without
+  // this the user sees a normal, working UI while nothing persists.
+  const [cloudSyncError, setCloudSyncError] = useState(null);
 
   const scenarioLimit = entitlements?.scenarioLimit ?? DEFAULT_FREE_SCENARIO_LIMIT;
   const isScenarioLimitReached = Number.isFinite(scenarioLimit) ? scenarios.length >= scenarioLimit : false;
@@ -411,9 +414,12 @@ export const ScenarioProvider = ({ children }) => {
       // Snapshot from the returned row: it carries the database-generated id
       // the snapshot's foreign key needs, and confirms the write landed.
       await recordScenarioSnapshot({ ...scenario, id: data.id });
+      setCloudSyncError(null);
       return data;
     } catch (error) {
       console.error('Error saving scenario to Supabase:', error);
+      setCloudSyncError({ operation: 'save', error });
+      trackEvent('scenario_cloud_sync_failed', { operation: 'save', code: error?.code ?? null });
       return null;
     }
   };
@@ -439,9 +445,12 @@ export const ScenarioProvider = ({ children }) => {
 
       if (error) throw error;
       await recordScenarioSnapshot({ ...scenario, id: data.id });
+      setCloudSyncError(null);
       return data;
     } catch (error) {
       console.error('Error updating scenario in Supabase:', error);
+      setCloudSyncError({ operation: 'update', error });
+      trackEvent('scenario_cloud_sync_failed', { operation: 'update', code: error?.code ?? null });
       return null;
     }
   };
@@ -714,6 +723,8 @@ export const ScenarioProvider = ({ children }) => {
     scenarioLimit,
     isScenarioLimitReached,
     lastScenarioError,
+    cloudSyncError,
+    dismissCloudSyncError: () => setCloudSyncError(null),
     saveScenario,
     updateCurrentScenario,
     deleteScenario,
