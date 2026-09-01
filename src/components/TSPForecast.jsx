@@ -15,7 +15,7 @@ import {
 import { useScenario } from '../contexts/ScenarioContext';
 import { useAuth } from '../contexts/AuthContext';
 import ScenarioManager from './ScenarioManager';
-import { calculateTspTraditionalVsRoth } from '../lib/calculations/tsp';
+import { calculateTspTraditionalVsRoth, DEFAULT_FUND_RETURNS } from '../lib/calculations/tsp';
 import TooltipWrapper from './TooltipWrapper';
 import NumberStepper from './NumberStepper';
 import { FEATURES, hasEntitlement } from '../lib/entitlements';
@@ -150,6 +150,23 @@ function TSPForecast() {
     years: 0,
     limits: null,
   });
+
+  // Without the Pro entitlement the projection ignores custom fund returns and
+  // uses the defaults, so the panel has to display the defaults too. A scenario
+  // saved while Pro keeps its custom values, and showing those to a downgraded
+  // user would contradict the numbers the chart is actually built from.
+  const effectiveFundReturns = useMemo(
+    () =>
+      canEditFundAssumptions
+        ? inputs.fundReturns
+        : Object.fromEntries(
+            Object.keys(inputs.fundReturns).map((fund) => [
+              fund,
+              (DEFAULT_FUND_RETURNS[fund] ?? 0) * 100,
+            ])
+          ),
+    [canEditFundAssumptions, inputs.fundReturns]
+  );
 
   // Validation state
   const [validationErrors, setValidationErrors] = useState({});
@@ -1394,7 +1411,9 @@ function TSPForecast() {
               <div>
                 <h3 className="text-xl font-semibold navy-text">Fund Returns (Assumed)</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Defaults are editable annually; this is a simplified planner assumption.
+                  {canEditFundAssumptions
+                    ? 'Defaults are editable annually; this is a simplified planner assumption.'
+                    : 'Your projection uses these default return assumptions.'}
                 </p>
               </div>
               {!canEditFundAssumptions && (
@@ -1405,7 +1424,7 @@ function TSPForecast() {
             </div>
 
             <div className="space-y-3">
-              {Object.entries(inputs.fundReturns).map(([fund, returnPct]) => (
+              {Object.entries(effectiveFundReturns).map(([fund, returnPct]) => (
                 <div key={fund} className="flex justify-between items-center gap-3">
                   <span className="text-slate-600 dark:text-slate-400">{fund} Fund</span>
                   {canEditFundAssumptions ? (

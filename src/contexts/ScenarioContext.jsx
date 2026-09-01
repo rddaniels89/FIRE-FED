@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext';
 import { DEFAULT_FREE_SCENARIO_LIMIT } from '../lib/entitlements';
 import { trackEvent } from '../lib/telemetry';
 import { isLocalOnlyUser } from '../lib/auth/session';
+import { SNAPSHOT_CONFLICT_TARGET, buildScenarioSnapshot } from '../lib/scenarios/snapshots';
 import {
   ANNUAL_CATCH_UP_LIMIT,
   ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
@@ -364,6 +365,28 @@ export const ScenarioProvider = ({ children }) => {
     }
   }, [scenarios, isLoadingScenarios, user]);
 
+  // Records the scenario's state for today so a later plan-over-time view has
+  // history to read. Best-effort by design: a failed snapshot must never fail
+  // the save the user actually asked for.
+  const recordScenarioSnapshot = async (scenario) => {
+    if (!isSupabaseAvailable || !user || isLocalOnlyUser(user)) return null;
+
+    const snapshot = buildScenarioSnapshot({ scenario, userId: user.id });
+    if (!snapshot) return null;
+
+    try {
+      const { error } = await supabase
+        .from('scenario_snapshots')
+        .upsert(snapshot, { onConflict: SNAPSHOT_CONFLICT_TARGET });
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error recording scenario snapshot:', error);
+      return null;
+    }
+  };
+
   // Helper function to save scenario to Supabase
   const saveScenarioToSupabase = async (scenario) => {
     if (!isSupabaseAvailable || !user || isLocalOnlyUser(user)) return null;
@@ -385,6 +408,9 @@ export const ScenarioProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+      // Snapshot from the returned row: it carries the database-generated id
+      // the snapshot's foreign key needs, and confirms the write landed.
+      await recordScenarioSnapshot({ ...scenario, id: data.id });
       return data;
     } catch (error) {
       console.error('Error saving scenario to Supabase:', error);
@@ -412,6 +438,7 @@ export const ScenarioProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+      await recordScenarioSnapshot({ ...scenario, id: data.id });
       return data;
     } catch (error) {
       console.error('Error updating scenario in Supabase:', error);
