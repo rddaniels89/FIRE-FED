@@ -3,7 +3,7 @@ import { supabase, isSupabaseAvailable } from '../supabaseClient';
 import { getEntitlements, hasEntitlement } from '../lib/entitlements';
 import { isActiveSubscriptionStatus, isLocalOnlyUser, isProFromTrustedMetadata } from '../lib/auth/session';
 import { resolveWithTimeout } from '../lib/auth/withTimeout';
-import { trackEvent } from '../lib/telemetry';
+import { identifyUser, resetIdentity, trackEvent } from '../lib/telemetry';
 
 /**
  * AuthContext - Authentication context for FireFed SaaS with Supabase integration
@@ -122,6 +122,7 @@ export const AuthProvider = ({ children }) => {
           if (session?.user) {
             setUser(session.user);
             setIsAuthenticated(true);
+            identifyUser(session.user.id);
             await refreshSubscription(session.user.id);
           }
         } else {
@@ -147,11 +148,13 @@ export const AuthProvider = ({ children }) => {
           if (session?.user) {
             setUser(session.user);
             setIsAuthenticated(true);
+            identifyUser(session.user.id);
             await refreshSubscription(session.user.id);
           } else {
             setUser(null);
             setIsAuthenticated(false);
             setSubscription(null);
+            resetIdentity();
           }
           setLoading(false);
         }

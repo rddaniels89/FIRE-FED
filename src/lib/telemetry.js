@@ -35,4 +35,50 @@ export function trackEvent(eventName, properties = {}) {
   }
 }
 
+/**
+ * Automatic pageviews are off because PostHog's default only fires on a full
+ * page load, and this is a single-page app: every route change after the first
+ * would be invisible. Routing calls this instead.
+ */
+export function trackPageView(path) {
+  try {
+    if (import.meta.env.VITE_POSTHOG_KEY) {
+      posthog.capture('$pageview', { $current_url: window.location.href, path });
+    }
+  } catch {
+    // swallow
+  }
+}
+
+/**
+ * Ties the anonymous visitor to the account they just signed into.
+ *
+ * Without this, someone who lands, uses a calculator, then signs up and pays is
+ * two unrelated people in the data — and the funnel this exists to measure
+ * cannot be assembled at all.
+ *
+ * Only the user id is sent. Email and anything else identifying stays out; this
+ * is a tool people put their salary and retirement plans into.
+ */
+export function identifyUser(userId) {
+  try {
+    if (import.meta.env.VITE_POSTHOG_KEY && userId) {
+      posthog.identify(String(userId));
+    }
+  } catch {
+    // swallow
+  }
+}
+
+/** Called on sign-out so a shared machine does not merge two people. */
+export function resetIdentity() {
+  try {
+    if (import.meta.env.VITE_POSTHOG_KEY) {
+      posthog.reset();
+    }
+  } catch {
+    // swallow
+  }
+}
+
 

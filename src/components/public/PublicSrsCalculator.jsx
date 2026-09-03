@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { trackEvent } from '../../lib/telemetry';
 import { DEFAULT_MRA } from '../../lib/calculations/fers';
 import { calculateSrs, getSrsEarningsTestExemptAmount } from '../../lib/calculations/srs';
 
@@ -26,8 +27,20 @@ export default function PublicSrsCalculator() {
     isVoluntaryEarlyRetirement: false,
   });
 
-  const set = (k) => (e) =>
-    setForm((p) => ({ ...p, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
+  // Fires once. A pageview says they arrived; this says the tool was actually
+  // used, which is the number that matters against signups.
+  const hasEngaged = useRef(false);
+  const markEngaged = () => {
+    if (hasEngaged.current) return;
+    hasEngaged.current = true;
+    trackEvent('public_calculator_engaged', { calculator: 'special_retirement_supplement' });
+  };
+
+  const set = (k) => (e) => {
+    markEngaged();
+    const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    setForm((p) => ({ ...p, [k]: value }));
+  };
 
   const srs = useMemo(
     () =>
@@ -176,7 +189,11 @@ export default function PublicSrsCalculator() {
               A free account adds your FERS annuity, TSP projection, and the gap between your income and
               your expenses.
             </p>
-            <Link to="/signin?mode=signup" className="btn-primary inline-block">Create a free account</Link>
+            <Link
+              to="/signin?mode=signup"
+              onClick={() => trackEvent('calculator_signup_cta_clicked', { calculator: 'special_retirement_supplement', engaged: hasEngaged.current })}
+              className="btn-primary inline-block"
+            >Create a free account</Link>
           </div>
         </div>
       </div>

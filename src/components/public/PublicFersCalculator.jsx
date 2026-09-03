@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { trackEvent } from '../../lib/telemetry';
 import { SURVIVOR_ELECTIONS, calculateFersResults } from '../../lib/calculations/fers';
 import { calculateSrs } from '../../lib/calculations/srs';
 
@@ -28,7 +29,19 @@ export default function PublicFersCalculator() {
     socialSecurityAt62Monthly: '0',
   });
 
-  const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
+  // Fires once. A pageview says they arrived; this says the tool was actually
+  // used, which is the number that matters against signups.
+  const hasEngaged = useRef(false);
+  const markEngaged = () => {
+    if (hasEngaged.current) return;
+    hasEngaged.current = true;
+    trackEvent('public_calculator_engaged', { calculator: 'fers_pension' });
+  };
+
+  const set = (k) => (e) => {
+    markEngaged();
+    setForm((p) => ({ ...p, [k]: e.target.value }));
+  };
 
   const { fers, srs } = useMemo(() => {
     const f = calculateFersResults({
@@ -205,7 +218,11 @@ export default function PublicFersCalculator() {
               A free account saves up to three scenarios, adds your TSP projection, and shows how far you are
               from covering your expenses.
             </p>
-            <Link to="/signin?mode=signup" className="btn-primary inline-block">Create a free account</Link>
+            <Link
+              to="/signin?mode=signup"
+              onClick={() => trackEvent('calculator_signup_cta_clicked', { calculator: 'fers_pension', engaged: hasEngaged.current })}
+              className="btn-primary inline-block"
+            >Create a free account</Link>
           </div>
         </div>
       </div>
