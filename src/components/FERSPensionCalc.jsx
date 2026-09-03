@@ -17,6 +17,8 @@ import ScenarioManager from './ScenarioManager';
 import { SURVIVOR_ELECTIONS, calculateFersResults } from '../lib/calculations/fers';
 import { calculateSrs } from '../lib/calculations/srs';
 import { evaluateAllRetirementPaths } from '../lib/calculations/retirementPaths';
+import { DEFAULT_LOCALITY_CODE, LOCALITY_AREAS, calculateGsSalary } from '../lib/calculations/gsPay';
+import { evaluateMilitaryDepositDecision } from '../lib/calculations/militaryDeposit';
 import TooltipWrapper from './TooltipWrapper';
 import NumberStepper from './NumberStepper';
 
@@ -47,8 +49,13 @@ function FERSPensionCalc() {
     privateJobYears: '20',
     unusedSickLeaveHours: '0',
     survivorElection: SURVIVOR_ELECTIONS.NONE,
-    socialSecurityAt62Monthly: '0'
+    socialSecurityAt62Monthly: '0',
+    militaryYears: '0',
+    militaryBasicPay: '0'
   });
+
+  // Pay lookup is a convenience for filling High-3, not part of the scenario.
+  const [payLookup, setPayLookup] = useState({ grade: '13', step: '5', locality: DEFAULT_LOCALITY_CODE });
 
   // Utility function to parse numeric inputs only when needed
   const parseNumericInputs = (inputs) => ({
@@ -63,7 +70,9 @@ function FERSPensionCalc() {
     unusedSickLeaveHours: inputs.unusedSickLeaveHours === '' ? 0 : parseFloat(inputs.unusedSickLeaveHours) || 0,
     survivorElection: inputs.survivorElection,
     socialSecurityAt62Monthly:
-      inputs.socialSecurityAt62Monthly === '' ? 0 : parseFloat(inputs.socialSecurityAt62Monthly) || 0
+      inputs.socialSecurityAt62Monthly === '' ? 0 : parseFloat(inputs.socialSecurityAt62Monthly) || 0,
+    militaryYears: inputs.militaryYears === '' ? 0 : parseFloat(inputs.militaryYears) || 0,
+    militaryBasicPay: inputs.militaryBasicPay === '' ? 0 : parseFloat(inputs.militaryBasicPay) || 0
   });
 
   // Results state
@@ -85,6 +94,17 @@ function FERSPensionCalc() {
       breakEvenAge: 0
     },
     paths: [],
+    military: {
+      deposit: { principal: 0, interest: 0, total: 0, interestFreeYearsRemaining: 2, isAccruingInterest: false },
+      militaryYears: 0,
+      annualAnnuityIncrease: 0,
+      monthlyAnnuityIncrease: 0,
+      breakEvenYears: null,
+      lifetimeIncrease: 0,
+      netLifetimeGain: 0,
+      isWorthPaying: false,
+      addsEligibility: false,
+    },
     service: { eligibilityYears: 0, sickLeaveYears: 0, computationYears: 0, unusedSickLeaveHours: 0 },
     // Must exist before the first debounced calculation, or the panels below
     // dereference undefined on the very first render.
@@ -144,6 +164,8 @@ function FERSPensionCalc() {
         privateJobSalary: String(fers.privateJobSalary || 95000),
         privateJobYears: String(fers.privateJobYears || 20),
         unusedSickLeaveHours: String(fers.unusedSickLeaveHours ?? 0),
+        militaryYears: String(fers.militaryYears ?? 0),
+        militaryBasicPay: String(fers.militaryBasicPay ?? 0),
         survivorElection: fers.survivorElection || SURVIVOR_ELECTIONS.NONE,
         socialSecurityAt62Monthly: String(fers.socialSecurityAt62Monthly ?? 0)
       };
@@ -278,8 +300,17 @@ function FERSPensionCalc() {
       yearsOfService: fers.service.eligibilityYears,
     });
 
+    const military = evaluateMilitaryDepositDecision({
+      militaryYears: numericInputs.militaryYears,
+      militaryBasicPay: numericInputs.militaryBasicPay,
+      high3Salary: numericInputs.high3Salary,
+      multiplier: fers.stayFed.multiplier,
+      yearsOfAnnuityExpected: Math.max(0, 85 - numericInputs.retirementAge),
+    });
+
     setResults({
       paths,
+      military,
       stayFed: fers.stayFed,
       leaveEarly: fers.leaveEarly,
       service: fers.service,
@@ -532,6 +563,89 @@ function FERSPensionCalc() {
           <div className="card p-6">
             <h3 className="text-xl font-semibold navy-text mb-6">Salary Information</h3>
             <div className="space-y-4">
+              <details className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                <summary className="text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
+                  Don&rsquo;t know your High-3? Look it up from your grade
+                </summary>
+                <div className="grid grid-cols-3 gap-2 mt-3">
+                  <div>
+                    <label className="label text-xs" htmlFor="payGrade">Grade</label>
+                    <select
+                      id="payGrade"
+                      className="input-field w-full"
+                      value={payLookup.grade}
+                      onChange={(e) => setPayLookup((p) => ({ ...p, grade: e.target.value }))}
+                    >
+                      {Array.from({ length: 15 }, (_, i) => i + 1).map((g) => (
+                        <option key={g} value={g}>GS-{g}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label text-xs" htmlFor="payStep">Step</label>
+                    <select
+                      id="payStep"
+                      className="input-field w-full"
+                      value={payLookup.step}
+                      onChange={(e) => setPayLookup((p) => ({ ...p, step: e.target.value }))}
+                    >
+                      {Array.from({ length: 10 }, (_, i) => i + 1).map((st) => (
+                        <option key={st} value={st}>{st}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label text-xs" htmlFor="payLocality">Locality</label>
+                    <select
+                      id="payLocality"
+                      className="input-field w-full"
+                      value={payLookup.locality}
+                      onChange={(e) => setPayLookup((p) => ({ ...p, locality: e.target.value }))}
+                    >
+                      {LOCALITY_AREAS.map((l) => (
+                        <option key={l.code} value={l.code}>{l.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {(() => {
+                  const pay = calculateGsSalary({
+                    grade: payLookup.grade,
+                    step: payLookup.step,
+                    localityCode: payLookup.locality,
+                  });
+                  if (!pay) return null;
+                  return (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-sm">
+                        <span className="font-semibold text-slate-900 dark:text-white">
+                          ${pay.salary.toLocaleString()}
+                        </span>
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {' '}&mdash; ${pay.basePay.toLocaleString()} base plus {pay.locality.percent}% locality
+                        </span>
+                        {pay.wasCapped && (
+                          <span className="block text-xs text-amber-700 dark:text-amber-400 mt-1">
+                            Capped at Executive Schedule Level IV, so the locality percentage does not apply in full.
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-secondary text-sm py-2 px-4"
+                        onClick={() => handleInputChange('high3Salary', String(pay.salary))}
+                      >
+                        Use as High-3
+                      </button>
+                    </div>
+                  );
+                })()}
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                  2026 OPM tables. Your real High-3 averages your highest three consecutive years, so this is
+                  exact only if you have been at this step that long.
+                </p>
+              </details>
+
               <TooltipWrapper text="Average of your highest 3 consecutive years of basic pay">
                 <div>
                   <label className="label">High-3 Average Salary</label>
@@ -643,7 +757,45 @@ function FERSPensionCalc() {
                       disabledDecrement={numericInputs.unusedSickLeaveHours <= 0}
                     />
                   </div>
-                  {results.paths.filter((p) => p.isEligible).length > 1 && (
+                  {results.military.militaryYears > 0 && results.military.deposit.total > 0 && (
+                <div className="mt-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="font-medium text-slate-900 dark:text-white text-sm mb-2">
+                    Military service deposit
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <div className="text-slate-600 dark:text-slate-400">Deposit owed</div>
+                      <div className="font-medium text-slate-900 dark:text-white">
+                        ${Math.round(results.military.deposit.total).toLocaleString()}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-600 dark:text-slate-400">Adds to your annuity</div>
+                      <div className="font-medium text-green-700 dark:text-green-400">
+                        +${Math.round(results.military.annualAnnuityIncrease).toLocaleString()}/yr
+                      </div>
+                    </div>
+                  </div>
+                  {results.military.breakEvenYears !== null && (
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-3">
+                      You get the deposit back in{' '}
+                      <strong className="text-slate-900 dark:text-white">
+                        {results.military.breakEvenYears < 1
+                          ? `${Math.round(results.military.breakEvenYears * 12)} months`
+                          : `${results.military.breakEvenYears.toFixed(1)} years`}
+                      </strong>
+                      , then keep the increase for life &mdash; about{' '}
+                      ${Math.round(results.military.netLifetimeGain).toLocaleString()} net.
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                    Without the deposit this service does not count at all &mdash; not toward the annuity, and
+                    not toward the years that decide when you may retire. It must be paid before you separate.
+                  </p>
+                </div>
+              )}
+
+              {results.paths.filter((p) => p.isEligible).length > 1 && (
                 <div className="mt-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                   <div className="font-medium text-slate-900 dark:text-white text-sm mb-1">
                     Your options at this age and service
@@ -769,6 +921,38 @@ function FERSPensionCalc() {
                   </select>
                 </div>
               </TooltipWrapper>
+
+              <TooltipWrapper text="Post-1956 active duty counts toward your FERS annuity only if you pay a deposit of 3% of the basic pay you earned. Without it the time does not count at all.">
+                <div>
+                  <label className="label" htmlFor="militaryYears">Military service (years)</label>
+                  <input
+                    id="militaryYears"
+                    type="text"
+                    value={getDisplayValue('militaryYears')}
+                    onChange={(e) => handleInputChange('militaryYears', e.target.value)}
+                    className="input-field w-full"
+                    placeholder="0"
+                    inputMode="decimal"
+                  />
+                </div>
+              </TooltipWrapper>
+
+              {numericInputs.militaryYears > 0 && (
+                <TooltipWrapper text="Total basic pay you earned while serving, in the dollars of the time. The deposit is 3% of it.">
+                  <div>
+                    <label className="label" htmlFor="militaryBasicPay">Military basic pay earned (total)</label>
+                    <input
+                      id="militaryBasicPay"
+                      type="text"
+                      value={getDisplayValue('militaryBasicPay')}
+                      onChange={(e) => handleInputChange('militaryBasicPay', e.target.value)}
+                      className="input-field w-full"
+                      placeholder="0"
+                      inputMode="decimal"
+                    />
+                  </div>
+                </TooltipWrapper>
+              )}
 
               <TooltipWrapper text="Your estimated Social Security benefit at age 62, from your Social Security statement. Used only to estimate the Special Retirement Supplement.">
                 <div>
