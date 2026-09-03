@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { trackEvent } from '../../lib/telemetry';
 
 const MODELS = [
   {
@@ -33,11 +34,16 @@ export default function LandingPage() {
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row gap-3">
-            <Link to="/calculators/fers-pension" className="btn-primary text-center">
+            <Link
+              to="/calculators/fers-pension"
+              className="btn-primary text-center"
+              onClick={() => trackEvent('landing_cta_clicked', { target: 'fers_calculator', placement: 'hero' })}
+            >
               Try the FERS calculator — no account
             </Link>
             <Link
               to="/signin?mode=signup"
+              onClick={() => trackEvent('landing_cta_clicked', { target: 'signup', placement: 'hero' })}
               className="focus-ring text-center border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-medium py-3 px-6 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-colors"
             >
               Create a free account

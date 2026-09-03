@@ -1,11 +1,12 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { ScenarioProvider } from './contexts/ScenarioContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Footer from './components/Footer';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import CloudSyncBanner from './components/CloudSyncBanner';
+import { trackPageView } from './lib/telemetry';
 
 const HomePage = lazy(() => import('./components/HomePage'));
 const TSPForecast = lazy(() => import('./components/TSPForecast'));
@@ -24,6 +25,15 @@ const LandingPage = lazy(() => import('./components/public/LandingPage'));
 const PricingPage = lazy(() => import('./components/public/PricingPage'));
 const PublicFersCalculator = lazy(() => import('./components/public/PublicFersCalculator'));
 const PublicSrsCalculator = lazy(() => import('./components/public/PublicSrsCalculator'));
+
+/** Routing is client-side, so pageviews have to be reported explicitly. */
+function PageViewTracker() {
+  const location = useLocation();
+  useEffect(() => {
+    trackPageView(location.pathname);
+  }, [location.pathname]);
+  return null;
+}
 
 function RouteLoading() {
   return (
@@ -267,6 +277,7 @@ function App() {
         <ScenarioProvider>
           <Router>
             <AppErrorBoundary>
+              <PageViewTracker />
               <AppContent />
             </AppErrorBoundary>
           </Router>
