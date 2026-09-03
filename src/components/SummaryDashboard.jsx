@@ -20,6 +20,7 @@ import OptimizationPanel from './OptimizationPanel';
 import { calculateTspTraditionalVsRoth } from '../lib/calculations/tsp';
 import { calculateFersResults, DEFAULT_MRA, findEarliestFersImmediateRetirementAge } from '../lib/calculations/fers';
 import { calculateFireGap } from '../lib/calculations/fire';
+import { calculateSrs } from '../lib/calculations/srs';
 import { FEATURES, hasEntitlement } from '../lib/entitlements';
 import { trackEvent } from '../lib/telemetry';
 import NumberStepper from './NumberStepper';
@@ -375,6 +376,14 @@ function SummaryDashboard() {
       const ssMonthlyLocal =
         ssModeLocal === 'manual' ? ssManualMonthlyLocal : ssModeLocal === 'estimate' ? ssEstimatedMonthlyLocal : 0;
 
+      // Bridge income between retiring and 62. Without it the gap calculation
+      // understates early income and hides the drop when the supplement stops.
+      const srsLocal = calculateSrs({
+        retirementAge: pensionStartAge,
+        creditableYearsOfService: fersResults.service.eligibilityYears,
+        socialSecurityAt62Monthly: currentScenario?.fers?.socialSecurityAt62Monthly ?? 0,
+      });
+
       const fireGap = calculateFireGap({
         tspProjectedBalance: tspData.projectedBalance,
         pensionMonthly: pensionData.monthlyPension,
@@ -382,6 +391,8 @@ function SummaryDashboard() {
         safeWithdrawalRate: swrLocal,
         desiredFireAge: fireData.desiredFireAge,
         pensionStartAge,
+        supplementMonthly: srsLocal.isEligible ? srsLocal.monthlyAfterEarningsTest : 0,
+        supplementStartAge: srsLocal.payableFromAge ?? pensionStartAge,
       });
 
       const totalAnnualIncomeEstimate =

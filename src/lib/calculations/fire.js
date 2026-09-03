@@ -1,4 +1,7 @@
 export const DEFAULT_SAFE_WITHDRAWAL_RATE = 0.04;
+
+/** The Special Retirement Supplement stops the month the retiree turns 62. */
+export const SUPPLEMENT_END_AGE = 62;
 export const SAFE_WITHDRAWAL_RATE_PRESETS = Object.freeze([0.03, 0.035, 0.04]);
 
 const toNumber = (value, fallback = 0) => {
@@ -48,6 +51,12 @@ export function calculateFireGap({
   safeWithdrawalRate = DEFAULT_SAFE_WITHDRAWAL_RATE,
   desiredFireAge = undefined,
   pensionStartAge = undefined,
+  // The Special Retirement Supplement is bridge income by construction: it
+  // exists only between retirement and 62, which is exactly the window a
+  // retire-early decision turns on. Leaving it out understates early income and
+  // hides the cliff when it stops.
+  supplementMonthly = 0,
+  supplementStartAge = undefined,
 }) {
   const swr = clamp(toNumber(safeWithdrawalRate, DEFAULT_SAFE_WITHDRAWAL_RATE), 0.01, 0.1);
   const tspMonthlyWithdrawal = toNumber(tspProjectedBalance, 0) * swr / 12;
@@ -64,13 +73,25 @@ export function calculateFireGap({
   const pensionAtDesiredAge = pensionAvailableAtDesiredAge ? toNumber(pensionMonthly, 0) : 0;
   const pensionAfterStart = toNumber(pensionMonthly, 0);
 
+  const supplement = Math.max(0, toNumber(supplementMonthly, 0));
+  const supplementStart = toNumber(supplementStartAge, desired);
+  const supplementPayableAtDesiredAge =
+    supplement > 0 && desired >= supplementStart && desired < SUPPLEMENT_END_AGE;
+  const supplementAtDesiredAge = supplementPayableAtDesiredAge ? supplement : 0;
+
   const monthlyIncomeBeforePension =
     tspMonthlyWithdrawal + sideHustleIncome + spouseIncome;
 
   const totalPassiveIncomeAtDesiredAge =
-    monthlyIncomeBeforePension + pensionAtDesiredAge;
+    monthlyIncomeBeforePension + pensionAtDesiredAge + supplementAtDesiredAge;
 
   const totalPassiveIncomeAfterPension =
+    monthlyIncomeBeforePension + pensionAfterStart + supplementAtDesiredAge;
+
+  // What is left the month the supplement stops. Planning to the pre-62 figure
+  // and discovering the drop afterwards is the specific mistake worth
+  // preventing.
+  const totalPassiveIncomeAfterSupplementEnds =
     monthlyIncomeBeforePension + pensionAfterStart;
 
   const monthlyGapAtDesiredAge = totalPassiveIncomeAtDesiredAge - fireIncomeGoal;
@@ -91,7 +112,7 @@ export function calculateFireGap({
     desiredFireAge: desired,
     pensionStartAge: pensionStart,
     fireIncomeGoalMonthly: fireIncomeGoal,
-    monthlyIncomeBeforePension,
+    monthlyIncomeBeforePension: monthlyIncomeBeforePension + supplementAtDesiredAge,
   });
 
   return {
@@ -99,6 +120,19 @@ export function calculateFireGap({
     totalPassiveIncome: totalPassiveIncomeAtDesiredAge,
     totalPassiveIncomeAtDesiredAge,
     totalPassiveIncomeAfterPension,
+    totalPassiveIncomeAfterSupplementEnds,
+    supplement: {
+      monthly: supplement,
+      startAge: supplement > 0 ? supplementStart : null,
+      endAge: SUPPLEMENT_END_AGE,
+      payableAtDesiredAge: supplementPayableAtDesiredAge,
+      monthlyAtDesiredAge: supplementAtDesiredAge,
+      /** The drop the month it stops. */
+      incomeCliffAt62: supplementAtDesiredAge,
+      yearsPayableFromDesiredAge: supplementPayableAtDesiredAge
+        ? Math.max(0, SUPPLEMENT_END_AGE - Math.max(desired, supplementStart))
+        : 0,
+    },
     fireIncomeGoal,
     monthlyGap: monthlyGapAtDesiredAge,
     monthlyGapAtDesiredAge,

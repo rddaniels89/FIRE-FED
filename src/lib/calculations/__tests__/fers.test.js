@@ -188,3 +188,79 @@ describe('backward compatibility', () => {
     );
   });
 });
+
+describe('MRA+10 age reduction reaches the annuity', () => {
+  const base = {
+    yearsOfService: 15,
+    monthsOfService: 0,
+    high3Salary: 100000,
+    currentAge: 57,
+    retirementAge: 57,
+    showComparison: false,
+    cpiIncrease: 0,
+  };
+
+  // The defect this covers: the reduction existed in the library but the result
+  // path used an older eligibility function with no MRA+10 branch, so someone
+  // retiring at MRA with 10-29 years saw an unreduced pension.
+  it('reduces an MRA+10 annuity by 5% for each year under 62', () => {
+    const res = calculateFersResults(base);
+
+    expect(res.ageReduction.isMra10).toBe(true);
+    expect(res.ageReduction.percent).toBeCloseTo(25, 6); // 60 months x 5/12
+    expect(res.stayFed.annualPensionBeforeReductions).toBeCloseTo(15000, 4);
+    expect(res.stayFed.annualPension).toBeCloseTo(11250, 4); // 15000 less 25%
+  });
+
+  it('leaves an unreduced retirement alone', () => {
+    // 30 years at MRA qualifies for an immediate unreduced annuity.
+    const res = calculateFersResults({ ...base, yearsOfService: 30 });
+    expect(res.ageReduction.isMra10).toBe(false);
+    expect(res.ageReduction.percent).toBe(0);
+    expect(res.stayFed.annualPension).toBeCloseTo(res.stayFed.annualPensionBeforeReductions, 6);
+  });
+
+  it('applies no reduction at 62 even with only 10 years', () => {
+    const res = calculateFersResults({ ...base, currentAge: 62, retirementAge: 62, yearsOfService: 10 });
+    expect(res.ageReduction.percent).toBe(0);
+  });
+
+  // OPM reduces for age first; the survivor's share is a percentage of what
+  // remains, not of the original figure.
+  it('reduces for age before the survivor election', () => {
+    const res = calculateFersResults({ ...base, survivorElection: SURVIVOR_ELECTIONS.FULL });
+
+    expect(res.stayFed.annualPensionBeforeSurvivorReduction).toBeCloseTo(11250, 4);
+    expect(res.stayFed.annualPension).toBeCloseTo(10125, 4); // less a further 10%
+    expect(res.survivor.survivorAnnualBenefit).toBeCloseTo(5625, 4); // half of 11250
+  });
+});
+
+describe('FERS COLA reaches the lifetime figures', () => {
+  const base = {
+    yearsOfService: 30,
+    monthsOfService: 0,
+    high3Salary: 100000,
+    currentAge: 57,
+    retirementAge: 57,
+    retirementEndAge: 85,
+    showComparison: false,
+  };
+
+  it('reports nominal above real, because the diet COLA trails inflation', () => {
+    const res = calculateFersResults({ ...base, cpiIncrease: 0.025 });
+    expect(res.cola.lifetimeNominal).toBeGreaterThan(res.cola.lifetimeReal);
+    expect(res.cola.purchasingPowerRetained).toBeLessThan(1);
+  });
+
+  it('withholds adjustments until 62 for an ordinary retiree', () => {
+    const res = calculateFersResults({ ...base, cpiIncrease: 0.025 });
+    expect(res.cola.startAge).toBe(62);
+  });
+
+  it('collapses to a level annuity when inflation is zero', () => {
+    const res = calculateFersResults({ ...base, cpiIncrease: 0 });
+    expect(res.cola.lifetimeNominal).toBeCloseTo(res.stayFed.annualPension * 28, 2);
+    expect(res.cola.lifetimeNominal).toBeCloseTo(res.cola.lifetimeReal, 6);
+  });
+});
