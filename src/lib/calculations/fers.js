@@ -1,4 +1,5 @@
 import { projectAnnuityWithCola } from './cola';
+import { calculateSpecialProvisionAnnuity } from './specialProvisions';
 
 export const DEFAULT_RETIREMENT_END_AGE = 85;
 export const DEFAULT_MRA = 57;
@@ -243,8 +244,15 @@ export function calculateFersResults({
     totalYearsOfService: projectedYears,
   });
 
-  const annualPensionBeforeReductions =
-    Number(high3Salary ?? 0) * computationYears * multiplier;
+  // Special provision service is computed at 1.7% for the first 20 years and
+  // 1.0% beyond, which is a different formula rather than a different rate.
+  const specialProvisionAnnuity = isSpecialProvision
+    ? calculateSpecialProvisionAnnuity({ high3Salary, totalYearsOfService: computationYears })
+    : null;
+
+  const annualPensionBeforeReductions = specialProvisionAnnuity
+    ? specialProvisionAnnuity.annualPension
+    : Number(high3Salary ?? 0) * computationYears * multiplier;
 
   // Eligibility has to be evaluated before the annuity is final, because the
   // MRA+10 route carries an age reduction and the unreduced routes do not.
@@ -316,6 +324,13 @@ export function calculateFersResults({
       unusedSickLeaveHours: Math.max(0, Number(unusedSickLeaveHours ?? 0)),
     },
     survivor,
+    specialProvision: specialProvisionAnnuity
+      ? {
+          ...specialProvisionAnnuity,
+          advantageOverStandard:
+            specialProvisionAnnuity.annualPension - specialProvisionAnnuity.standardFersEquivalent,
+        }
+      : null,
     ageReduction: {
       // Zero unless this is an MRA+10 retirement.
       percent: ageReductionPercent,
@@ -337,7 +352,7 @@ export function calculateFersResults({
       monthlyPension,
       annualPensionBeforeReductions,
       annualPensionBeforeSurvivorReduction,
-      multiplier,
+      multiplier: specialProvisionAnnuity ? specialProvisionAnnuity.effectiveMultiplier : multiplier,
       lifetimePension,
       lifetimePensionReal: colaProjection.lifetimeReal,
       isEligible: eligibility.isEligibleImmediate,

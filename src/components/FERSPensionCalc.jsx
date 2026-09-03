@@ -19,6 +19,7 @@ import { calculateSrs } from '../lib/calculations/srs';
 import { evaluateAllRetirementPaths } from '../lib/calculations/retirementPaths';
 import { DEFAULT_LOCALITY_CODE, LOCALITY_AREAS, calculateGsSalary } from '../lib/calculations/gsPay';
 import { evaluateMilitaryDepositDecision } from '../lib/calculations/militaryDeposit';
+import { evaluateFehbContinuation } from '../lib/calculations/fehb';
 import TooltipWrapper from './TooltipWrapper';
 import NumberStepper from './NumberStepper';
 
@@ -51,7 +52,9 @@ function FERSPensionCalc() {
     survivorElection: SURVIVOR_ELECTIONS.NONE,
     socialSecurityAt62Monthly: '0',
     militaryYears: '0',
-    militaryBasicPay: '0'
+    militaryBasicPay: '0',
+    isSpecialProvision: false,
+    fehbYearsEnrolled: '5'
   });
 
   // Pay lookup is a convenience for filling High-3, not part of the scenario.
@@ -72,7 +75,9 @@ function FERSPensionCalc() {
     socialSecurityAt62Monthly:
       inputs.socialSecurityAt62Monthly === '' ? 0 : parseFloat(inputs.socialSecurityAt62Monthly) || 0,
     militaryYears: inputs.militaryYears === '' ? 0 : parseFloat(inputs.militaryYears) || 0,
-    militaryBasicPay: inputs.militaryBasicPay === '' ? 0 : parseFloat(inputs.militaryBasicPay) || 0
+    militaryBasicPay: inputs.militaryBasicPay === '' ? 0 : parseFloat(inputs.militaryBasicPay) || 0,
+    isSpecialProvision: inputs.isSpecialProvision,
+    fehbYearsEnrolled: inputs.fehbYearsEnrolled === '' ? 0 : parseFloat(inputs.fehbYearsEnrolled) || 0
   });
 
   // Results state
@@ -94,6 +99,8 @@ function FERSPensionCalc() {
       breakEvenAge: 0
     },
     paths: [],
+    fehb: { outcome: 'continues', continues: true, meetsFiveYearRule: true, yearsShort: 0, message: '' },
+    specialProvision: null,
     military: {
       deposit: { principal: 0, interest: 0, total: 0, interestFreeYearsRemaining: 2, isAccruingInterest: false },
       militaryYears: 0,
@@ -166,6 +173,8 @@ function FERSPensionCalc() {
         unusedSickLeaveHours: String(fers.unusedSickLeaveHours ?? 0),
         militaryYears: String(fers.militaryYears ?? 0),
         militaryBasicPay: String(fers.militaryBasicPay ?? 0),
+        isSpecialProvision: fers.isSpecialProvision || false,
+        fehbYearsEnrolled: String(fers.fehbYearsEnrolled ?? 5),
         survivorElection: fers.survivorElection || SURVIVOR_ELECTIONS.NONE,
         socialSecurityAt62Monthly: String(fers.socialSecurityAt62Monthly ?? 0)
       };
@@ -282,6 +291,7 @@ function FERSPensionCalc() {
       includeFutureService: true,
       unusedSickLeaveHours: numericInputs.unusedSickLeaveHours,
       survivorElection: numericInputs.survivorElection,
+      isSpecialProvision: numericInputs.isSpecialProvision,
     });
 
     // The supplement is a separate benefit, not part of the annuity: it stops at
@@ -308,15 +318,19 @@ function FERSPensionCalc() {
       yearsOfAnnuityExpected: Math.max(0, 85 - numericInputs.retirementAge),
     });
 
+    const fehb = evaluateFehbContinuation({ yearsEnrolled: numericInputs.fehbYearsEnrolled });
+
     setResults({
       paths,
       military,
+      fehb,
       stayFed: fers.stayFed,
       leaveEarly: fers.leaveEarly,
       service: fers.service,
       survivor: fers.survivor,
       ageReduction: fers.ageReduction,
       cola: fers.cola,
+      specialProvision: fers.specialProvision,
       srs,
     });
   }, [inputs, validateInputs]);
@@ -757,7 +771,50 @@ function FERSPensionCalc() {
                       disabledDecrement={numericInputs.unusedSickLeaveHours <= 0}
                     />
                   </div>
-                  {results.military.militaryYears > 0 && results.military.deposit.total > 0 && (
+                  {results.specialProvision && (
+                <div className="mt-4 p-4 rounded-lg bg-navy-50 dark:bg-slate-800/60 border border-navy-200 dark:border-slate-700">
+                  <div className="font-medium text-slate-900 dark:text-white text-sm mb-2">
+                    Special provision computation
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <div className="text-slate-600 dark:text-slate-400">
+                        First {results.specialProvision.enhancedYears} years at 1.7%
+                      </div>
+                      <div className="font-medium text-slate-900 dark:text-white">
+                        ${Math.round(results.specialProvision.enhancedPortion).toLocaleString()}/yr
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-600 dark:text-slate-400">
+                        Remaining {results.specialProvision.standardYears.toFixed(1)} years at 1.0%
+                      </div>
+                      <div className="font-medium text-slate-900 dark:text-white">
+                        ${Math.round(results.specialProvision.standardPortion).toLocaleString()}/yr
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-3">
+                    Worth{' '}
+                    <strong className="text-green-700 dark:text-green-400">
+                      ${Math.round(results.specialProvision.advantageOverStandard).toLocaleString()} a year more
+                    </strong>{' '}
+                    than the same service under ordinary FERS. You also receive COLAs from the start rather than
+                    waiting for 62, and the supplement is exempt from the earnings test until your MRA.
+                  </p>
+                </div>
+              )}
+
+              {!results.fehb.continues && (
+                <div className="mt-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-800">
+                  <div className="font-medium text-amber-900 dark:text-amber-200 text-sm mb-1">
+                    You would lose FEHB in retirement
+                  </div>
+                  <p className="text-xs text-amber-800 dark:text-amber-300">{results.fehb.message}</p>
+                </div>
+              )}
+
+              {results.military.militaryYears > 0 && results.military.deposit.total > 0 && (
                 <div className="mt-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                   <div className="font-medium text-slate-900 dark:text-white text-sm mb-2">
                     Military service deposit
@@ -919,6 +976,38 @@ function FERSPensionCalc() {
                     <option value={SURVIVOR_ELECTIONS.PARTIAL}>Partial &mdash; 5% cost, survivor receives 25%</option>
                     <option value={SURVIVOR_ELECTIONS.FULL}>Full &mdash; 10% cost, survivor receives 50%</option>
                   </select>
+                </div>
+              </TooltipWrapper>
+
+              <TooltipWrapper text="Law enforcement, firefighters and air traffic controllers earn 1.7% for the first 20 years, can retire at 50 with 20 years, face mandatory separation, and receive COLAs before 62.">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={inputs.isSpecialProvision}
+                    onChange={(e) => handleInputChange('isSpecialProvision', e.target.checked)}
+                    className="mt-1 w-4 h-4"
+                  />
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Special provision position
+                    <span className="block text-xs font-normal text-slate-500 dark:text-slate-400">
+                      Law enforcement, firefighter, or air traffic controller
+                    </span>
+                  </span>
+                </label>
+              </TooltipWrapper>
+
+              <TooltipWrapper text="To keep FEHB in retirement you must have been enrolled for the five years immediately before you retire, and be retiring on an immediate annuity.">
+                <div>
+                  <label className="label" htmlFor="fehbYearsEnrolled">Years enrolled in FEHB</label>
+                  <input
+                    id="fehbYearsEnrolled"
+                    type="text"
+                    value={getDisplayValue('fehbYearsEnrolled')}
+                    onChange={(e) => handleInputChange('fehbYearsEnrolled', e.target.value)}
+                    className="input-field w-full"
+                    placeholder="5"
+                    inputMode="decimal"
+                  />
                 </div>
               </TooltipWrapper>
 
