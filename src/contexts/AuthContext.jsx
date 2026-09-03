@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { supabase, isSupabaseAvailable } from '../supabaseClient';
 import { getEntitlements, hasEntitlement } from '../lib/entitlements';
 import { isActiveSubscriptionStatus, isLocalOnlyUser, isProFromTrustedMetadata } from '../lib/auth/session';
+import { resolveWithTimeout } from '../lib/auth/withTimeout';
+import { trackEvent } from '../lib/telemetry';
 
 /**
  * AuthContext - Authentication context for FireFed SaaS with Supabase integration
@@ -87,7 +89,24 @@ export const AuthProvider = ({ children }) => {
         }
 
         if (isSupabaseAvailable) {
-          const { data: { session } } = await supabase.auth.getSession();
+          // Bounded rather than awaited outright: getSession() can hang forever
+          // on a held Web Lock, and an unbounded await here leaves the app on
+          // its spinner with no error to catch. On timeout we render the signed
+          // -out view; onAuthStateChange still fires when the lock frees and
+          // signs the user back in without a reload.
+          const { timedOut, value } = await resolveWithTimeout(supabase.auth.getSession(), {
+            fallback: { data: { session: null } },
+            onTimeout: () =>
+              console.warn(
+                'Auth session lookup timed out. Rendering signed-out; the auth listener will recover the session if it arrives.'
+              ),
+          });
+
+          if (timedOut) {
+            trackEvent('auth_session_timeout');
+          }
+
+          const session = value?.data?.session ?? null;
           if (session?.user) {
             setUser(session.user);
             setIsAuthenticated(true);
