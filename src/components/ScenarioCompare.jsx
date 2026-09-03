@@ -6,6 +6,7 @@ import { FEATURES, hasEntitlement } from '../lib/entitlements';
 import { calculateTspTraditionalVsRoth } from '../lib/calculations/tsp';
 import { calculateFersResults, findEarliestFersImmediateRetirementAge } from '../lib/calculations/fers';
 import { calculateFireGap } from '../lib/calculations/fire';
+import { calculateSrs } from '../lib/calculations/srs';
 import { trackEvent } from '../lib/telemetry';
 import {
   ANNUAL_CATCH_UP_LIMIT,
@@ -213,6 +214,13 @@ function ScenarioCompare() {
 
       const plannedRetAge = tsp.retirementAge ?? fers.retirementAge ?? 0;
 
+      const srsRes = calculateSrs({
+        retirementAge: fers.retirementAge ?? 0,
+        creditableYearsOfService: fersRes.service.eligibilityYears,
+        socialSecurityAt62Monthly: fers.socialSecurityAt62Monthly ?? 0,
+      });
+      const supplementMonthly = srsRes.isEligible ? srsRes.monthlyAfterEarningsTest : 0;
+
       const gapDesired = calculateFireGap({
         tspProjectedBalance: tspSelected.projectedBalance ?? 0,
         pensionMonthly: fersRes.stayFed.monthlyPension ?? 0,
@@ -220,6 +228,8 @@ function ScenarioCompare() {
         safeWithdrawalRate: swr,
         desiredFireAge: fire.desiredFireAge ?? undefined,
         pensionStartAge: fers.retirementAge ?? undefined,
+        supplementMonthly,
+        supplementStartAge: srsRes.payableFromAge ?? fers.retirementAge ?? undefined,
       });
 
       const gapAtPlannedRet = calculateFireGap({
@@ -229,6 +239,8 @@ function ScenarioCompare() {
         safeWithdrawalRate: swr,
         desiredFireAge: plannedRetAge || undefined,
         pensionStartAge: plannedRetAge || undefined,
+        supplementMonthly,
+        supplementStartAge: srsRes.payableFromAge ?? (plannedRetAge || undefined),
       });
 
       const earliestEligibleAge = findEarliestFersImmediateRetirementAge({

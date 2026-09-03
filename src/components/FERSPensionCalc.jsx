@@ -84,6 +84,19 @@ function FERSPensionCalc() {
       breakEvenAge: 0
     },
     service: { eligibilityYears: 0, sickLeaveYears: 0, computationYears: 0, unusedSickLeaveHours: 0 },
+    // Must exist before the first debounced calculation, or the panels below
+    // dereference undefined on the very first render.
+    ageReduction: { percent: 0, annual: 0, isMra10: false },
+    cola: {
+      rate: 0,
+      cpiIncrease: 0,
+      startAge: 62,
+      lifetimeNominal: 0,
+      lifetimeReal: 0,
+      finalYearNominal: 0,
+      finalYearReal: 0,
+      purchasingPowerRetained: 1,
+    },
     survivor: {
       election: SURVIVOR_ELECTIONS.NONE,
       reductionPercent: 0,
@@ -260,6 +273,8 @@ function FERSPensionCalc() {
       leaveEarly: fers.leaveEarly,
       service: fers.service,
       survivor: fers.survivor,
+      ageReduction: fers.ageReduction,
+      cola: fers.cola,
       srs,
     });
   }, [inputs, validateInputs]);
@@ -617,7 +632,63 @@ function FERSPensionCalc() {
                       disabledDecrement={numericInputs.unusedSickLeaveHours <= 0}
                     />
                   </div>
-                  {results.service.sickLeaveYears > 0 && (
+                  {results.ageReduction.percent > 0 && (
+                <div className="mt-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-800">
+                  <div className="font-medium text-amber-900 dark:text-amber-200 text-sm mb-2">
+                    MRA+10 age reduction &mdash; {results.ageReduction.percent.toFixed(1)}%
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <div className="text-slate-600 dark:text-slate-400">Before reduction</div>
+                      <div className="font-medium text-slate-900 dark:text-white">
+                        ${Math.round(results.stayFed.annualPensionBeforeReductions).toLocaleString()}/yr
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-600 dark:text-slate-400">Cost of retiring early</div>
+                      <div className="font-medium text-amber-700 dark:text-amber-400">
+                        &minus;${Math.round(results.ageReduction.annual).toLocaleString()}/yr
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
+                    Retiring under MRA+10 costs 5% of your annuity for every year you are under 62, and the
+                    reduction is permanent. Postponing the start of your annuity reduces or removes it.
+                  </p>
+                </div>
+              )}
+
+              {results.cola.cpiIncrease > 0 && results.stayFed.lifetimePension > 0 && (
+                <div className="mt-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="font-medium text-slate-900 dark:text-white text-sm mb-2">
+                    What inflation does to it
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <div className="text-slate-600 dark:text-slate-400">Lifetime, as paid</div>
+                      <div className="font-medium text-slate-900 dark:text-white">
+                        ${Math.round(results.cola.lifetimeNominal).toLocaleString()}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-600 dark:text-slate-400">Lifetime, in today&rsquo;s dollars</div>
+                      <div className="font-medium text-slate-900 dark:text-white">
+                        ${Math.round(results.cola.lifetimeReal).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
+                    FERS pays a reduced COLA, and for most retirees none at all before 62
+                    {results.cola.startAge > numericInputs.retirementAge
+                      ? ` — so your annuity is frozen for the first ${Math.round(results.cola.startAge - numericInputs.retirementAge)} years.`
+                      : '.'}
+                    {' '}Your last payment is worth about{' '}
+                    {Math.round(results.cola.purchasingPowerRetained * 100)}% of what the first one buys today.
+                  </p>
+                </div>
+              )}
+
+              {results.service.sickLeaveYears > 0 && (
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                       Adds {results.service.sickLeaveYears.toFixed(2)} years of service credit at 2,087 hours per year.
                     </p>
@@ -770,7 +841,7 @@ function FERSPensionCalc() {
               <div className="grid grid-cols-2 gap-6">
                 <div className="text-center">
                   <div className="text-3xl font-bold navy-text mb-2">
-                    ${results.stayFed.annualPension.toLocaleString()}
+                    ${Math.round(results.stayFed.annualPension).toLocaleString()}
                   </div>
                   <div className="text-sm text-slate-500 dark:text-slate-400">Annual Pension</div>
                 </div>
@@ -782,7 +853,7 @@ function FERSPensionCalc() {
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-bold text-slate-600 dark:text-slate-400 mb-2">
-                    ${results.stayFed.lifetimePension.toLocaleString()}
+                    ${Math.round(results.stayFed.lifetimePension).toLocaleString()}
                   </div>
                   <div className="text-sm text-slate-500 dark:text-slate-400">Lifetime Estimate</div>
                 </div>
@@ -912,13 +983,13 @@ function FERSPensionCalc() {
                   <div className="space-y-3">
                     <div>
                       <div className="text-2xl font-bold text-navy-600 dark:text-navy-400">
-                        ${results.stayFed.annualPension.toLocaleString()}
+                        ${Math.round(results.stayFed.annualPension).toLocaleString()}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">Annual Pension</div>
                     </div>
                     <div>
                       <div className="text-2xl font-bold text-slate-700 dark:text-slate-300">
-                        ${results.stayFed.totalLifetimeEarnings.toLocaleString()}
+                        ${Math.round(results.stayFed.totalLifetimeEarnings).toLocaleString()}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">Lifetime Earnings</div>
                     </div>
@@ -930,13 +1001,13 @@ function FERSPensionCalc() {
                   <div className="space-y-3">
                     <div>
                       <div className="text-2xl font-bold text-gold-600 dark:text-gold-400">
-                        ${results.leaveEarly.deferredPension.toLocaleString()}
+                        ${Math.round(results.leaveEarly.deferredPension).toLocaleString()}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">Deferred Pension (at {results.leaveEarly.mra})</div>
                     </div>
                     <div>
                       <div className="text-2xl font-bold text-slate-700 dark:text-slate-300">
-                        ${results.leaveEarly.totalLifetimeEarnings.toLocaleString()}
+                        ${Math.round(results.leaveEarly.totalLifetimeEarnings).toLocaleString()}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">Lifetime Earnings</div>
                     </div>

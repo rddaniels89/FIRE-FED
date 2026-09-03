@@ -1,3 +1,5 @@
+import { projectAnnuityWithCola } from './cola';
+
 export const DEFAULT_RETIREMENT_END_AGE = 85;
 export const DEFAULT_MRA = 57;
 
@@ -84,6 +86,17 @@ export function calculateFersMultiplier({ retirementAge, totalYearsOfService }) 
   return 0.01;
 }
 
+/**
+ * The MRA+10 age reduction.
+ *
+ * OPM: "your benefit will be reduced by 5/12 of 1% for each full month (5% per
+ * year) that you were under age 62 on the date your annuity began."
+ *
+ * Counted in whole months, because that is how OPM counts it — a retirement at
+ * 57 years and 7 months is not the same as one at 57.
+ */
+export const MRA10_REDUCTION_PER_MONTH = 5 / 12;
+
 export function calculateMra10ReductionPercent({ annuityStartAge, mra = DEFAULT_MRA }) {
   const startAge = Number(annuityStartAge ?? 0);
   const mraAge = Number(mra ?? DEFAULT_MRA);
@@ -91,9 +104,8 @@ export function calculateMra10ReductionPercent({ annuityStartAge, mra = DEFAULT_
   if (startAge >= 62) return 0;
   if (startAge < mraAge) return 0;
 
-  const yearsUnder62 = 62 - startAge;
-  // Simplified rule: 5% per year under 62 (pro-rated monthly in real life; we keep it simple here).
-  return Math.max(0, yearsUnder62 * 5);
+  const fullMonthsUnder62 = Math.floor((62 - startAge) * 12);
+  return Math.max(0, fullMonthsUnder62 * MRA10_REDUCTION_PER_MONTH);
 }
 
 export function evaluateFersRegularEligibility({
@@ -120,9 +132,9 @@ export function evaluateFersRegularEligibility({
   } else if (immediateMra10) {
     const reduction = calculateMra10ReductionPercent({ annuityStartAge: a, mra: mraAge });
     messages.push(
-      `Eligible for immediate retirement under MRA+10 (simplified reduction: ~${reduction.toFixed(1)}%)`
+      `Eligible for immediate retirement under MRA+10 — reduced ${reduction.toFixed(1)}% for retiring before 62`
     );
-    messages.push('You may be able to postpone the annuity start to reduce/eliminate the reduction (not fully modeled).');
+    messages.push('Postponing the start of the annuity reduces or eliminates that reduction.');
   } else if (deferred) {
     messages.push('Not eligible for immediate retirement; may be eligible for deferred retirement (FEHB rules differ).');
   } else {
@@ -203,6 +215,12 @@ export function calculateFersResults({
   deferredYearsAssumption = 20,
   unusedSickLeaveHours = 0,
   survivorElection = SURVIVOR_ELECTIONS.NONE,
+  // FERS pays a reduced COLA and, for most retirees, none at all before 62.
+  // Defaulted rather than opt-in: a level nominal annuity shown beside an
+  // inflation-adjusted TSP balance is not a conservative estimate, it is two
+  // numbers that cannot be compared.
+  cpiIncrease = 0.025,
+  isSpecialProvision = false,
 }) {
   const totalYears = Number(yearsOfService ?? 0) + Number(monthsOfService ?? 0) / 12;
   const ageNow = Number(currentAge ?? 0);
@@ -225,9 +243,26 @@ export function calculateFersResults({
     totalYearsOfService: projectedYears,
   });
 
-  const annualPensionBeforeSurvivorReduction =
+  const annualPensionBeforeReductions =
     Number(high3Salary ?? 0) * computationYears * multiplier;
 
+  // Eligibility has to be evaluated before the annuity is final, because the
+  // MRA+10 route carries an age reduction and the unreduced routes do not.
+  const eligibility = evaluateFersRegularEligibility({
+    age: retireAge,
+    totalYearsOfService: projectedYears,
+    mra,
+  });
+
+  const ageReductionPercent = eligibility.isEligibleImmediateMra10
+    ? calculateMra10ReductionPercent({ annuityStartAge: retireAge, mra })
+    : 0;
+
+  const ageReduction = (annualPensionBeforeReductions * ageReductionPercent) / 100;
+  const annualPensionBeforeSurvivorReduction = annualPensionBeforeReductions - ageReduction;
+
+  // Order matters: OPM reduces for age first, and the survivor's share is a
+  // percentage of what remains.
   const survivor = calculateSurvivorBenefit({
     annualPensionBeforeSurvivorReduction,
     election: survivorElection,
@@ -236,8 +271,15 @@ export function calculateFersResults({
   const annualPension = survivor.annualPensionAfterReduction;
   const monthlyPension = annualPension / 12;
 
-  const lifetimePension = annualPension * Math.max(0, endAge - retireAge);
-  const eligibility = calculateFersEligibility({ retirementAge: retireAge, totalYearsOfService: projectedYears });
+  const colaProjection = projectAnnuityWithCola({
+    annualPension,
+    startAge: retireAge,
+    endAge,
+    cpiIncrease,
+    isSpecialProvision,
+  });
+
+  const lifetimePension = colaProjection.lifetimeNominal;
 
   const workingYears = Math.max(0, retireAge - ageNow);
   const totalLifetimeEarnings = workingYears * Number(high3Salary ?? 0) + lifetimePension;
@@ -274,14 +316,32 @@ export function calculateFersResults({
       unusedSickLeaveHours: Math.max(0, Number(unusedSickLeaveHours ?? 0)),
     },
     survivor,
+    ageReduction: {
+      // Zero unless this is an MRA+10 retirement.
+      percent: ageReductionPercent,
+      annual: ageReduction,
+      isMra10: eligibility.isEligibleImmediateMra10,
+    },
+    cola: {
+      rate: colaProjection.colaRate,
+      cpiIncrease,
+      startAge: isSpecialProvision ? retireAge : 62,
+      lifetimeNominal: colaProjection.lifetimeNominal,
+      lifetimeReal: colaProjection.lifetimeReal,
+      finalYearNominal: colaProjection.finalYearNominal,
+      finalYearReal: colaProjection.finalYearReal,
+      purchasingPowerRetained: colaProjection.purchasingPowerRetained,
+    },
     stayFed: {
       annualPension,
       monthlyPension,
+      annualPensionBeforeReductions,
       annualPensionBeforeSurvivorReduction,
       multiplier,
       lifetimePension,
-      isEligible: eligibility.isEligible,
-      eligibilityMessage: eligibility.eligibilityMessage,
+      lifetimePensionReal: colaProjection.lifetimeReal,
+      isEligible: eligibility.isEligibleImmediate,
+      eligibilityMessage: eligibility.messages[0] ?? '',
       totalLifetimeEarnings,
     },
     leaveEarly: {
