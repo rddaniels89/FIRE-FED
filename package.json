@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:install": "playwright install"
+    "test:e2e:install": "playwright install",
+    "og:image": "node scripts/generate-og-image.mjs"
   },
   "dependencies": {
     "@sentry/react": "^9.46.0",
