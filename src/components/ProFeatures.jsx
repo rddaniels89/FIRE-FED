@@ -16,7 +16,7 @@ const PRO_MONTHLY_PRICE_ID = import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY || ''
 const PRO_ANNUAL_PRICE_ID = import.meta.env.VITE_STRIPE_PRICE_PRO_ANNUAL || '';
 
 const ProFeatures = () => {
-  const { isAuthenticated, isProUser, subscription, subscriptionLoading, refreshSubscription } = useAuth();
+  const { user, isAuthenticated, isProUser, subscription, subscriptionLoading, refreshSubscription } = useAuth();
   const location = useLocation();
   const [isBillingAction, setIsBillingAction] = useState(false);
   const [message, setMessage] = useState('');
@@ -34,12 +34,15 @@ const ProFeatures = () => {
     if (checkout === 'success') {
       setMessage('✅ Payment complete. Your Pro access should unlock shortly.');
       trackEvent('pro_checkout_return', { status: 'success' });
-      refreshSubscription?.();
+      // Must carry the user id: refreshSubscription treats a missing one as
+      // "no user" and clears the subscription, which would blank out the Pro
+      // state on the very screen meant to confirm the payment.
+      refreshSubscription?.(user?.id);
     } else if (checkout === 'canceled') {
       setMessage('ℹ️ Checkout canceled. You can upgrade anytime.');
       trackEvent('pro_checkout_return', { status: 'canceled' });
     }
-  }, [refreshSubscription]);
+  }, [refreshSubscription, user?.id]);
 
   const reasonHint = useMemo(() => {
     const reason = location.state?.reason;
@@ -283,9 +286,15 @@ const ProFeatures = () => {
                   <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
                     Update your payment method, cancel, or download invoices.
                   </p>
+                  {/*
+                    Deliberately not gated on subscriptionLoading: the portal
+                    needs only a Stripe customer id, which the server looks up
+                    itself. A stalled status check must never be what stops
+                    someone cancelling — that turns into a chargeback.
+                  */}
                   <button
                     onClick={openBillingPortal}
-                    disabled={isBillingAction || subscriptionLoading}
+                    disabled={isBillingAction}
                     className="btn-primary w-full disabled:opacity-50"
                   >
                     {isBillingAction ? 'Opening…' : 'Manage subscription'}
