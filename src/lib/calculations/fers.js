@@ -1,6 +1,82 @@
 export const DEFAULT_RETIREMENT_END_AGE = 85;
 export const DEFAULT_MRA = 57;
 
+/**
+ * OPM's leave year: 2,087 hours. Unused sick leave converts at this rate and is
+ * added to service for the annuity computation only.
+ *
+ * https://www.opm.gov/retirement-center/fers-information/computation/
+ */
+export const SICK_LEAVE_HOURS_PER_WORK_YEAR = 2087;
+
+/**
+ * Survivor annuity elections. The survivor benefit is a percentage of the
+ * retiree's annuity *before* the survivor reduction, and the retiree's own
+ * annuity is reduced by the cost for life.
+ *
+ * Electing none requires notarized spousal consent if married, and it also ends
+ * the spouse's ability to keep FEHB after the retiree dies — the reason the
+ * election matters beyond the dollar figures.
+ */
+export const SURVIVOR_ELECTIONS = Object.freeze({
+  NONE: 'none',
+  PARTIAL: 'partial',
+  FULL: 'full',
+});
+
+export const SURVIVOR_ELECTION_RULES = Object.freeze({
+  [SURVIVOR_ELECTIONS.NONE]: { reductionPercent: 0, survivorPercent: 0 },
+  [SURVIVOR_ELECTIONS.PARTIAL]: { reductionPercent: 5, survivorPercent: 25 },
+  [SURVIVOR_ELECTIONS.FULL]: { reductionPercent: 10, survivorPercent: 50 },
+});
+
+/**
+ * Unused sick leave expressed as years of service.
+ *
+ * Creditable for the annuity computation only. It cannot establish eligibility
+ * to retire, cannot raise the high-3, and does not count toward the Special
+ * Retirement Supplement.
+ */
+export function convertSickLeaveHoursToServiceYears(unusedSickLeaveHours) {
+  const hours = Number(unusedSickLeaveHours);
+  if (!Number.isFinite(hours) || hours <= 0) return 0;
+  return hours / SICK_LEAVE_HOURS_PER_WORK_YEAR;
+}
+
+export function getSurvivorElectionRule(election) {
+  return (
+    SURVIVOR_ELECTION_RULES[election] ?? SURVIVOR_ELECTION_RULES[SURVIVOR_ELECTIONS.NONE]
+  );
+}
+
+/**
+ * Applies a survivor election to a gross annuity.
+ *
+ * The survivor's benefit is computed from the annuity before the reduction, not
+ * after — a full election on a $40,000 annuity pays the survivor $20,000 while
+ * costing the retiree $4,000 a year.
+ */
+export function calculateSurvivorBenefit({
+  annualPensionBeforeSurvivorReduction,
+  election = SURVIVOR_ELECTIONS.NONE,
+}) {
+  const gross = Math.max(0, Number(annualPensionBeforeSurvivorReduction ?? 0));
+  const rule = getSurvivorElectionRule(election);
+
+  const annualReduction = (gross * rule.reductionPercent) / 100;
+
+  return {
+    election: SURVIVOR_ELECTION_RULES[election] ? election : SURVIVOR_ELECTIONS.NONE,
+    reductionPercent: rule.reductionPercent,
+    survivorPercent: rule.survivorPercent,
+    annualReduction,
+    monthlyReduction: annualReduction / 12,
+    annualPensionAfterReduction: gross - annualReduction,
+    survivorAnnualBenefit: (gross * rule.survivorPercent) / 100,
+    survivorMonthlyBenefit: (gross * rule.survivorPercent) / 100 / 12,
+  };
+}
+
 export function calculateFersMultiplier({ retirementAge, totalYearsOfService }) {
   const age = Number(retirementAge ?? 0);
   const years = Number(totalYearsOfService ?? 0);
@@ -125,20 +201,40 @@ export function calculateFersResults({
   retirementEndAge = DEFAULT_RETIREMENT_END_AGE,
   mra = DEFAULT_MRA,
   deferredYearsAssumption = 20,
+  unusedSickLeaveHours = 0,
+  survivorElection = SURVIVOR_ELECTIONS.NONE,
 }) {
   const totalYears = Number(yearsOfService ?? 0) + Number(monthsOfService ?? 0) / 12;
   const ageNow = Number(currentAge ?? 0);
   const retireAge = Number(retirementAge ?? 0);
   const endAge = Number(retirementEndAge ?? DEFAULT_RETIREMENT_END_AGE);
 
+  // Service that counts toward eligibility. Sick leave is deliberately excluded:
+  // it cannot be used to qualify for retirement.
   const projectedYears =
     includeFutureService ? totalYears + Math.max(0, retireAge - ageNow) : totalYears;
 
-  const { annualPension, monthlyPension, multiplier } = calculateFersPensionAnnual({
-    high3Salary,
-    totalYearsOfService: projectedYears,
+  const sickLeaveYears = convertSickLeaveHoursToServiceYears(unusedSickLeaveHours);
+  const computationYears = projectedYears + sickLeaveYears;
+
+  // The 1.1% factor requires age 62 with 20 years. Read conservatively here as a
+  // threshold sick leave cannot satisfy, consistent with sick leave being barred
+  // from establishing eligibility — so the multiplier keys off service alone.
+  const multiplier = calculateFersMultiplier({
     retirementAge: retireAge,
+    totalYearsOfService: projectedYears,
   });
+
+  const annualPensionBeforeSurvivorReduction =
+    Number(high3Salary ?? 0) * computationYears * multiplier;
+
+  const survivor = calculateSurvivorBenefit({
+    annualPensionBeforeSurvivorReduction,
+    election: survivorElection,
+  });
+
+  const annualPension = survivor.annualPensionAfterReduction;
+  const monthlyPension = annualPension / 12;
 
   const lifetimePension = annualPension * Math.max(0, endAge - retireAge);
   const eligibility = calculateFersEligibility({ retirementAge: retireAge, totalYearsOfService: projectedYears });
@@ -169,9 +265,19 @@ export function calculateFersResults({
   return {
     totalYears,
     projectedYears,
+    service: {
+      // Eligibility and computation differ once sick leave is in play, and the
+      // difference is the whole point of tracking both.
+      eligibilityYears: projectedYears,
+      sickLeaveYears,
+      computationYears,
+      unusedSickLeaveHours: Math.max(0, Number(unusedSickLeaveHours ?? 0)),
+    },
+    survivor,
     stayFed: {
       annualPension,
       monthlyPension,
+      annualPensionBeforeSurvivorReduction,
       multiplier,
       lifetimePension,
       isEligible: eligibility.isEligible,
