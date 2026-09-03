@@ -40,11 +40,23 @@ export const AuthProvider = ({ children }) => {
 
     setSubscriptionLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('user_id', id)
-        .maybeSingle();
+      // Bounded as well as the lock beneath it. subscriptionLoading gates the
+      // upgrade buttons, so a query that never settles leaves a paying customer
+      // looking at a dead page with no way forward.
+      const { timedOut, value } = await resolveWithTimeout(
+        supabase.from('subscriptions').select('*').eq('user_id', id).maybeSingle(),
+        {
+          fallback: { data: null, error: null },
+          onTimeout: () => console.warn('Subscription lookup timed out; treating Pro status as unknown.'),
+        }
+      );
+
+      if (timedOut) {
+        setSubscription(null);
+        return;
+      }
+
+      const { data, error } = value;
 
       if (error) {
         console.error('Error loading subscription:', error);
