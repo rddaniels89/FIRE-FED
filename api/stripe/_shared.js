@@ -69,4 +69,29 @@ export function sendError(res, error) {
   sendJson(res, status, { error: message });
 }
 
+/**
+ * Returns the stored Stripe customer id only if it still resolves, otherwise
+ * null.
+ *
+ * A stored id can stop resolving for reasons that have nothing to do with the
+ * user: the customer was deleted in the Stripe dashboard, or it was created in
+ * a different mode or sandbox during setup. The id is read straight back from
+ * the database on every attempt, so a dead one blocks that user permanently --
+ * from purchasing at the checkout endpoint, and from cancelling at the portal.
+ */
+export async function resolveUsableCustomerId({ stripe, storedCustomerId }) {
+  const stored = (storedCustomerId || '').toString().trim();
+  if (!stored) return null;
 
+  try {
+    const customer = await stripe.customers.retrieve(stored);
+    // Deleted customers still retrieve, flagged rather than throwing.
+    return customer && customer.deleted !== true ? stored : null;
+  } catch (error) {
+    // Only a missing customer is recoverable by minting a new one. Anything
+    // else (auth, network, rate limit) must surface rather than silently
+    // orphaning the existing customer and its payment methods.
+    if (error?.code === 'resource_missing' || error?.statusCode === 404) return null;
+    throw error;
+  }
+}

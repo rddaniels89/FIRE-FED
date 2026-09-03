@@ -1,5 +1,5 @@
 /* eslint-env node */
-import { getBaseUrl, getStripe, getSupabaseAdmin, requireAuthedUser, sendError, sendJson } from './_shared.js';
+import { getBaseUrl, getStripe, getSupabaseAdmin, requireAuthedUser, resolveUsableCustomerId, sendError, sendJson } from './_shared.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -36,7 +36,8 @@ export default async function handler(req, res) {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    let customerId = existingRow?.stripe_customer_id || null;
+    let customerId = await resolveUsableCustomerId({ stripe, storedCustomerId: existingRow?.stripe_customer_id });
+
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email || undefined,
