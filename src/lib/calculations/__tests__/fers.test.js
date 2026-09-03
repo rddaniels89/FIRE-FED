@@ -264,3 +264,39 @@ describe('FERS COLA reaches the lifetime figures', () => {
     expect(res.cola.lifetimeNominal).toBeCloseTo(res.cola.lifetimeReal, 6);
   });
 });
+
+describe('special provision service in the full result', () => {
+  const base = {
+    yearsOfService: 25,
+    monthsOfService: 0,
+    high3Salary: 120000,
+    currentAge: 50,
+    retirementAge: 50,
+    showComparison: false,
+    cpiIncrease: 0,
+  };
+
+  it('uses the 1.7% formula rather than the flat rate', () => {
+    const std = calculateFersResults(base);
+    const spec = calculateFersResults({ ...base, isSpecialProvision: true });
+
+    // 120k x 20 x 1.7% + 120k x 5 x 1% = 40,800 + 6,000
+    expect(spec.stayFed.annualPensionBeforeReductions).toBeCloseTo(46800, 4);
+    expect(std.stayFed.annualPensionBeforeReductions).toBeCloseTo(30000, 4);
+    expect(spec.specialProvision.advantageOverStandard).toBeCloseTo(16800, 4);
+  });
+
+  it('reports the blended effective multiplier', () => {
+    const spec = calculateFersResults({ ...base, isSpecialProvision: true });
+    expect(spec.stayFed.multiplier).toBeCloseTo(46800 / (120000 * 25), 6);
+  });
+
+  it('pays COLA from the start instead of waiting for 62', () => {
+    const spec = calculateFersResults({ ...base, isSpecialProvision: true, cpiIncrease: 0.025 });
+    expect(spec.cola.startAge).toBe(50);
+  });
+
+  it('leaves ordinary retirements untouched', () => {
+    expect(calculateFersResults(base).specialProvision).toBeNull();
+  });
+});
