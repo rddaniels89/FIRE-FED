@@ -860,7 +860,12 @@ function FERSPensionCalc() {
 
               <div className="mt-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                 <div className="font-medium text-slate-900 dark:text-white text-sm mb-2">Special Retirement Supplement</div>
-                {results.srs.isEligible ? (
+                {results.srs.isEligible && numericInputs.socialSecurityAt62Monthly <= 0 ? (
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    You would qualify for the supplement at this retirement age. Add your estimated Social
+                    Security at 62 above and it will be calculated &mdash; it is often over $1,000 a month.
+                  </p>
+                ) : results.srs.isEligible ? (
                   <>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>

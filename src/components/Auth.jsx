@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase, isSupabaseAvailable } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { trackEvent } from '../lib/telemetry'
@@ -11,7 +12,10 @@ const Auth = ({ onAuthSuccess }) => {
   const [resetLoading, setResetLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [isSignUp, setIsSignUp] = useState(false)
+  // Almost every arrival is new, so "create an account" is the default unless
+  // the visitor explicitly came to sign in.
+  const [searchParams] = useSearchParams()
+  const [isSignUp, setIsSignUp] = useState(searchParams.get('mode') !== 'signin')
   const [message, setMessage] = useState('')
 
   const handleAuth = async (e) => {
@@ -87,22 +91,40 @@ const Auth = ({ onAuthSuccess }) => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            {isSignUp ? 'Create your account' : 'Sign in to your account'}
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-12 px-4 sm:px-6 lg:px-8 transition-colors duration-200">
+      <div className="max-w-md w-full mx-auto space-y-8">
+        <div className="text-center">
+          <Link to="/" className="inline-flex items-center gap-2 font-bold text-2xl navy-text">
+            <span aria-hidden="true">🔥</span>
+            <span>FireFed</span>
+          </Link>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+            Retirement planning built for federal employees
+          </p>
+
+          <h2 className="mt-8 text-3xl font-bold text-slate-900 dark:text-white">
+            {isSignUp ? 'Create your free account' : 'Sign in to your account'}
           </h2>
+
+          {isSignUp && (
+            <ul className="mt-5 text-sm text-slate-600 dark:text-slate-300 space-y-1.5 text-left inline-block">
+              <li>✅ Save and revisit up to three retirement scenarios</li>
+              <li>✅ FERS pension, TSP projection, and the gap to age 62</li>
+              <li>✅ Free forever &mdash; Pro is $9.99/month if you want more</li>
+            </ul>
+          )}
+
           {!isSupabaseAvailable && (
-            <div className="mt-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
+            <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 rounded-lg">
               <p className="text-sm">
-                Authentication service unavailable. You can still use the app with guest mode (data stored locally).
+                Sign-in is unavailable right now. You can still use the app in guest mode, with scenarios
+                saved on this device only.
               </p>
             </div>
           )}
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleAuth}>
-          <div className="rounded-md shadow-sm -space-y-px">
+          <div className="space-y-3">
             <div>
               <label htmlFor="email" className="sr-only">
                 Email address
@@ -113,7 +135,7 @@ const Auth = ({ onAuthSuccess }) => {
                 type="email"
                 autoComplete="email"
                 required={isSupabaseAvailable}
-                className="relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="input-field w-full"
                 placeholder="Email address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -129,7 +151,7 @@ const Auth = ({ onAuthSuccess }) => {
                 type="password"
                 autoComplete={isSignUp ? "new-password" : "current-password"}
                 required={isSupabaseAvailable}
-                className="relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="input-field w-full"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -148,9 +170,9 @@ const Auth = ({ onAuthSuccess }) => {
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              className="btn-primary w-full disabled:opacity-50"
             >
-              {loading ? 'Loading...' : (isSignUp ? 'Sign up' : 'Sign in')}
+              {loading ? 'Working…' : isSignUp ? 'Create free account' : 'Sign in'}
             </button>
           </div>
 
@@ -160,7 +182,7 @@ const Auth = ({ onAuthSuccess }) => {
                 type="button"
                 onClick={handleForgotPassword}
                 disabled={resetLoading}
-                className="text-indigo-600 hover:text-indigo-500 text-sm disabled:opacity-50"
+                className="navy-text hover:underline text-sm disabled:opacity-50"
               >
                 {resetLoading ? 'Sending reset email…' : 'Forgot password?'}
               </button>
@@ -170,7 +192,7 @@ const Auth = ({ onAuthSuccess }) => {
           <div className="text-center">
             <button
               type="button"
-              className="text-indigo-600 hover:text-indigo-500 text-sm"
+              className="navy-text hover:underline text-sm"
               onClick={() => {
                 setIsSignUp(!isSignUp)
                 setMessage('')
@@ -184,7 +206,7 @@ const Auth = ({ onAuthSuccess }) => {
             <div className="text-center">
               <button
                 type="button"
-                className="text-gray-600 hover:text-gray-500 text-sm underline"
+                className="text-slate-600 dark:text-slate-400 hover:underline text-sm"
                 onClick={() => {
                   const run = isSupabaseAvailable ? loginAsGuest : () => login('guest@example.com', '')
                   run().then((result) => {
@@ -195,13 +217,23 @@ const Auth = ({ onAuthSuccess }) => {
                 Continue as Guest
               </button>
               {allowGuestPreview && isSupabaseAvailable && (
-                <p className="mt-2 text-xs text-gray-500">
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                   Guest mode saves scenarios on this device only. Sign up to sync across devices.
                 </p>
               )}
             </div>
           )}
         </form>
+
+        <div className="text-center pt-2 border-t border-slate-200 dark:border-slate-700">
+          <p className="text-sm text-slate-600 dark:text-slate-400 pt-4">
+            Not ready to sign up?{' '}
+            <Link to="/calculators/fers-pension" className="navy-text hover:underline font-medium">
+              Try the free FERS calculator
+            </Link>{' '}
+            &mdash; no account needed.
+          </p>
+        </div>
       </div>
     </div>
   )
