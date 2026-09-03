@@ -19,6 +19,11 @@ const ProFeatures = lazy(() => import('./components/ProFeatures'));
 const LegalTerms = lazy(() => import('./components/LegalTerms'));
 const LegalPrivacy = lazy(() => import('./components/LegalPrivacy'));
 const LegalDisclaimer = lazy(() => import('./components/LegalDisclaimer'));
+const PublicLayout = lazy(() => import('./components/public/PublicLayout'));
+const LandingPage = lazy(() => import('./components/public/LandingPage'));
+const PricingPage = lazy(() => import('./components/public/PricingPage'));
+const PublicFersCalculator = lazy(() => import('./components/public/PublicFersCalculator'));
+const PublicSrsCalculator = lazy(() => import('./components/public/PublicSrsCalculator'));
 
 function RouteLoading() {
   return (
@@ -227,16 +232,29 @@ function AppContent() {
     <Suspense fallback={<RouteLoading />}>
       <Routes>
         <Route path="/auth/reset" element={<ResetPassword />} />
-        <Route
-          path="*"
-          element={
-            isAuthenticated ? (
-              <AuthenticatedApp />
-            ) : (
-              <Auth onAuthSuccess={handleAuthSuccess} />
-            )
-          }
-        />
+
+        {isAuthenticated ? (
+          <Route path="*" element={<AuthenticatedApp />} />
+        ) : (
+          <>
+            {/* Reachable with no account. Someone arriving from a video needs to
+                see what this is, try it, and find the price before signing up. */}
+            <Route element={<PublicLayout />}>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/calculators/fers-pension" element={<PublicFersCalculator />} />
+              <Route
+                path="/calculators/special-retirement-supplement"
+                element={<PublicSrsCalculator />}
+              />
+              <Route path="/legal/terms" element={<LegalTerms />} />
+              <Route path="/legal/privacy" element={<LegalPrivacy />} />
+              <Route path="/legal/disclaimer" element={<LegalDisclaimer />} />
+            </Route>
+
+            <Route path="*" element={<Auth onAuthSuccess={handleAuthSuccess} />} />
+          </>
+        )}
       </Routes>
     </Suspense>
   );

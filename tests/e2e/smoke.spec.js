@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Smoke: core flows', () => {
   async function tryContinueAsGuest(page) {
-    await page.goto('/');
+    // "/" is the public landing page now; the auth screen lives at /signin.
+    await page.goto('/signin');
     const guestButton = page.getByRole('button', { name: 'Continue as Guest' });
     try {
       await guestButton.waitFor({ state: 'visible', timeout: 5000 });
@@ -114,11 +115,60 @@ test.describe('Smoke: core flows', () => {
     await expect(page.getByRole('heading', { name: /Reset your password/i })).toBeVisible();
   });
 
-  test('Unauthed users see the auth screen', async ({ page }) => {
+  test('Unauthed users land on the marketing page, not a login form', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: /Sign in to your account/i })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /Know what your federal retirement is actually worth/i })
+    ).toBeVisible();
+    // The product is named and priced before anyone is asked to sign up.
+    await expect(page.getByText(/\$9\.99\/month/)).toBeVisible();
     // Nothing behind the gate should be reachable before signing in.
     await expect(page.getByRole('link', { name: /Scenarios/ })).toHaveCount(0);
+  });
+
+  test('The auth screen defaults to sign-up and can be switched to sign-in', async ({ page }) => {
+    await page.goto('/signin');
+    await expect(page.getByRole('heading', { name: /Create your free account/i })).toBeVisible();
+
+    await page.goto('/signin?mode=signin');
+    await expect(page.getByRole('heading', { name: /Sign in to your account/i })).toBeVisible();
+  });
+
+  // The whole point of the public routes: a stranger from a video can get a real
+  // answer before being asked for anything.
+  test('The FERS calculator works with no account', async ({ page }) => {
+    await page.goto('/calculators/fers-pension');
+    await expect(page.getByRole('heading', { name: 'FERS Pension Calculator' })).toBeVisible();
+
+    await page.getByLabel('High-3 average salary').fill('100000');
+    await page.getByLabel('Years of service (so far)').fill('30');
+    await page.getByLabel('Current age').fill('57');
+    await page.getByLabel('Planned retirement age').fill('57');
+
+    // 100,000 x 30 years x 1.0% = $30,000.
+    await expect(page.getByText('$30,000')).toBeVisible();
+    await expect(page.getByRole('link', { name: /Create a free account/i }).first()).toBeVisible();
+  });
+
+  test('The SRS calculator explains ineligibility rather than showing zero', async ({ page }) => {
+    await page.goto('/calculators/special-retirement-supplement');
+    await expect(
+      page.getByRole('heading', { name: 'Special Retirement Supplement Calculator' })
+    ).toBeVisible();
+
+    // MRA+30 qualifies: 2000 x 30 / 40 = $1,500/mo.
+    await expect(page.getByText('$1,500/mo')).toBeVisible();
+
+    // MRA+10 is a reduced annuity and does not.
+    await page.getByLabel('Years of creditable civilian service').fill('10');
+    await expect(page.getByRole('heading', { name: /No supplement for this scenario/i })).toBeVisible();
+    await expect(page.getByText(/MRA\+10 is a reduced annuity/i)).toBeVisible();
+  });
+
+  test('Pricing is readable without an account', async ({ page }) => {
+    await page.goto('/pricing');
+    await expect(page.getByText('$9.99')).toBeVisible();
+    await expect(page.getByText('$0')).toBeVisible();
   });
 });
 
