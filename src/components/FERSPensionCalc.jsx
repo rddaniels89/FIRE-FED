@@ -16,6 +16,7 @@ import { useScenario } from '../contexts/ScenarioContext';
 import ScenarioManager from './ScenarioManager';
 import { SURVIVOR_ELECTIONS, calculateFersResults } from '../lib/calculations/fers';
 import { calculateSrs } from '../lib/calculations/srs';
+import { evaluateAllRetirementPaths } from '../lib/calculations/retirementPaths';
 import TooltipWrapper from './TooltipWrapper';
 import NumberStepper from './NumberStepper';
 
@@ -83,6 +84,7 @@ function FERSPensionCalc() {
       totalLifetimeEarnings: 0,
       breakEvenAge: 0
     },
+    paths: [],
     service: { eligibilityYears: 0, sickLeaveYears: 0, computationYears: 0, unusedSickLeaveHours: 0 },
     // Must exist before the first debounced calculation, or the panels below
     // dereference undefined on the very first render.
@@ -268,7 +270,16 @@ function FERSPensionCalc() {
       socialSecurityAt62Monthly: numericInputs.socialSecurityAt62Monthly,
     });
 
+    // Which doors are actually open at this age and service, and what each costs.
+    // No annuityStartAge: postponing and deferring default to the age that
+    // removes their reduction, which is the comparison worth showing.
+    const paths = evaluateAllRetirementPaths({
+      separationAge: numericInputs.retirementAge,
+      yearsOfService: fers.service.eligibilityYears,
+    });
+
     setResults({
+      paths,
       stayFed: fers.stayFed,
       leaveEarly: fers.leaveEarly,
       service: fers.service,
@@ -632,7 +643,54 @@ function FERSPensionCalc() {
                       disabledDecrement={numericInputs.unusedSickLeaveHours <= 0}
                     />
                   </div>
-                  {results.ageReduction.percent > 0 && (
+                  {results.paths.filter((p) => p.isEligible).length > 1 && (
+                <div className="mt-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="font-medium text-slate-900 dark:text-white text-sm mb-1">
+                    Your options at this age and service
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                    The same service can produce very different outcomes depending on which route you take out.
+                  </p>
+                  <div className="space-y-3">
+                    {results.paths
+                      .filter((p) => p.isEligible)
+                      .map((p) => (
+                        <div key={p.path} className="pb-3 border-b border-slate-200 dark:border-slate-700 last:border-0 last:pb-0">
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <span className="text-sm font-medium text-slate-900 dark:text-white">
+                              {p.label}
+                              {p.annuityStartAge > numericInputs.retirementAge && (
+                                <span className="font-normal text-slate-500 dark:text-slate-400">
+                                  {' '}&mdash; payments from {p.annuityStartAge}
+                                </span>
+                              )}
+                            </span>
+                            <span className="text-xs font-medium">
+                              {p.ageReductionPercent > 0 ? (
+                                <span className="text-amber-700 dark:text-amber-400">
+                                  &minus;{p.ageReductionPercent.toFixed(1)}% for age
+                                </span>
+                              ) : (
+                                <span className="text-green-700 dark:text-green-400">No age reduction</span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-slate-600 dark:text-slate-400">
+                            <span>{p.keepsFehb ? '✅ Keeps FEHB' : '❌ Loses FEHB'}</span>
+                            <span>{p.creditsSickLeave ? '✅ Sick leave credited' : '❌ Sick leave lost'}</span>
+                            <span>{p.hasSupplement ? '✅ Supplement' : '❌ No supplement'}</span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
+                    Losing FEHB is permanent and often costs more than the annuity difference. Postponing an
+                    MRA+10 annuity keeps it; deferring does not.
+                  </p>
+                </div>
+              )}
+
+              {results.ageReduction.percent > 0 && (
                 <div className="mt-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-800">
                   <div className="font-medium text-amber-900 dark:text-amber-200 text-sm mb-2">
                     MRA+10 age reduction &mdash; {results.ageReduction.percent.toFixed(1)}%
