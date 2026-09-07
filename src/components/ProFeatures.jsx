@@ -308,11 +308,13 @@ const ProFeatures = () => {
                   <div className="text-3xl font-bold text-slate-900 dark:text-white mt-2">$9.99</div>
                   <div className="text-sm text-slate-600 dark:text-slate-400">per month</div>
                   <ul className="mt-4 space-y-2 text-sm text-slate-700 dark:text-slate-200">
-                    <li>✅ Unlimited scenarios</li>
-                    <li>✅ PDF export</li>
-                    <li>✅ Compare scenarios</li>
-                    <li>✅ Export / import scenarios</li>
-                    <li>✅ Advanced analytics + optimization</li>
+                    <li>✅ Household and dual-fed modeling</li>
+                    <li>✅ Monte Carlo durability and named stress tests</li>
+                    <li>✅ 72(t) and Roth conversion ladder strategies</li>
+                    <li>✅ GS career and High-3 simulator</li>
+                    <li>✅ Compare up to five scenarios with a delta view</li>
+                    <li>✅ Federal Retirement Projection Report (PDF)</li>
+                    <li>✅ Unlimited scenarios, import/export, optimization</li>
                   </ul>
                   <button
                     onClick={() => startCheckout({ plan: 'monthly' })}

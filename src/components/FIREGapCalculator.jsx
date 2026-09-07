@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useScenario } from '../contexts/ScenarioContext';
 import { calculateFireGap, SAFE_WITHDRAWAL_RATE_PRESETS } from '../lib/calculations/fire';
+import { buildTimeline } from '../lib/projection/timeline';
 
 /**
  * FIREGapCalculator Component - Core MVP feature for FireFed SaaS
@@ -147,6 +148,19 @@ function FIREGapCalculator({ tspProjectedBalance, pensionMonthly }) {
       return recommendations;
     }
   };
+
+  // The bridge is read from the lifetime timeline, which sequences every income
+  // start and charges the taxes and penalties each withdrawal carries.
+  const timelineBridge = useMemo(() => {
+    if (!currentScenario?.profile) return null;
+    try {
+      const t = buildTimeline(currentScenario);
+      return { ...t.summary.bridge, plan: t.plan, isSustainable: t.summary.isSustainable };
+    } catch (e) {
+      console.error('Timeline bridge failed', e);
+      return null;
+    }
+  }, [currentScenario]);
 
   const swrPresets = useMemo(() => SAFE_WITHDRAWAL_RATE_PRESETS.slice(), []);
   const swrSensitivity = useMemo(() => {
@@ -425,31 +439,53 @@ function FIREGapCalculator({ tspProjectedBalance, pensionMonthly }) {
         </div>
       </div>
 
-      {/* Bridge Strategy */}
-      {desiredFireAge < pensionStartAge ? (
+      {/* Bridge, from the lifetime timeline */}
+      {timelineBridge && timelineBridge.years > 0 ? (
         <div className="card p-4 mb-6">
           <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">
-            Bridge Strategy (early exit)
+            Bridge (early exit)
           </h4>
           <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-            If you stop working at age {desiredFireAge}, your pension is assumed to start at age {pensionStartAge}. This section estimates the shortfall you’d need to fund for those bridge years.
+            Leaving at {timelineBridge.startAge} via {timelineBridge.plan?.pathLabel?.toLowerCase()}. Guaranteed income covers
+            spending and healthcare from age {timelineBridge.endAge}; the years in between are funded from savings, with taxes and
+            any early-withdrawal penalties included.
           </p>
-          <div className="grid md:grid-cols-3 gap-4 text-sm">
+          <div className="grid md:grid-cols-4 gap-4 text-sm">
             <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
-              <div className="text-slate-500 dark:text-slate-400 text-xs">Years to bridge</div>
-              <div className="font-semibold">{gapAnalysis.bridge?.yearsToBridge ?? 0}</div>
+              <div className="text-slate-500 dark:text-slate-400 text-xs">Bridge years</div>
+              <div className="font-semibold">{timelineBridge.years}</div>
             </div>
             <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
-              <div className="text-slate-500 dark:text-slate-400 text-xs">Monthly shortfall (pre-pension)</div>
-              <div className="font-semibold">{formatCurrency(gapAnalysis.bridge?.monthlyShortfall ?? 0)}</div>
+              <div className="text-slate-500 dark:text-slate-400 text-xs">Withdrawals needed</div>
+              <div className="font-semibold">{formatCurrency(timelineBridge.withdrawalsNeeded ?? 0)}</div>
             </div>
             <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
-              <div className="text-slate-500 dark:text-slate-400 text-xs">Estimated bridge assets needed</div>
-              <div className="font-semibold">{formatCurrency(gapAnalysis.bridge?.requiredBridgeAssets ?? 0)}</div>
+              <div className="text-slate-500 dark:text-slate-400 text-xs">Assets at separation</div>
+              <div className="font-semibold">{formatCurrency(timelineBridge.assetsAtSeparation ?? 0)}</div>
+            </div>
+            <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+              <div className="text-slate-500 dark:text-slate-400 text-xs">Bridge funded</div>
+              <div className="font-semibold">{Math.round(timelineBridge.fundedPercent ?? 0)}%</div>
             </div>
           </div>
+          {Array.isArray(timelineBridge.incomeStarts) && timelineBridge.incomeStarts.length > 0 ? (
+            <ul className="mt-3 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+              {timelineBridge.incomeStarts.map((s) => (
+                <li key={s.source}>
+                  {s.source} starts at {s.age}
+                  {s.endAge ? ` and ends at ${s.endAge}` : ''}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {timelineBridge.penalties > 0 ? (
+            <div className="disclaimer mt-3">
+              {formatCurrency(timelineBridge.penalties)} of early-withdrawal penalties fall inside the bridge. The plan page
+              shows the 72(t) and Roth ladder strategies that can remove them.
+            </div>
+          ) : null}
           <div className="disclaimer mt-3">
-            Simplified estimate: assumes level dollars and no investment growth/interest during the bridge period.
+            Projection from the lifetime timeline under the scenario's assumptions. Educational, not advice.
           </div>
         </div>
       ) : null}
