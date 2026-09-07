@@ -83,7 +83,11 @@ export default function PricingPage() {
       </div>
 
       <div className="card mt-10 overflow-x-auto">
-        <table className="w-full text-sm min-w-[520px]">
+        {/* The minimum only applies from `sm` up. Forced at every width it widens
+            the document past a phone viewport, and no ancestor overflow rule
+            contains it — the intrinsic minimum propagates regardless. Below
+            `sm` the three columns lay out naturally instead. */}
+        <table className="w-full text-sm sm:min-w-[520px]">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-700">
               <th className="text-left font-semibold text-slate-700 dark:text-slate-200 px-6 py-4">What you get</th>
