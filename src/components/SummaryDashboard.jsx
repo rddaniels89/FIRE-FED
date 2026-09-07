@@ -86,6 +86,9 @@ function SummaryDashboard() {
   const netWorthChartRef = useRef(null);
 
   const pensionEndAge = Number(currentScenario?.summary?.assumptions?.pensionEndAge ?? 85);
+  // The safe withdrawal rate is a user setting. Four figures below used to
+  // hardcode 4%, so someone planning at 3.25% still saw numbers computed at 4%.
+  const swr = Number(currentScenario?.summary?.assumptions?.safeWithdrawalRate ?? 0.04);
 
   // Load data from current scenario
   useEffect(() => {
@@ -698,10 +701,10 @@ function SummaryDashboard() {
           <div className="card p-6">
             <div className="stat-label">Annual retirement income</div>
             <div className="stat-figure mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
-              ${Math.round(pensionData.annualPension + (tspData.projectedBalance * 0.04)).toLocaleString()}
+              ${Math.round(pensionData.annualPension + (tspData.projectedBalance * swr)).toLocaleString()}
             </div>
             <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {Math.round(((pensionData.annualPension + (tspData.projectedBalance * 0.04)) / pensionData.high3Salary) * 100)}% of your High-3
+              {Math.round(((pensionData.annualPension + (tspData.projectedBalance * swr)) / pensionData.high3Salary) * 100)}% of your High-3
             </div>
           </div>
 
@@ -897,7 +900,7 @@ function SummaryDashboard() {
                 <div className="flex justify-between items-center">
                   <span className="text-slate-600">TSP Withdrawals (4%)</span>
                   <span className="font-medium text-slate-800">
-                    ${Math.round(tspData.projectedBalance * 0.04).toLocaleString()}
+                    ${Math.round(tspData.projectedBalance * swr).toLocaleString()}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -910,7 +913,7 @@ function SummaryDashboard() {
                 <div className="flex justify-between items-center">
                   <span className="text-slate-700 font-medium">Total Annual Income</span>
                   <span className="font-bold text-navy-600">
-                    ${Math.round(pensionData.annualPension + (tspData.projectedBalance * 0.04) + (pensionData.high3Salary * 0.4)).toLocaleString()}
+                    ${Math.round(pensionData.annualPension + (tspData.projectedBalance * swr) + (pensionData.high3Salary * 0.4)).toLocaleString()}
                   </span>
                 </div>
               </div>

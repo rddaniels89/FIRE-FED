@@ -22,6 +22,20 @@ describe('TSP tax rates from the bracket engine', () => {
     expect(currentMarginalRate(applyScenarioUpdates(base(), { taxes: { filingStatus: 'married_joint' } }))).toBe(0.12);
   });
 
+  it('taxes Social Security through the worksheet, not at a flat 85%', () => {
+    // A modest retirement income keeps provisional income below the top tier,
+    // so far less than 85% of the benefit is taxable. Assuming the ceiling
+    // overstated the retirement rate and biased the Roth comparison.
+    const modest = applyScenarioUpdates(base(), {
+      fers: { yearsOfService: 8, high3Salary: 60000 },
+      tsp: { currentBalance: 60000, annualSalary: 60000 },
+      fire: { monthlyFireIncomeGoal: 2500 },
+      summary: { monthlyExpenses: 2200, socialSecurity: { mode: 'manual', monthlyBenefit: 1500 } },
+    });
+    const r = resolveTspTaxRates(modest);
+    expect(r.retirementTaxRate).toBeLessThanOrEqual(12);
+  });
+
   it('the retirement rate comes from the timeline and is lower than the working rate here', () => {
     const r = resolveTspTaxRates(base());
     expect(r.currentTaxRate).toBe(22);
