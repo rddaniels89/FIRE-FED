@@ -34,6 +34,7 @@ import {
   fullRetirementAge,
 } from '../calculations/socialSecurity';
 import { projectCareerSalaries } from '../calculations/careerProjection';
+import { isMraTransitionYear, minimumRetirementAge } from '../calculations/mra';
 import { RETIREMENT_PATH_AUTO } from '../scenarios/schema';
 
 const num = (v, fallback = 0) => {
@@ -145,7 +146,13 @@ export function resolveHigh3AtSeparation(scenario) {
 export function resolveRetirementPlan(scenario, { asOfYear = new Date().getFullYear() } = {}) {
   const profile = scenario.profile;
   const fers = scenario.fers ?? {};
-  const mra = num(profile.mra, DEFAULT_MRA);
+  // OPM's MRA runs from 55 to 57 by year of birth. Assuming 57 for everyone
+  // overstates it for anyone born before 1970, which delays their eligibility.
+  const birthYear = birthYearFromAge({ currentAge: num(profile.currentAge, 42), asOfYear });
+  const mra =
+    profile.mra === null || profile.mra === undefined || profile.mra === ''
+      ? minimumRetirementAge(birthYear)
+      : num(profile.mra, DEFAULT_MRA);
   const currentAge = num(profile.currentAge);
   const separationAge = num(profile.separationAge, currentAge);
   const isSpecialProvision = isSpecialProvisionType(profile.employeeType);
@@ -242,6 +249,7 @@ export function resolveRetirementPlan(scenario, { asOfYear = new Date().getFullY
           socialSecurityAt62Monthly: socialSecurity.monthlyAt62,
           mra,
           isVoluntaryEarlyRetirement: path === RETIREMENT_PATHS.VERA,
+          isDiscontinuedService: Boolean(profile.isDiscontinuedService),
           isDeferredOrPostponed: isDeferred || isPostponed || path === RETIREMENT_PATHS.MRA10_IMMEDIATE,
           isSpecialProvision: Boolean(special?.isEligible),
         })
@@ -288,6 +296,9 @@ export function resolveRetirementPlan(scenario, { asOfYear = new Date().getFullY
     ],
     mandatoryRetirementAge,
     exceedsMandatoryAge,
+    mraBirthYear: birthYear,
+    mraIsDerived: profile.mra === null || profile.mra === undefined || profile.mra === '',
+    mraNeedsConfirming: isMraTransitionYear(birthYear),
     currentAge,
     separationAge,
     annuityStartAge,

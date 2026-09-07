@@ -26,6 +26,26 @@ describe('plan resolution', () => {
     expect(yes.path).toBe('immediate_unreduced');
   });
 
+  it('derives the minimum retirement age from the birth year, not a flat 57', () => {
+    // In 2026 a 60-year-old was born in 1966, whose MRA is 56 years 4 months.
+    // Assuming 57 would deny them MRA+10 a year before the law does.
+    const older = applyScenarioUpdates(base(), {
+      profile: { currentAge: 60, separationAge: 60, mra: null },
+      fers: { yearsOfService: 12 },
+    });
+    const plan = resolveRetirementPlan(older, { asOfYear: 2026 });
+    expect(plan.mraBirthYear).toBe(1966);
+    expect(plan.mraIsDerived).toBe(true);
+    expect(plan.mra).toBeCloseTo(56 + 4 / 12, 6);
+    expect(plan.isEligibleForAnnuity).toBe(true);
+    expect(plan.path).toBe('mra10_immediate');
+
+    // An explicit override still wins over the derived value.
+    const overridden = applyScenarioUpdates(older, { profile: { mra: 57 } });
+    expect(resolveRetirementPlan(overridden, { asOfYear: 2026 }).mra).toBe(57);
+    expect(resolveRetirementPlan(overridden, { asOfYear: 2026 }).mraIsDerived).toBe(false);
+  });
+
   it('a 45-year-old with 18 years leaving at 57 has MRA+30 and the supplement', () => {
     const plan = resolveRetirementPlan(base());
     expect(plan.service.eligibilityYears).toBe(30);

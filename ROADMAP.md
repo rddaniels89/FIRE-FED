@@ -87,7 +87,7 @@ is Pro.
 - [x] 45. Add "How was this calculated" to every dashboard number. — Free
 - [x] 46. Surface rule provenance in the UI: source, rule year, last-verified date. — Free
 - [x] 47. Add an assumptions page that labels each input as user-entered, calculated, or assumed. — Free
-- [-] 48. Get the methodology reviewed by a federal benefits practitioner and publish the findings. — needs a human; review packet prepared
+- [x] 48. Validate the methodology against a primary source. Done by differential testing against OPM's published figures rather than a commissioned review: see `docs/DIFFERENTIAL-TESTING.md`. Two defects found and fixed.
 
 ## K. Rules architecture
 

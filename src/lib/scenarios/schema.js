@@ -81,7 +81,10 @@ export function createDefaultProfile() {
     isVeraOffered: false,
     employeeType: 'regular',
     hireCohort: FERS_HIRE_COHORTS.FERS_FRAE,
-    mra: DEFAULT_MRA,
+    // null means "derive from year of birth" using OPM's table. A number is an
+    // explicit override for someone who knows their own MRA.
+    mra: null,
+    isDiscontinuedService: false,
   };
 }
 
@@ -389,7 +392,9 @@ function sanitizeProfile(profile) {
     separationAge,
     annuityStartAge,
     socialSecurityClaimAge,
-    mra: num(profile.mra, DEFAULT_MRA),
+    // Left null so the plan resolver can derive it from the birth year; only a
+    // deliberate override is carried through as a number.
+    mra: profile.mra === null || profile.mra === undefined || profile.mra === '' ? null : num(profile.mra, DEFAULT_MRA),
   };
 }
 

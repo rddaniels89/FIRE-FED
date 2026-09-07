@@ -62,6 +62,7 @@ export function evaluateSrsEligibility({
   creditableYearsOfService,
   mra = DEFAULT_MRA,
   isVoluntaryEarlyRetirement = false,
+  isDiscontinuedService = false,
   isDeferredOrPostponed = false,
   isSpecialProvision = false,
 } = {}) {
@@ -91,8 +92,12 @@ export function evaluateSrsEligibility({
     return { isEligible: true, isPayableNow: true, payableFromAge: age, reason: null };
   }
 
-  // VERA is its own qualifying route; payment waits until MRA.
-  if (isVoluntaryEarlyRetirement) {
+  // An early out and an involuntary (discontinued service) separation are both
+  // qualifying routes in their own right, and both wait until MRA to be paid.
+  // Chapter 51, Example 3: a retiree separated involuntarily at 55 years 4
+  // months "is not eligible to receive the retiree annuity supplement until he
+  // attains his minimum retirement age".
+  if (isVoluntaryEarlyRetirement || isDiscontinuedService) {
     return {
       isEligible: true,
       isPayableNow: age >= mraAge,
@@ -173,6 +178,7 @@ export function calculateSrs({
   socialSecurityAt62Monthly,
   mra = DEFAULT_MRA,
   isVoluntaryEarlyRetirement = false,
+  isDiscontinuedService = false,
   isDeferredOrPostponed = false,
   isSpecialProvision = false,
   annualEarnedIncome = 0,
@@ -184,6 +190,7 @@ export function calculateSrs({
     creditableYearsOfService,
     mra,
     isVoluntaryEarlyRetirement,
+    isDiscontinuedService,
     isDeferredOrPostponed,
     isSpecialProvision,
   });
