@@ -12,6 +12,8 @@
  */
 
 /** Conflict target for the daily upsert; matches the unique index in SQL. */
+import { toScenarioRow } from './storage';
+
 export const SNAPSHOT_CONFLICT_TARGET = 'scenario_id,snapshot_date';
 
 /**
@@ -39,10 +41,6 @@ export function buildScenarioSnapshot({ scenario, userId, date } = {}) {
     scenario_id: String(scenarioId),
     user_id: userId,
     snapshot_date: snapshotDate,
-    scenario_name: scenario.name ?? null,
-    tsp_data: scenario.tsp ?? null,
-    fers_data: scenario.fers ?? null,
-    fire_goal: scenario.fire ?? null,
-    summary_data: scenario.summary ?? null,
+    ...toScenarioRow(scenario),
   };
 }

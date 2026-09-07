@@ -3,11 +3,14 @@ import {
   DEFAULT_LOCALITY_CODE,
   EXECUTIVE_SCHEDULE_LEVEL_IV_CAP,
   GS_BASE_TABLE,
+  GS_PAY_TABLES,
   GS_PAY_TABLE_YEAR,
   LOCALITY_AREAS,
   calculateGsSalary,
   estimateHigh3FromGrade,
   getGsBasePay,
+  getDefinedGsPayTableYears,
+  getGsPayTable,
   getLocality,
 } from '../gsPay';
 
@@ -129,5 +132,28 @@ describe('high-3 from a grade', () => {
 describe('the table year is stated', () => {
   it('names the year the figures come from', () => {
     expect(GS_PAY_TABLE_YEAR).toBe(2026);
+  });
+});
+
+describe('tables are versioned by year', () => {
+  it('returns the exact table for a published year', () => {
+    const t = getGsPayTable(2026);
+    expect(t.isExact).toBe(true);
+    expect(t.year).toBe(2026);
+    expect(t.baseTable).toBe(GS_BASE_TABLE);
+    expect(t.localityAreas).toBe(LOCALITY_AREAS);
+    expect(t.executiveScheduleLevelIvCap).toBe(EXECUTIVE_SCHEDULE_LEVEL_IV_CAP);
+  });
+
+  it('falls back to the latest table for an unpublished year and says so', () => {
+    const t = getGsPayTable(2030);
+    expect(t.isExact).toBe(false);
+    expect(t.requestedYear).toBe(2030);
+    expect(t.year).toBe(GS_PAY_TABLE_YEAR);
+    expect(calculateGsSalary({ grade: 13, step: 1, localityCode: 'RUS', year: 2030 }).salary).toBe(106437);
+  });
+
+  it('lists the published years', () => {
+    expect(getDefinedGsPayTableYears()).toEqual(Object.keys(GS_PAY_TABLES).map(Number));
   });
 });

@@ -25,6 +25,10 @@ const LandingPage = lazy(() => import('./components/public/LandingPage'));
 const PricingPage = lazy(() => import('./components/public/PricingPage'));
 const PublicFersCalculator = lazy(() => import('./components/public/PublicFersCalculator'));
 const PublicSrsCalculator = lazy(() => import('./components/public/PublicSrsCalculator'));
+const PlanDashboard = lazy(() => import('./components/plan/PlanDashboard'));
+const PlanInputs = lazy(() => import('./components/plan/PlanInputs'));
+const CareerSimulator = lazy(() => import('./components/plan/CareerSimulator'));
+const AssumptionsPage = lazy(() => import('./components/AssumptionsPage'));
 
 /** Routing is client-side, so pageviews have to be reported explicitly. */
 function PageViewTracker() {
@@ -54,6 +58,7 @@ function Navigation() {
 
   const navItems = [
     { path: '/', label: 'Home', icon: '🏠' },
+    { path: '/plan', label: 'My Plan', icon: '🗺️' },
     { path: '/tsp-forecast', label: 'TSP Forecast', icon: '📈' },
     { path: '/fers-pension', label: 'FERS Pension', icon: '💰' },
     { path: '/summary', label: 'Summary', icon: '📊' },
@@ -202,6 +207,10 @@ function AuthenticatedApp() {
         <Suspense fallback={<RouteLoading />}>
           <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/plan" element={<PlanDashboard />} />
+            <Route path="/plan/inputs" element={<PlanInputs />} />
+            <Route path="/plan/career" element={<CareerSimulator />} />
+            <Route path="/assumptions" element={<AssumptionsPage />} />
             <Route path="/tsp-forecast" element={<TSPForecast />} />
             <Route path="/fers-pension" element={<FERSPensionCalc />} />
             <Route path="/summary" element={<SummaryDashboard />} />
