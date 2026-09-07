@@ -1,12 +1,16 @@
-# Differential testing against OPM
+# Differential testing against OPM, the IRS and SSA
 
 Run 2026-09-07. This is how FireFed's methodology is validated in place of an
 independent practitioner review: every rule is asserted against the figures the
 authority itself publishes, so a disagreement is a fact rather than an opinion.
 
-The suite is `src/lib/calculations/__tests__/opmDifferential.test.js`. It runs
-with the rest of the tests, so a future change that breaks agreement with OPM
-fails the build.
+Two suites, both running with the rest of the tests so a future change that
+breaks agreement with an authority fails the build:
+
+- `src/lib/calculations/__tests__/opmDifferential.test.js` — the FERS rules
+- `src/lib/taxes/__tests__/irsSsaDifferential.test.js` — tax and Social Security
+
+48 assertions in total. Three defects found across the two runs, all fixed.
 
 ## Sources
 
@@ -126,3 +130,79 @@ collect. The divergence is recorded on the assumptions page rather than hidden.
 
 Re-read the sources when OPM revises a handbook chapter, and update the
 `lastVerified` dates in `src/lib/rules/registry.js` at the same time.
+
+
+---
+
+# Part 2: the IRS and SSA
+
+Run 2026-09-07, after the OPM pass. The FERS rules had never been checked
+against a primary source and yielded two defects, so the same treatment was
+applied to the tax and Social Security rules, which had also never been checked.
+
+## Sources
+
+| Source | Used for |
+|---|---|
+| IRS Publication 915 (2025), *Social Security and Equivalent Railroad Retirement Benefits* | Worksheet 1 line by line, its two filled-in examples, the statutory base amounts and second-tier widths |
+| SSA, *Starting Your Retirement Benefits Early* | the full retirement age table and the reduction at 62 for all seven cohorts |
+| SSA Office of the Chief Actuary, *Early or Late Retirement?* | the 5/9 and 5/12 of one percent rules, and the delayed retirement credit table by birth year |
+| IRS Notice 2022-6 | the 5% floor on the interest rate for substantially equal periodic payments |
+
+Publication 915 was downloaded and its text extracted rather than read through
+a summary. The two SSA pages block automated fetching, so they were read in a
+browser.
+
+## Result
+
+25 assertions, 24 in agreement on the first run.
+
+A clean first run is a reason for suspicion rather than satisfaction, so the
+edge cases most likely to be wrong were then probed directly: the
+married-filing-separately case with no base amount, the exact tier boundary at
+$34,000 and one dollar above it, and the pre-1943 birth cohorts. That probe
+found the one divergence below.
+
+### Finding: the delayed retirement credit was hardcoded at 8%
+
+**Severity: low, and academic in practice.** The code applied 2/3 of one percent
+a month, 8% a year, to every birth year. SSA's table runs from 3.0% for those
+born 1917–24 up to 8.0% only for 1943 and later.
+
+Someone born in 1930 claiming at 70 was credited 40% rather than the correct
+22.5%. Nobody planning a federal retirement today is outside the 8% band, so no
+plausible user was affected. It is fixed anyway: a rate that is wrong for some
+inputs has to be reasoned about every time it is read, and the table is smaller
+than the caveat would have been.
+
+## What agreed
+
+- Publication 915 Worksheet 1, Example 1 to the dollar: a single filer with
+  $5,980 of benefits and $28,990 of other income has $2,990 taxable
+- Worksheet 1, Example 2: a couple with $28,750 of other income after an IRA
+  deduction and $5,600 of benefits has none taxable, as the publication states
+  in words
+- The statutory base amounts, $25,000 and $32,000, and the second-tier widths,
+  $9,000 and $12,000
+- The 85% ceiling on the taxable portion
+- A married-separate filer who lived with their spouse gets no base amount and
+  is taxed on 85%
+- The tier boundary behaves correctly at exactly $34,000 and at one dollar above
+- The full retirement age table for all seven cohorts, and the reduction at 62
+  for each: a $1,000 benefit becomes $750, $741, $733, $725, $716, $708 and
+  $700, matching SSA's published figures after its round-down
+- 5/9 of one percent for the first 36 months and 5/12 beyond, reproducing SSA's
+  own arithmetic that 36 months plus 24 months is a 30% reduction
+- The credit stops accruing at 70
+- The 5% floor on the SEPP interest rate under Notice 2022-6
+
+## Combined result across both parts
+
+| Authority | Assertions | Defects found |
+|---|---|---|
+| OPM | 23 | 2 |
+| IRS and SSA | 25 | 1 |
+
+The three defects were: the minimum retirement age hardcoded at 57, discontinued
+service retirement not modeled, and the delayed retirement credit hardcoded at
+8%. The first was user-affecting and shipping.
