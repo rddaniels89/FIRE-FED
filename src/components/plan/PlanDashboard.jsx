@@ -152,7 +152,7 @@ export default function PlanDashboard() {
             </div>
             {fireDate?.found ? (
               <>
-                <div className="text-5xl font-bold gold-accent mb-2 tabular-nums">
+                <div className="stat-figure mb-2 text-6xl font-semibold text-gold-600 dark:text-gold-400">
                   <HowCalculated ruleId="fire.date">{fireDate.separationAge}</HowCalculated>
                 </div>
                 <div className="text-sm text-slate-600 dark:text-slate-400">

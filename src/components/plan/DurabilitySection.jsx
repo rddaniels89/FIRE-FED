@@ -39,7 +39,7 @@ function ProGate({ locked, reason, children, preview }) {
 
 function MetricTile({ label, value, sub }) {
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 bg-white dark:bg-slate-900">
+    <div className="stat-tile p-3">
       <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
       <div className="text-xl font-bold navy-text mt-0.5 tabular-nums">{value}</div>
       {sub && <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{sub}</div>}
