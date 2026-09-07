@@ -61,11 +61,11 @@ export const ANNUAL_PARAMETERS = Object.freeze({
     fers: Object.freeze({
       /**
        * Interest on a refund of FERS contributions, and on service-credit
-       * deposits, is set annually by Treasury. 2024: 4.375%; 2025: 4.5%; the
-       * 2026 rate is carried as an estimate until OPM publishes it.
-       * https://www.opm.gov/retirement-center/csrs-information/service-credit/
+       * deposits, is set annually by Treasury. 2025: 4.375%; 2026: 4.25%
+       * (OPM Benefits Administration Letter 26-301). Verified 2026-09-07.
+       * https://www.opm.gov/retirement-center/publications-forms/benefits-administration-letters/2026/26-301.pdf
        */
-      refundInterestRate: 0.045,
+      refundInterestRate: 0.0425,
       /** Employee contribution rates by hire cohort. 5 U.S.C. 8422(a). */
       contributionRates: Object.freeze({ fers: 0.008, fers_rae: 0.031, fers_frae: 0.044 }),
     }),
@@ -244,7 +244,7 @@ export const ANNUAL_PARAMETERS = Object.freeze({
         Object.freeze({ singleMagiAbove: 137000, jointMagiAbove: 274000, partBMonthly: 405.7 }),
         Object.freeze({ singleMagiAbove: 171000, jointMagiAbove: 342000, partBMonthly: 527.2 }),
         Object.freeze({ singleMagiAbove: 205000, jointMagiAbove: 410000, partBMonthly: 648.8 }),
-        Object.freeze({ singleMagiAbove: 500000, jointMagiAbove: 750000, partBMonthly: 689.3 }),
+        Object.freeze({ singleMagiAbove: 500000, jointMagiAbove: 750000, partBMonthly: 689.9 }),
       ]),
       irmaaLookbackYears: 2,
     }),

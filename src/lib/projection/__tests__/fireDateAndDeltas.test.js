@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { findFireDate, withSeparationAge } from '../fireDate';
+import { resolveRetirementPlan } from '../plan';
 import { compareSeparationShift, oneYearDeltas, separationSweep } from '../deltas';
 import { runStressTests, STRESS_TESTS } from '../../analytics/stressTests';
 import { monteCarloBySeparationAge, runMonteCarloAnalytics } from '../../analytics/monteCarlo';
@@ -24,6 +25,18 @@ describe('the Federal FIRE Date', () => {
     expect(r.timeline.summary.isSustainable).toBe(true);
     // Every age tried before it was not sustainable.
     for (const t of r.tried.slice(0, -1)) expect(t.isSustainable).toBe(false);
+  });
+
+  it('never searches past the mandatory retirement age for a special provision employee', () => {
+    const leo = applyScenarioUpdates(base(), {
+      profile: { currentAge: 45, separationAge: 60, employeeType: 'law_enforcement' },
+      fire: { monthlyFireIncomeGoal: 40000 },
+    });
+    const r = findFireDate(leo);
+    expect(r.found).toBe(false);
+    expect(r.tried[r.tried.length - 1].separationAge).toBe(57);
+    expect(resolveRetirementPlan(leo).exceedsMandatoryAge).toBe(true);
+    expect(resolveRetirementPlan(leo).notes.join(' ')).toMatch(/Mandatory retirement at 57/);
   });
 
   it('reports not found when nothing works before the cap', () => {

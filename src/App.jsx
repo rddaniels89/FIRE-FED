@@ -63,7 +63,7 @@ function Navigation() {
     { path: '/fers-pension', label: 'FERS Pension', icon: '💰' },
     { path: '/summary', label: 'Summary', icon: '📊' },
     { path: '/scenarios', label: 'Scenarios', icon: '💼' },
-    { path: '/pro-features', label: 'Pro Features', icon: '🚀' },
+    { path: '/pro-features', label: 'Pro', icon: '🚀' },
   ];
 
   return (
@@ -77,20 +77,20 @@ function Navigation() {
             </Link>
           </div>
 
-          <div className="hidden md:flex items-center space-x-4">
+          <div className="hidden lg:flex items-center space-x-2 min-w-0">
             {isAuthenticated && (
-              <div className="flex items-baseline space-x-6">
+              <div className="flex items-baseline space-x-1 min-w-0">
                 {navItems.map((item) => (
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    className={`px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200 ${
                       location.pathname === item.path
                         ? 'bg-navy-600 text-white shadow-md'
                         : 'text-slate-600 dark:text-slate-300 hover:text-navy-700 dark:hover:text-navy-400 hover:bg-slate-50 dark:hover:bg-slate-700'
                     }`}
                   >
-                    <span className="mr-2">{item.icon}</span>
+                    <span className="mr-2 hidden xl:inline">{item.icon}</span>
                     {item.label}
                   </Link>
                 ))}
@@ -98,9 +98,12 @@ function Navigation() {
             )}
 
             {isAuthenticated && (
-              <div className="flex items-center space-x-3">
-                <span className="text-sm text-slate-600 dark:text-slate-300">
-                  👋 Welcome, {user?.email || user?.user_metadata?.email}
+              <div className="flex items-center space-x-3 shrink-0">
+                <span
+                  className="hidden xl:inline text-sm text-slate-600 dark:text-slate-300 truncate max-w-[12rem]"
+                  title={user?.email || user?.user_metadata?.email}
+                >
+                  👋 {user?.email || user?.user_metadata?.email}
                 </span>
                 <button
                   onClick={logout}
@@ -120,7 +123,7 @@ function Navigation() {
             </button>
           </div>
 
-          <div className="md:hidden flex items-center space-x-2">
+          <div className="lg:hidden flex items-center space-x-2">
             <button
               onClick={toggleTheme}
               className="p-2 rounded-md text-slate-600 dark:text-slate-300 hover:text-navy-700 dark:hover:text-navy-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all duration-200"
@@ -141,7 +144,7 @@ function Navigation() {
       </div>
 
       {isMenuOpen && (
-        <div className="md:hidden border-t border-slate-200 dark:border-slate-700">
+        <div className="lg:hidden border-t border-slate-200 dark:border-slate-700">
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-slate-50 dark:bg-slate-800">
             {isAuthenticated && (
               <>

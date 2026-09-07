@@ -1,5 +1,6 @@
 import { projectAnnuityWithCola } from './cola';
 import { calculateSpecialProvisionAnnuity } from './specialProvisions';
+import { getAnnualParameters } from './annualParameters';
 
 export const DEFAULT_RETIREMENT_END_AGE = 85;
 export const DEFAULT_MRA = 57;
@@ -49,10 +50,10 @@ export function getFersContributionRate(hireCohort) {
  * contributor it almost never beats keeping the annuity.
  *
  * Interest: none for service under one year; the market rate set by Treasury
- * thereafter, compounded annually. Recent rates ran 1.375% (2021) to 4.375%
- * (2024). Source: 5 U.S.C. 8422(i); OPM SF 3106 instructions.
+ * thereafter, compounded annually. 2025: 4.375%; 2026: 4.25% (OPM BAL 26-301).
+ * The rate lives in annualParameters.js. Source: 5 U.S.C. 8422(i); OPM SF 3106.
  */
-export const FERS_REFUND_INTEREST_RATE_DEFAULT = 0.0375;
+export const FERS_REFUND_INTEREST_RATE_DEFAULT = getAnnualParameters().fers.refundInterestRate;
 
 export function calculateFersRefund({
   annualSalaries = [],

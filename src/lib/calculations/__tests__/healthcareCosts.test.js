@@ -168,7 +168,7 @@ describe('IRMAA tiers', () => {
   it('reaches the top tier above $500,000', () => {
     const r = calculateIrmaaSurcharge({ magi: 600000, filingStatus: 'single' });
     expect(r.tierIndex).toBe(4);
-    expect(r.monthlySurcharge).toBeCloseTo(689.3 - 202.9, 6);
+    expect(r.monthlySurcharge).toBeCloseTo(689.9 - 202.9, 6);
   });
 });
 

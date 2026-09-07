@@ -15,6 +15,10 @@ never runs dry under stated assumptions. It does not give individualized
 financial advice, and its wording is kept to "projected" and "under these
 assumptions" throughout.
 
+How the review is being arranged, with candidate reviewers and a draft
+request, is in `REVIEW-OUTREACH.md`; the form for recording verdicts is
+`REVIEW-WORKSHEET.md`.
+
 ## What we would like reviewed
 
 For each rule below: is the rule stated correctly, is the source the right

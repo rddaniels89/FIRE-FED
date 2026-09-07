@@ -56,3 +56,32 @@ rules show their age in the UI.
 
 Update the assumptions page copy and `ROADMAP.md` if any rule was added or
 retired.
+
+## Verification log
+
+### 2026-09-07
+
+Every figure flagged as unverified when the 2026 parameters were first entered
+was checked against its source. Three corrections were made.
+
+| Figure | Value in code | Source | Result |
+|---|---|---|---|
+| Standard deduction (single / joint / HoH) | 16,100 / 32,200 / 24,150 | IRS Rev. Proc. 2025-32 via https://taxfoundation.org/data/all/federal/2026-tax-brackets/ | matches |
+| Additional deduction age 65+ (unmarried / married) | 2,050 / 1,650 | same | matches |
+| Senior bonus deduction | 6,000, 6% phase-out above 75,000 / 150,000 | same | matches |
+| Ordinary brackets, all statuses | as coded | same | matches, including the HoH 32% ceiling of 256,200 |
+| Long-term gains 0% / 15% ceilings | 49,450 / 98,900 / 66,200; 545,500 / 613,700 / 579,600 | same | matches |
+| FICA wage base | 184,500 | https://etf.wi.gov/news/social-security-wage-base-set-increase-2026 | matches |
+| Earnings test exempt amounts | 24,480 / 65,160 | https://www.nasdaq.com/articles/here-are-2026-social-security-earnings-test-limits | matches |
+| Part B premium and deductible | 202.90 / 283 | https://www.federalregister.gov/documents/2025/11/19/2025-20251/ | matches |
+| IRMAA thresholds | 109,000 / 218,000 first tier; 500,000 / 750,000 top | https://www.kiplinger.com/retirement/medicare/medicare-premiums-2026-irmaa-brackets-and-surcharges-for-parts-b-and-d | matches |
+| IRMAA top-tier premium | was 689.30 | same | **corrected to 689.90** |
+| FEHB enrollee-share increase | 12.3% (total 10.2%) | https://www.fedsmith.com/2025/10/09/federal-employees-face-12-percent-jump-in-2026-fehb-premiums/ | matches |
+| TSP limits | 24,500 / 8,000 / 11,250 / 150,000 | https://www.tsp.gov/bulletins/25-3/ | matches |
+| FERS refund and deposit interest | was 4.5% | OPM BAL 26-301 https://www.opm.gov/retirement-center/publications-forms/benefits-administration-letters/2026/26-301.pdf | **corrected to 4.25%** |
+| State rates: IN 2.95, KY 3.5, OH 2.75, ID 5.3, GA 5.19, NE 4.55, LA 3.0, IA 3.8, NC 3.99, AZ 2.5, UT 4.5, CO 4.4, MI 4.25, PA 3.07, IL 4.95 | as coded | https://taxfoundation.org/data/all/state/state-income-tax-rates-2026/ | matches |
+| Mississippi flat rate | was 4.4% | same | **corrected to 4.0%** (final step of the phase-down) |
+| Progressive states coded as effective rates (WV top 4.82, MT top 5.65, AR top 3.9, NM top 5.9, SC top 6.0, MO top 4.7) | effective approximations below the top rate | same | left as approximations; the file says so |
+
+Not verified: the married-filing-separately IRMAA schedule (not modeled) and
+the state pension-exclusion dollar amounts (indexed annually in ME, MD, MO).

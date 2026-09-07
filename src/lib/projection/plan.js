@@ -26,7 +26,7 @@ import {
 import { calculateSrs } from '../calculations/srs';
 import { evaluateFehbContinuation } from '../calculations/fehb';
 import { describeTspAccess } from '../calculations/tspAccess';
-import { SPECIAL_PROVISION_TYPES, evaluateSpecialProvisionEligibility } from '../calculations/specialProvisions';
+import { SPECIAL_PROVISION_TYPES, evaluateSpecialProvisionEligibility, getMandatoryRetirementAge } from '../calculations/specialProvisions';
 import {
   birthYearFromAge,
   estimatePiaFromSalary,
@@ -173,6 +173,10 @@ export function resolveRetirementPlan(scenario, { asOfYear = new Date().getFullY
   const special = isSpecialProvision
     ? evaluateSpecialProvisionEligibility({ age: separationAge, coveredYears: eligibilityYears, type: profile.employeeType })
     : null;
+  // Special provision employees are separated by law at the mandatory age (57;
+  // 56 for air traffic controllers). A later separation age is not available.
+  const mandatoryRetirementAge = isSpecialProvision ? getMandatoryRetirementAge(profile.employeeType) : null;
+  const exceedsMandatoryAge = mandatoryRetirementAge != null && separationAge > mandatoryRetirementAge;
 
   // Special provision retirement is immediate and unreduced whenever its own
   // test is met, whatever the regular FERS doors say.
@@ -276,7 +280,14 @@ export function resolveRetirementPlan(scenario, { asOfYear = new Date().getFullY
     pathLabel: pathEval?.label ?? (special?.isEligible ? 'Special provision, immediate' : 'No annuity'),
     isEligibleForAnnuity,
     reason: pathEval?.reason ?? null,
-    notes: pathEval?.notes ?? [],
+    notes: [
+      ...(pathEval?.notes ?? []),
+      ...(exceedsMandatoryAge
+        ? [`Mandatory retirement at ${mandatoryRetirementAge} for this position: a separation at ${separationAge} is not available.`]
+        : []),
+    ],
+    mandatoryRetirementAge,
+    exceedsMandatoryAge,
     currentAge,
     separationAge,
     annuityStartAge,

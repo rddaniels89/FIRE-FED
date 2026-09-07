@@ -13,6 +13,7 @@
 
 import { buildTimeline } from './timeline';
 import { applyScenarioUpdates } from '../scenarios/schema';
+import { resolveRetirementPlan } from './plan';
 
 const num = (v, fallback = 0) => {
   const n = Number(v);
@@ -35,7 +36,9 @@ export function withSeparationAge(scenario, separationAge) {
  */
 export function findFireDate(scenario, options = {}) {
   const currentAge = Math.ceil(num(scenario?.profile?.currentAge));
-  const maxAge = num(options.maxSeparationAge, 75);
+  // Special provision employees cannot separate after the mandatory age.
+  const mandatory = resolveRetirementPlan(scenario).mandatoryRetirementAge;
+  const maxAge = Math.min(num(options.maxSeparationAge, 75), mandatory ?? Infinity);
   const tried = [];
 
   for (let age = currentAge; age <= maxAge; age++) {
