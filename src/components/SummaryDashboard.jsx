@@ -19,7 +19,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import AdvancedAnalyticsPanel from './AdvancedAnalyticsPanel';
 import OptimizationPanel from './OptimizationPanel';
 import { calculateTspTraditionalVsRoth } from '../lib/calculations/tsp';
-import { calculateFersResults, DEFAULT_MRA, findEarliestFersImmediateRetirementAge } from '../lib/calculations/fers';
+import { calculateFersResults, findEarliestFersImmediateRetirementAge } from '../lib/calculations/fers';
+import { birthYearFromAgeAndMonths, minimumRetirementAge } from '../lib/calculations/mra';
 import { calculateFireGap } from '../lib/calculations/fire';
 import { calculateSrs } from '../lib/calculations/srs';
 import { FEATURES, hasEntitlement } from '../lib/entitlements';
@@ -320,10 +321,24 @@ function SummaryDashboard() {
       const totalYearsOfService =
         Number(currentScenario?.fers?.yearsOfService ?? 0) + Number(currentScenario?.fers?.monthsOfService ?? 0) / 12;
 
+      // The minimum retirement age runs from 55 to 57 by year of birth. An
+      // explicit override on the profile wins; otherwise derive it, the same
+      // way the plan resolver does, so the two pages cannot disagree.
+      const profileLocal = currentScenario?.profile ?? {};
+      const mraLocal =
+        profileLocal.mra === null || profileLocal.mra === undefined || profileLocal.mra === ''
+          ? minimumRetirementAge(
+              birthYearFromAgeAndMonths({
+                currentAge: profileLocal.currentAge,
+                currentAgeMonths: profileLocal.currentAgeMonths,
+              }) - (profileLocal.bornOnJanuaryFirst ? 1 : 0)
+            )
+          : Number(profileLocal.mra);
+
       const earliestFersImmediateAge = findEarliestFersImmediateRetirementAge({
         currentAge: currentScenario?.fers?.currentAge,
         totalYearsOfService,
-        mra: DEFAULT_MRA,
+        mra: mraLocal,
       });
 
       const pensionStartAge = Number(currentScenario?.fers?.retirementAge ?? pensionData.retirementAge ?? tspData.retirementAge);
@@ -337,7 +352,7 @@ function SummaryDashboard() {
         showComparison: false,
         includeFutureService: true,
         retirementEndAge: pensionEndAgeLocal,
-        mra: DEFAULT_MRA,
+        mra: mraLocal,
         unusedSickLeaveHours: currentScenario?.fers?.unusedSickLeaveHours ?? 0,
         survivorElection: currentScenario?.fers?.survivorElection,
       });
@@ -438,7 +453,7 @@ function SummaryDashboard() {
           generatedAt: new Date().toLocaleString(),
           swr: swrLocal,
           pensionEndAge: pensionEndAgeLocal,
-          mra: DEFAULT_MRA,
+          mra: mraLocal,
           earliestFersImmediateAge,
 
           totalNetWorthAtRetirement: fireData.totalNetWorth,
