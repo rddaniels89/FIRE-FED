@@ -383,9 +383,9 @@ that names them:
 - The Social Security benefit comes from your statement; there is no wage
   indexing or bend-point computation
 - The methodology has not been reviewed by an independent federal benefits
-  practitioner. It is instead validated by differential testing against OPM's
-  own published figures, which found and fixed two defects; see
-  `docs/DIFFERENTIAL-TESTING.md`.
+  practitioner. It is instead validated by differential testing against the
+  published figures of OPM, the IRS and SSA, which found and fixed three
+  defects; see `docs/DIFFERENTIAL-TESTING.md`.
 - The Special Retirement Supplement uses OPM's published shorthand rather than
   OPM's full internal computation, which needs an earnings history the app does
   not collect.
@@ -402,5 +402,7 @@ that names them:
 - 12 browser tests covering the main journeys
 - Every 2026 figure checked against IRS, Social Security Administration, CMS,
   OPM, TSP, and Tax Foundation sources on 2026-09-07
-- 23 differential assertions against the CSRS/FERS Handbook Chapters 50 and 51
-  and OPM's eligibility table, run with the rest of the suite
+- 48 differential assertions against primary sources, run with the rest of the
+  suite: the CSRS/FERS Handbook Chapters 50 and 51 and OPM's eligibility table,
+  IRS Publication 915's worksheet and its filled-in examples, SSA's full
+  retirement age and delayed credit tables, and IRS Notice 2022-6

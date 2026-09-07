@@ -56,6 +56,39 @@ export const EARLY_REDUCTION_FIRST_TIER_MONTHS = 36;
 export const DELAYED_CREDIT_RATE_PER_MONTH = 2 / 3 / 100;
 
 /**
+ * The delayed retirement credit is not 8% for everyone. It rises with year of
+ * birth from 3% to 8%, reaching 8% only for those born in 1943 or later.
+ * https://www.ssa.gov/oact/quickcalc/early_late.html
+ *
+ * Everyone planning a federal retirement today is in the 8% band, so this table
+ * changes nothing in practice. It is here because a rate that is wrong for some
+ * inputs is a rate that has to be reasoned about, and a small table costs less
+ * than the caveat would.
+ */
+const DELAYED_CREDIT_ANNUAL_RATE_BY_BIRTH_YEAR = Object.freeze([
+  [1924, 0.03],
+  [1926, 0.035],
+  [1928, 0.04],
+  [1930, 0.045],
+  [1932, 0.05],
+  [1934, 0.055],
+  [1936, 0.06],
+  [1938, 0.065],
+  [1940, 0.07],
+  [1942, 0.075],
+]);
+
+/** Annual delayed retirement credit rate for a year of birth. */
+export function delayedCreditAnnualRate(birthYear) {
+  const year = Number(birthYear);
+  if (!Number.isFinite(year)) return DELAYED_CREDIT_RATE_PER_MONTH * 12;
+  for (const [through, rate] of DELAYED_CREDIT_ANNUAL_RATE_BY_BIRTH_YEAR) {
+    if (year <= through) return rate;
+  }
+  return DELAYED_CREDIT_RATE_PER_MONTH * 12;
+}
+
+/**
  * The 2025 Trustees Report projects the OASI trust fund reserves deplete in
  * 2033, after which continuing payroll-tax income covers about 77% of
  * scheduled benefits — a 23% across-the-board cut unless Congress acts. The
@@ -177,7 +210,7 @@ export function claimingAdjustment({ claimAgeMonths, claimAge, fraMonths, fra, b
   const firstTier = Math.min(reductionMonths, EARLY_REDUCTION_FIRST_TIER_MONTHS);
   const secondTier = Math.max(0, reductionMonths - EARLY_REDUCTION_FIRST_TIER_MONTHS);
   const reduction = firstTier * EARLY_REDUCTION_RATE_FIRST_36 + secondTier * EARLY_REDUCTION_RATE_BEYOND_36;
-  const credit = creditMonths * DELAYED_CREDIT_RATE_PER_MONTH;
+  const credit = creditMonths * (delayedCreditAnnualRate(birthYear) / 12);
 
   return {
     factor: 1 - reduction + credit,
