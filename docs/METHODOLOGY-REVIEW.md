@@ -15,9 +15,11 @@ never runs dry under stated assumptions. It does not give individualized
 financial advice, and its wording is kept to "projected" and "under these
 assumptions" throughout.
 
-How the review is being arranged, with candidate reviewers and a draft
-request, is in `REVIEW-OUTREACH.md`; the form for recording verdicts is
-`REVIEW-WORKSHEET.md`.
+No practitioner review has been commissioned, and none is planned. In its
+place the model is checked by differential testing against OPM's own published
+figures: see `src/lib/calculations/__tests__/opmDifferential.test.js`, which
+asserts against the CSRS/FERS Handbook Chapters 50 and 51 and OPM's eligibility
+table. The findings from the first run are in `docs/DIFFERENTIAL-TESTING.md`.
 
 ## What we would like reviewed
 
@@ -30,7 +32,8 @@ worked example.
 |---|---|---|---|
 | Eligibility | MRA+30, 60+20, 62+5 unreduced; MRA+10 reduced 5/12% per month under 62; deferred with 5+ years; VERA 50/20 or any/25 when offered; special provisions 50/20 or any/25 | `src/lib/calculations/retirementPaths.js`, `fers.js`, `specialProvisions.js` | `__tests__/retirementPaths.test.js`, `goldenCases.test.js`, `opmConformance.test.js` |
 | Service | Years and months carried; sick leave credited only on immediate annuities and only for computation; High-3 at separation grown from today's salary or from a GS career path | `fers.js`, `projection/plan.js`, `careerProjection.js` | `fers.test.js`, `careerProjection.test.js` |
-| Multiplier | 1.0%; 1.1% at 62 with 20 years at separation; not earned by a deferred or postponed annuity that merely begins at 62 | `fers.js` | `goldenCases.test.js` |
+| Multiplier | 1.0%; 1.1% at 62 with 20 years at separation; not earned by a deferred or postponed annuity that merely begins at 62, nor by a special provision computation | `fers.js` | `goldenCases.test.js`, `opmDifferential.test.js` |
+| Minimum retirement age | 55 to 57 by year of birth on OPM's table, derived from the stored age unless overridden | `mra.js` | `opmDifferential.test.js` |
 | Survivor | 10% reduction for 50%, 5% for 25%, survivor share computed before the reduction | `fers.js` | `fers.test.js` |
 | COLA | Diet COLA (CPI ≤2 → CPI; 2–3 → 2; >3 → CPI−1); none before 62 except special provisions | `cola.js` | `cola.test.js` |
 | Deferred freeze | Deferred and postponed annuities computed on the separation-day High-3, no COLA until commencement | `projection/plan.js` | `timeline.test.js` |
@@ -68,6 +71,10 @@ worked example.
    bend-point computation.
 9. Required minimum distributions are not modeled.
 10. Spousal and survivor Social Security benefits are not modeled.
+11. The supplement uses OPM's published shorthand (the age-62 benefit prorated
+    by service over 40) rather than OPM's full internal method, which rebuilds
+    an indexed earnings history and applies the Social Security bend-point
+    formula. OPM itself gives the shorthand to employees for estimating.
 
 ## Questions for the reviewer
 

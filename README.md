@@ -21,8 +21,9 @@ A comprehensive Federal Employee Retirement Planning application designed to hel
 - Legacy calculators: FERS Pension, TSP Forecast, Summary
 
 See `ROADMAP.md` for the build checklist, `DEVELOPMENT_DOCUMENTATION.md` for
-the model architecture, `docs/ANNUAL-UPDATE.md` for yearly figure updates, and
-`docs/METHODOLOGY-REVIEW.md` for the practitioner review packet.
+the model architecture, `docs/ANNUAL-UPDATE.md` for yearly figure updates, `docs/METHODOLOGY-REVIEW.md` for how each rule is stated and sourced, and
+`docs/DIFFERENTIAL-TESTING.md` for the validation against OPM's published
+figures.
 
 ## Technology Stack
 
