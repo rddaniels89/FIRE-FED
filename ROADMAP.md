@@ -19,7 +19,7 @@ is Pro.
 - [x] 4. Build a year-by-year cash-flow engine: one row per age with salary, pension, SRS, Social Security, TSP withdrawals, other income, healthcare, taxes, spending, ending balance. — Free (deterministic)
 - [x] 5. Replace the level-dollar, no-growth bridge estimate with the timeline-driven version that sequences each income start. — Free
 - [x] 6. Make Monte Carlo consume the same timeline rows. — Pro
-- [~] 7. Point the optimizer, the PDF, and the dashboard at the timeline. — Free/Pro as before
+- [x] 7. Point the optimizer, the PDF, and the dashboard at the timeline. — Free/Pro as before
 
 ## B. FERS rules that decide a FIRE outcome
 
@@ -73,9 +73,9 @@ is Pro.
 
 ## H. Comparison
 
-- [~] 40. Add a delta view that highlights only the fields that differ between scenarios. — Pro
-- [~] 41. Compare three to five scenarios on one screen. — Pro
-- [~] 42. Compare Monte Carlo results across separation ages. — Pro
+- [x] 40. Add a delta view that highlights only the fields that differ between scenarios. — Pro
+- [x] 41. Compare three to five scenarios on one screen. — Pro
+- [x] 42. Compare Monte Carlo results across separation ages. — Pro
 
 ## I. Monte Carlo and stress
 
@@ -107,5 +107,5 @@ is Pro.
 
 - [x] 57. Goal-first onboarding that asks only the inputs the chosen question needs. — Free
 - [x] 58. Rebuild the dashboard around four questions with the timeline as the central view. — Free (Monte Carlo card Pro)
-- [~] 59. Rebuild the PDF from the timeline: bridge, Social Security, healthcare, taxes, stress results, assumptions, sources. — Pro
+- [x] 59. Rebuild the PDF from the timeline: bridge, Social Security, healthcare, taxes, stress results, assumptions, sources. — Pro
 - [x] 60. Wire the GS pay module into a career projection: step increases, raises, promotions, and the resulting High-3. — Pro

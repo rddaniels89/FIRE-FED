@@ -61,6 +61,15 @@ function portfolioStdDev({ weights }) {
   return Math.sqrt(varApprox);
 }
 
+const SUGGESTION_KIND_LABELS = Object.freeze({
+  contribution: 'TSP contribution',
+  separation_later: 'One more year',
+  separation_earlier: 'One year earlier',
+  social_security_claim: 'Social Security claiming age',
+  sepp: '72(t) bridge strategy',
+  deferred_freeze: 'Deferred annuity',
+});
+
 const RISK_PRESETS = Object.freeze([
   {
     key: 'conservative',
@@ -125,26 +134,10 @@ export default function OptimizationPanel() {
       navigate('/pro-features', { state: { reason: 'optimization_pro' } });
       return;
     }
-    if (!currentScenario) return;
+    if (!currentScenario || !s?.updates) return;
 
-    const next = {
-      tsp: {
-        retirementAge: s.retirementAge,
-        monthlyContributionPercent: s.contributionPct,
-      },
-      fers: {
-        retirementAge: s.retirementAge,
-      },
-      summary: {
-        monthlyExpenses: s.monthlyExpenses,
-      },
-    };
-
-    await updateCurrentScenario(next);
-    trackEvent('pro_optimizer_suggestion_applied', {
-      retirementAge: s.retirementAge,
-      contributionPct: s.contributionPct,
-    });
+    await updateCurrentScenario(s.updates);
+    trackEvent('pro_optimizer_suggestion_applied', { kind: s.kind, id: s.id });
   };
 
   return (
@@ -153,7 +146,8 @@ export default function OptimizationPanel() {
         <div>
           <h3 className="text-xl font-semibold navy-text">🎯 Optimization suggestions</h3>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Explore tradeoffs to reach FIRE sooner (simplified, educational).
+            Each line is one change run through the full timeline, with what it moves. Educational projections, not
+            individualized advice.
           </p>
         </div>
         {!canOptimize && (
@@ -168,45 +162,50 @@ export default function OptimizationPanel() {
 
       {/* Parameter search suggestions */}
       <div className="mt-6 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
-        <div className="font-semibold text-slate-900 dark:text-white mb-2">Quick optimizer</div>
-        {!optimizer ? (
+        <div className="font-semibold text-slate-900 dark:text-white mb-2">What one change moves</div>
+        {!optimizer?.baseline ? (
           <div className="text-sm text-slate-600 dark:text-slate-400">No scenario loaded.</div>
         ) : (
           <>
             <div className="text-sm text-slate-600 dark:text-slate-400">
-              Baseline: retirement age <span className="font-medium">{optimizer.baseline.retirementAge}</span>, contribution{' '}
-              <span className="font-medium">{optimizer.baseline.contributionPct}%</span>, expenses{' '}
-              <span className="font-medium">{formatMoney(optimizer.baseline.monthlyExpenses)}/mo</span>
-              {optimizer.baseline.earliestFireAge ? (
+              Baseline: separating at <span className="font-medium">{optimizer.baseline.separationAge}</span> via{' '}
+              <span className="font-medium">{optimizer.baseline.pathLabel}</span>, contributing{' '}
+              <span className="font-medium">{optimizer.baseline.contributionPct}%</span>, spending{' '}
+              <span className="font-medium">{formatMoney(optimizer.baseline.monthlyExpenses)}/mo</span> while working.{' '}
+              {optimizer.baseline.fireAge != null ? (
                 <>
-                  {' '}→ earliest FIRE age <span className="font-medium">{optimizer.baseline.earliestFireAge}</span>
+                  Projected sustainable separation age{' '}
+                  <span className="font-medium">{optimizer.baseline.fireAge}</span>
+                  {optimizer.baseline.isSustainable ? '; this scenario holds through the end age.' : '; this scenario runs short'}
+                  {!optimizer.baseline.isSustainable && optimizer.baseline.firstShortfallAge != null
+                    ? ` at ${optimizer.baseline.firstShortfallAge}.`
+                    : ''}
                 </>
               ) : (
-                ''
+                'No separation age up to the search limit holds through the end age under these inputs.'
               )}
             </div>
 
             {optimizer.suggestions.length === 0 ? (
               <div className="mt-3 text-sm text-slate-600 dark:text-slate-400">
-                No clear improvement found in the small search space. Try increasing your FIRE goal inputs or adjusting assumptions.
+                None of the changes tried (higher contributions, a year either way, a different Social Security claiming
+                age, a 72(t) schedule) moves this scenario. The Assumptions page lists every input the model reads.
               </div>
             ) : (
               <div className="mt-4 space-y-3">
                 {optimizer.suggestions.map((s) => (
                   <div
                     key={s.id}
-                    className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-800/40"
+                    className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-800/40"
                   >
                     <div className="text-sm text-slate-700 dark:text-slate-200">
-                      <div className="font-medium">
-                        Estimated earliest FIRE age: {s.earliestFireAge}
-                        {Number.isFinite(s.improvementYears) && s.improvementYears > 0 ? ` (−${s.improvementYears}y)` : ''}
+                      <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">
+                        {SUGGESTION_KIND_LABELS[s.kind] ?? 'Projection'}
                       </div>
-                      <div className="text-slate-600 dark:text-slate-400 mt-1">
-                        Retirement age {s.retirementAge} · Contribution {s.contributionPct}% · Expenses {formatMoney(s.monthlyExpenses)}/mo
-                      </div>
+                      <div className="font-medium">{s.title}</div>
+                      {s.detail && <div className="text-slate-600 dark:text-slate-400 mt-1">{s.detail}</div>}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0">
                       <button
                         className="btn-secondary"
                         onClick={() => navigate('/summary')}
@@ -214,9 +213,11 @@ export default function OptimizationPanel() {
                       >
                         Review
                       </button>
-                      <button className="btn-primary" onClick={() => applySuggestion(s)}>
-                        Apply
-                      </button>
+                      {s.updates && (
+                        <button className="btn-primary" onClick={() => applySuggestion(s)}>
+                          Apply
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -227,7 +228,7 @@ export default function OptimizationPanel() {
 
         {!canOptimize && (
           <div className="mt-4 text-xs text-slate-500 dark:text-slate-400">
-            Pro required to apply recommendations.
+            Pro is required to apply a change to the scenario.
           </div>
         )}
       </div>
