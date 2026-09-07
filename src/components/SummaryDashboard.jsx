@@ -14,7 +14,8 @@ import { useScenario } from '../contexts/ScenarioContext';
 import { useAuth } from '../contexts/AuthContext';
 import ScenarioManager from './ScenarioManager';
 import FIREGapCalculator from './FIREGapCalculator';
-import { useNavigate } from 'react-router-dom';
+import ProjectionDisclaimer from './ProjectionDisclaimer';
+import { Link, useNavigate } from 'react-router-dom';
 import AdvancedAnalyticsPanel from './AdvancedAnalyticsPanel';
 import OptimizationPanel from './OptimizationPanel';
 import { calculateTspTraditionalVsRoth } from '../lib/calculations/tsp';
@@ -24,7 +25,7 @@ import { calculateSrs } from '../lib/calculations/srs';
 import { FEATURES, hasEntitlement } from '../lib/entitlements';
 import { trackEvent } from '../lib/telemetry';
 import NumberStepper from './NumberStepper';
-import { FileDown, Lock } from 'lucide-react';
+import { FileDown, Lock, X } from 'lucide-react';
 import { createRetirementReportPdf } from '../lib/pdf/report';
 import { buildTimeline } from '../lib/projection/timeline';
 import { findFireDate } from '../lib/projection/fireDate';
@@ -68,9 +69,7 @@ function SummaryDashboard() {
 
   const [fireData, setFireData] = useState({
     monthlyExpenses: 4000,
-    desiredFireAge: 55,
-    projectedFireAge: 0,
-    fireMessage: '',
+    separationAge: 55,
     totalNetWorth: 0,
     fireGoalMonthly: 0
   });
@@ -85,10 +84,7 @@ function SummaryDashboard() {
   const pensionVsTspChartRef = useRef(null);
   const netWorthChartRef = useRef(null);
 
-  const summary = currentScenario?.summary ?? {};
-  const summaryAssumptions = summary?.assumptions ?? {};
-
-  const swr = Number(summaryAssumptions.safeWithdrawalRate ?? 0.04);
+  const pensionEndAge = Number(currentScenario?.summary?.assumptions?.pensionEndAge ?? 85);
 
   // Load data from current scenario
   useEffect(() => {
@@ -155,11 +151,11 @@ function SummaryDashboard() {
         }));
       }
 
-      // Load FIRE goal inputs from scenario (user-configured FIRE age, etc.)
+      // The separation age lives on the profile; `fire.desiredFireAge` is only a mirror.
       if (currentScenario.fire) {
         setFireData(prev => ({
           ...prev,
-          desiredFireAge: currentScenario.fire.desiredFireAge || 55,
+          separationAge: currentScenario.profile?.separationAge ?? 55,
           fireGoalMonthly: currentScenario.fire.monthlyFireIncomeGoal || 0
         }));
       }
@@ -177,6 +173,23 @@ function SummaryDashboard() {
     }
   }, [fireData.monthlyExpenses, currentScenario, updateCurrentScenario]);
 
+  /**
+   * The projected sustainable separation age is owned by My Plan, which reads it
+   * from the lifetime timeline: taxes, penalties, healthcare and the supplement
+   * all included. This screen used to run its own flat-withdrawal search over
+   * the TSP series and print a different number a scroll apart from that one.
+   * It now shows the same figure and links to the page that explains it.
+   */
+  const fireDate = useMemo(() => {
+    if (!currentScenario) return null;
+    try {
+      return findFireDate(currentScenario);
+    } catch (e) {
+      console.error('FIRE date failed', e);
+      return null;
+    }
+  }, [currentScenario]);
+
   const calculateFireProjection = useCallback(() => {
     const totalNetWorth = tspData.projectedBalance + pensionData.lifetimePension;
 
@@ -186,59 +199,18 @@ function SummaryDashboard() {
         ? currentScenario.fire.monthlyFireIncomeGoal
         : fireData.monthlyExpenses;
 
-    const sideHustleIncome = currentScenario?.fire?.sideHustleIncome ?? 0;
-    const spouseIncome = currentScenario?.fire?.spouseIncome ?? 0;
-
-    const pensionStartAge = currentScenario?.fers?.retirementAge ?? pensionData.retirementAge ?? tspData.retirementAge;
-    const pensionMonthly = pensionData.monthlyPension || 0;
-
-    // Find first age where projected passive income meets FIRE goal.
-    let projectedFireAge = 0;
-    const series = Array.isArray(tspData.yearlyData) ? tspData.yearlyData : [];
-    for (const point of series) {
-      const age = Number(point.year ?? 0);
-      const balance = Number(point.balance ?? 0);
-      if (!age) continue;
-
-      const tspMonthlyWithdrawal = balance * (Number(swr ?? 0.04) || 0.04) / 12;
-      const pensionThisAge = age >= pensionStartAge ? pensionMonthly : 0;
-      const totalMonthlyIncome = tspMonthlyWithdrawal + pensionThisAge + sideHustleIncome + spouseIncome;
-
-      if (totalMonthlyIncome >= fireGoalMonthly) {
-        projectedFireAge = Math.round(age);
-        break;
-      }
-    }
-
-    let fireMessage = '';
-    if (projectedFireAge > 0) {
-      const isBeforeRetirement = projectedFireAge <= tspData.retirementAge;
-      fireMessage = isBeforeRetirement
-        ? `Projected to reach FIRE at age ${projectedFireAge} given your current plan and income goal of $${Number(fireGoalMonthly).toLocaleString()}/month.`
-        : `Projected to reach FIRE after your planned retirement age (age ${projectedFireAge}). Consider reducing expenses or increasing savings/income.`;
-    } else {
-      fireMessage = 'Projected FIRE age not available with current inputs.';
-    }
-
     setFireData(prev => {
-      if (
-        prev.projectedFireAge === projectedFireAge &&
-        prev.fireMessage === fireMessage &&
-        prev.totalNetWorth === totalNetWorth &&
-        prev.fireGoalMonthly === fireGoalMonthly
-      ) {
+      if (prev.totalNetWorth === totalNetWorth && prev.fireGoalMonthly === fireGoalMonthly) {
         return prev;
       }
 
       return ({
         ...prev,
-        projectedFireAge,
-        fireMessage,
         totalNetWorth,
         fireGoalMonthly
       });
     });
-  }, [tspData, pensionData, currentScenario?.fire, currentScenario?.fers, fireData.monthlyExpenses, swr]);
+  }, [tspData.projectedBalance, pensionData.lifetimePension, currentScenario?.fire, fireData.monthlyExpenses]);
 
   useEffect(() => {
     calculateFireProjection();
@@ -394,7 +366,7 @@ function SummaryDashboard() {
         pensionMonthly: pensionData.monthlyPension,
         fire: currentScenario?.fire ?? {},
         safeWithdrawalRate: swrLocal,
-        desiredFireAge: fireData.desiredFireAge,
+        desiredFireAge: fireData.separationAge,
         pensionStartAge,
         supplementMonthly: srsLocal.isEligible ? srsLocal.monthlyAfterEarningsTest : 0,
         supplementStartAge: srsLocal.payableFromAge ?? pensionStartAge,
@@ -502,8 +474,8 @@ function SummaryDashboard() {
           pensionMonthly: pensionData.monthlyPension,
           pensionLifetimeValue: pensionData.lifetimePension,
 
-          desiredFireAge: fireData.desiredFireAge,
-          projectedFireAge: fireData.projectedFireAge,
+          desiredFireAge: fireData.separationAge,
+          projectedFireAge: reportFireDate?.found ? reportFireDate.separationAge : null,
           fireIncomeGoalMonthly: fireGap.fireIncomeGoal,
           tspMonthlyWithdrawal: fireGap.tspMonthlyWithdrawal,
           monthlyIncomeBeforePension: fireGap.bridge?.monthlyShortfall != null
@@ -547,15 +519,19 @@ function SummaryDashboard() {
       <ScenarioManager />
       
       <div className="mb-8">
-        <div className="flex justify-between items-start mb-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-start mb-4">
           <div>
-            <h1 className="text-3xl font-bold navy-text mb-3">Retirement Summary Dashboard</h1>
+            <h1 className="text-3xl font-bold navy-text mb-3">Summary</h1>
             <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              Combined analysis of your TSP investments and FERS pension with FIRE calculations 
-              and retirement readiness assessment.
+              A cross-check of the TSP and pension calculators. The lifetime timeline and the projected sustainable
+              separation age are on{' '}
+              <Link to="/plan" className="text-navy-600 dark:text-navy-300 hover:underline">
+                My Plan
+              </Link>
+              .
             </p>
           </div>
-          
+
           {canExportPdf ? (
             <button
               onClick={() => setIsPdfSettingsOpen(true)}
@@ -564,8 +540,8 @@ function SummaryDashboard() {
             >
               {isGeneratingPDF ? (
                 <>
-                  <span className="animate-spin">⏳</span>
-                  Generating...
+                  <FileDown className="h-4 w-4 animate-pulse" />
+                  Generating…
                 </>
               ) : (
                 <>
@@ -587,8 +563,10 @@ function SummaryDashboard() {
                 <Lock className="h-4 w-4" />
                 Export PDF (Pro)
               </button>
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap z-50">
-                {!isAuthenticated ? '🔒 Please log in to save or export your FIRE scenario.' : '🔒 PDF export is a Pro feature. Upgrade on the Pro Features page.'}
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 dark:bg-slate-700 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-normal w-64 max-w-[80vw] z-50">
+                {!isAuthenticated
+                  ? 'Log in to save or export this scenario.'
+                  : 'PDF export is a Pro feature. Upgrade on the Pro Features page.'}
               </div>
             </div>
           )}
@@ -596,13 +574,13 @@ function SummaryDashboard() {
       </div>
 
       {isPdfSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div
             className="absolute inset-0 bg-slate-900/60"
             onClick={() => !isGeneratingPDF && setIsPdfSettingsOpen(false)}
             aria-hidden="true"
           />
-          <div className="relative w-full max-w-lg rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl p-6">
+          <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl p-6">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
                 <h3 className="text-xl font-semibold navy-text">Export PDF Report</h3>
@@ -611,12 +589,12 @@ function SummaryDashboard() {
                 </p>
               </div>
               <button
-                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-slate-300 dark:hover:bg-slate-800"
                 onClick={() => !isGeneratingPDF && setIsPdfSettingsOpen(false)}
                 aria-label="Close export settings"
                 disabled={isGeneratingPDF}
               >
-                ✕
+                <X className="h-5 w-5" aria-hidden="true" />
               </button>
             </div>
 
@@ -693,35 +671,40 @@ function SummaryDashboard() {
       <div ref={summaryRef} className="bg-white dark:bg-slate-900 p-6 rounded-lg">
         <div className="grid md:grid-cols-4 gap-6 mb-8">
           <div className="card p-6 text-center">
-            <div className="text-3xl font-bold navy-text mb-2">
+            <div className="text-2xl lg:text-3xl font-bold navy-text mb-2 tabular-nums">
               ${fireData.totalNetWorth.toLocaleString()}
             </div>
             <div className="text-sm text-slate-500 dark:text-slate-400">Total Net Worth at Retirement</div>
           </div>
           <div className="card p-6 text-center">
-            <div className="text-3xl font-bold gold-accent mb-2">
-              ${(pensionData.annualPension + (tspData.projectedBalance * 0.04)).toLocaleString()}
+            <div className="text-2xl lg:text-3xl font-bold gold-accent mb-2 tabular-nums">
+              ${Math.round(pensionData.annualPension + (tspData.projectedBalance * 0.04)).toLocaleString()}
             </div>
             <div className="text-sm text-slate-500 dark:text-slate-400">Annual Retirement Income</div>
           </div>
           <div className="card p-6 text-center">
             <div className="grid grid-cols-2 gap-4 items-start">
               <div>
-                <div className="text-3xl font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  {fireData.desiredFireAge}
+                <div className="text-2xl lg:text-3xl font-bold text-slate-600 dark:text-slate-400 mb-1 tabular-nums">
+                  {fireData.separationAge}
                 </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Desired FIRE Age</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">Separation age</div>
               </div>
-              <div className="rounded-lg border border-gold-200 dark:border-gold-700 bg-gold-50 dark:bg-gold-900/20 p-2">
-                <div className="text-3xl font-bold text-gold-700 dark:text-gold-300 mb-1">
-                  {fireData.projectedFireAge || '—'}
+              <Link
+                to="/plan"
+                className="block rounded-lg border border-gold-200 dark:border-gold-700 bg-gold-50 dark:bg-gold-900/20 p-2 hover:border-gold-400 dark:hover:border-gold-500"
+              >
+                <div className="text-2xl lg:text-3xl font-bold text-gold-700 dark:text-gold-300 mb-1 tabular-nums">
+                  {fireDate?.found ? fireDate.separationAge : '—'}
                 </div>
-                <div className="text-xs font-semibold text-gold-700 dark:text-gold-300">Projected FIRE Age</div>
-              </div>
+                <div className="text-xs font-semibold text-gold-700 dark:text-gold-300">
+                  Projected sustainable separation age
+                </div>
+              </Link>
             </div>
           </div>
           <div className="card p-6 text-center">
-            <div className="text-3xl font-bold text-slate-600 dark:text-slate-400 mb-2">
+            <div className="text-2xl lg:text-3xl font-bold text-slate-600 dark:text-slate-400 mb-2 tabular-nums">
               {Math.round(((pensionData.annualPension + (tspData.projectedBalance * 0.04)) / pensionData.high3Salary) * 100)}%
             </div>
             <div className="text-sm text-slate-500 dark:text-slate-400">Income Replacement</div>
@@ -729,72 +712,52 @@ function SummaryDashboard() {
         </div>
 
         <div className="card p-6 mb-8">
-          <h3 className="text-xl font-semibold navy-text mb-4">Smart Analysis</h3>
+          <h3 className="text-xl font-semibold navy-text mb-1">What the inputs show</h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+            Three readings from the numbers on file, each with the basis it was computed on.
+          </p>
           <div className="space-y-4">
             {(() => {
-              const savingsRate = (tspData.totalContributions / (pensionData.high3Salary * (tspData.retirementAge - tspData.currentAge))) * 100;
+              const workingYears = Math.max(0, tspData.retirementAge - tspData.currentAge);
+              const savingsRate = (tspData.totalContributions / (pensionData.high3Salary * workingYears)) * 100;
               return (
-                <div className={`p-4 rounded-lg border ${
-                  savingsRate > 20 ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700' :
-                  savingsRate > 10 ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700' :
-                  'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700'
-                }`}>
-                  <div className={`font-medium ${
-                    savingsRate > 20 ? 'text-green-700 dark:text-green-300' :
-                    savingsRate > 10 ? 'text-yellow-700 dark:text-yellow-300' :
-                    'text-red-700 dark:text-red-300'
-                  }`}>
-                    Savings Rate: {savingsRate.toFixed(1)}%
+                <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40">
+                  <div className="font-medium text-slate-800 dark:text-slate-200 tabular-nums">
+                    Savings rate: {Number.isFinite(savingsRate) ? savingsRate.toFixed(1) : '—'}%
                   </div>
                   <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                    {savingsRate > 20 ? 'Excellent! Your savings rate is strong — you\'re on track for early retirement.' :
-                     savingsRate > 10 ? 'Good savings rate, but consider increasing contributions to reach your FIRE goal earlier.' :
-                     'Your savings rate could be improved. Consider increasing TSP contributions for better retirement outcomes.'}
+                    Projected TSP contributions of ${tspData.totalContributions.toLocaleString()} over{' '}
+                    {workingYears.toFixed(1)} years, as a share of a ${pensionData.high3Salary.toLocaleString()} high-3
+                    salary held flat.
                   </div>
                 </div>
               );
             })()}
 
-            {(() => {
-              const tspStrong = tspData.projectedBalance > 500000;
-              return (
-                <div className={`p-4 rounded-lg border ${
-                  tspStrong ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700' :
-                  'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700'
-                }`}>
-                  <div className={`font-medium ${
-                    tspStrong ? 'text-green-700 dark:text-green-300' : 'text-yellow-700 dark:text-yellow-300'
-                  }`}>
-                    TSP Projection: ${tspData.projectedBalance.toLocaleString()}
-                  </div>
-                  <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                    {tspStrong ? 'Strong TSP balance projected! This provides excellent retirement security.' :
-                     'Consider maximizing TSP contributions and reviewing your fund allocation for optimal growth.'}
-                  </div>
-                </div>
-              );
-            })()}
+            <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40">
+              <div className="font-medium text-slate-800 dark:text-slate-200 tabular-nums">
+                TSP at separation: ${tspData.projectedBalance.toLocaleString()}
+              </div>
+              <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                From the current balance and contributions grown at the expected return of the allocation on file, to
+                age {tspData.retirementAge}.
+              </div>
+            </div>
 
-            {(() => {
-              const fireAchievable = (fireData.projectedFireAge || 0) > 0 && fireData.projectedFireAge <= tspData.retirementAge;
-              return (
-                <div className={`p-4 rounded-lg border ${
-                  fireAchievable ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700' :
-                  'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700'
-                }`}>
-                  <div className={`font-medium ${
-                    fireAchievable ? 'text-green-700 dark:text-green-300' : 'text-blue-700 dark:text-blue-300'
-                  }`}>
-                    FIRE Status: {fireAchievable ? 'Achievable' : 'Post-Retirement'}
-                  </div>
-                  <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                    {fireAchievable ? 
-                     `Great news! You may achieve FIRE by age ${fireData.projectedFireAge}, before your planned retirement.` :
-                     'FIRE would be achieved after retirement age. Consider reducing expenses or increasing savings rate.'}
-                  </div>
-                </div>
-              );
-            })()}
+            <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40">
+              <div className="font-medium text-slate-800 dark:text-slate-200 tabular-nums">
+                Projected sustainable separation age:{' '}
+                {fireDate?.found ? fireDate.separationAge : 'not found under these inputs'}
+              </div>
+              <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                The earliest separation age at which the lifetime timeline never runs short, taxes, penalties,
+                healthcare and the supplement included. The separation age on file is {fireData.separationAge}.{' '}
+                <Link to="/plan" className="text-navy-600 dark:text-navy-300 hover:underline">
+                  See it on My Plan
+                </Link>
+                .
+              </div>
+            </div>
           </div>
         </div>
 
@@ -807,7 +770,7 @@ function SummaryDashboard() {
 
         <OptimizationPanel />
 
-        <div className="grid lg:grid-cols-2 gap-8">
+        <div className="grid lg:grid-cols-2 gap-8 min-w-0 [&>*]:min-w-0">
           <div className="space-y-6">
             <div className="card p-6">
               <h3 className="text-xl font-semibold navy-text mb-6">Pension vs TSP Share</h3>
@@ -836,9 +799,10 @@ function SummaryDashboard() {
                   </span>
                 </div>
               </div>
-              <div className="disclaimer">
-                Estimates only. For educational use. Pension value assumes life expectancy of 85 years.
-              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
+                Lifetime pension value assumes payments through age {pensionEndAge}.
+              </p>
+              <ProjectionDisclaimer compact className="mt-2" />
             </div>
 
             <div className="card p-6">
@@ -848,9 +812,7 @@ function SummaryDashboard() {
                   <Bar data={netWorthData} options={chartOptions} />
                 </div>
               </div>
-              <div className="disclaimer">
-                Estimates only. For educational use. Actual results may vary based on market performance.
-              </div>
+              <ProjectionDisclaimer compact className="mt-3" />
             </div>
           </div>
 
@@ -860,7 +822,7 @@ function SummaryDashboard() {
               <div className="space-y-4">
                 <div>
                   <label className="label">Monthly Expenses</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       type="number"
                       value={fireData.monthlyExpenses}
@@ -892,7 +854,18 @@ function SummaryDashboard() {
                 
                 <div className="p-4 bg-navy-50 dark:bg-navy-900/20 rounded-lg border border-navy-200 dark:border-navy-700">
                   <p className="text-slate-800 dark:text-slate-200">
-                    {fireData.fireMessage}
+                    {fireDate?.found
+                      ? `Projected sustainable separation age ${fireDate.separationAge}, against a separation age of ${fireData.separationAge} on file and an income goal of $${Number(fireData.fireGoalMonthly).toLocaleString()} a month.`
+                      : fireDate
+                        ? 'No separation age within the search range keeps the timeline funded to the end age under these assumptions.'
+                        : 'The projected sustainable separation age is unavailable for these inputs.'}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                    Read from the lifetime timeline on{' '}
+                    <Link to="/plan" className="text-navy-600 dark:text-navy-300 hover:underline">
+                      My Plan
+                    </Link>
+                    , which shows what one year either way changes.
                   </p>
                 </div>
               </div>
@@ -930,29 +903,6 @@ function SummaryDashboard() {
             </div>
 
             <div className="card p-6">
-              <h3 className="text-xl font-semibold navy-text mb-6">Key Insights</h3>
-              <div className="space-y-4">
-                <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                  <div className="text-green-700 font-medium mb-1">Strengths</div>
-                  <ul className="text-sm text-green-600 space-y-1">
-                    <li>• Diversified retirement income sources</li>
-                    <li>• Government pension provides stability</li>
-                    <li>• TSP offers growth potential</li>
-                  </ul>
-                </div>
-                
-                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="text-blue-700 font-medium mb-1">Recommendations</div>
-                  <ul className="text-sm text-blue-600 space-y-1">
-                    <li>• Review TSP allocation for your age</li>
-                    <li>• Consider maximizing TSP contributions</li>
-                    <li>• Plan for healthcare costs in retirement</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            <div className="card p-6">
               <h3 className="text-xl font-semibold navy-text mb-6">Planning Checklist</h3>
               <div className="space-y-3">
                 <div className="flex items-center space-x-3">
@@ -981,24 +931,14 @@ function SummaryDashboard() {
         </div>
       </div>
 
-      {/* 🔥 FIRE Gap Calculator - New FireFed Feature */}
+      {/* FIRE gap analysis at the chosen separation age */}
       <div className="section-divider"></div>
       <FIREGapCalculator 
         tspProjectedBalance={tspData.projectedBalance}
         pensionMonthly={pensionData.monthlyPension}
       />
 
-      <div className="mt-8 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-        <div className="text-center">
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-            📋 This estimate is educational and not official financial advice.
-          </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            All calculations are estimates for educational purposes only. 
-            Consult with official government resources and financial advisors for authoritative retirement planning.
-          </p>
-        </div>
-      </div>
+      <ProjectionDisclaimer className="mt-8" />
 
       <div className="section-divider"></div>
       <div className="card p-6">

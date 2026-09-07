@@ -23,6 +23,11 @@ vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({ entitlements: mocks.entitlements }),
 }));
 
+// The charts read the theme to pick axis and gridline colours.
+vi.mock('../../../contexts/ThemeContext', () => ({
+  useTheme: () => ({ isDarkMode: false }),
+}));
+
 import CareerSimulator from '../CareerSimulator';
 
 const renderPage = ({ pro = true, career = {} } = {}) => {

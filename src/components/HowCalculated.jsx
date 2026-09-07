@@ -16,8 +16,12 @@ import { getRule } from '../lib/rules/registry';
  *   children  the figure being explained
  *   inputs    optional { label: value } shown as "Inputs used"
  *   className optional extra classes for the wrapper
+ *   align     'left' (default) anchors the popover to the left of the figure;
+ *             'right' anchors it to the right edge from `sm` up, for figures in
+ *             right-aligned cells where a left-anchored panel would push past
+ *             the wrapper and get clipped (or grow an overflow-x-auto region).
  */
-export default function HowCalculated({ ruleId, children, inputs, className = '' }) {
+export default function HowCalculated({ ruleId, children, inputs, className = '', align = 'left' }) {
   const rule = getRule(ruleId);
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
@@ -40,7 +44,13 @@ export default function HowCalculated({ ruleId, children, inputs, className = ''
       }
     };
     const onPointer = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false);
+      if (!wrapperRef.current || wrapperRef.current.contains(e.target)) return;
+      // Only pull focus back to the trigger when it currently sits inside the
+      // popover we are about to unmount; otherwise closing would yank focus
+      // away from whatever the user is actually working with.
+      const active = document.activeElement;
+      if (dialogRef.current && active && dialogRef.current.contains(active)) close();
+      else setOpen(false);
     };
     document.addEventListener('keydown', onKey);
     document.addEventListener('mousedown', onPointer);
@@ -62,7 +72,7 @@ export default function HowCalculated({ ruleId, children, inputs, className = ''
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-xs leading-none text-slate-500 hover:text-navy-700 hover:bg-slate-100 dark:hover:text-navy-300 dark:hover:bg-slate-700 print:hidden"
+        className="relative inline-flex h-5 w-5 items-center justify-center rounded-full text-xs leading-none text-slate-500 after:absolute after:-inset-2.5 after:content-[''] hover:text-navy-700 hover:bg-slate-100 dark:hover:text-navy-300 dark:hover:bg-slate-700 print:hidden"
         aria-label={`How was this calculated? ${title}`}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -78,7 +88,9 @@ export default function HowCalculated({ ruleId, children, inputs, className = ''
           aria-labelledby={titleId}
           aria-describedby={rule ? descId : undefined}
           tabIndex={-1}
-          className="absolute left-0 top-full z-50 mt-2 w-80 max-w-[90vw] rounded-lg border border-slate-200 bg-white p-4 text-left text-sm font-normal normal-case tracking-normal text-slate-800 shadow-xl outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-96"
+          className={`absolute left-0 top-full z-50 mt-2 w-80 max-w-[90vw] rounded-lg border border-slate-200 bg-white p-4 text-left text-sm font-normal normal-case tracking-normal text-slate-800 shadow-xl outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-96 ${
+            align === 'right' ? 'sm:left-auto sm:right-0' : ''
+          }`.trim()}
         >
           <div className="flex items-start justify-between gap-3">
             <h3 id={titleId} className="text-sm font-semibold text-slate-900 dark:text-white">

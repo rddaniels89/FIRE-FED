@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Landmark, Map, SlidersHorizontal, TrendingUp } from 'lucide-react';
+import { Check, LayoutDashboard, Landmark, Map, SlidersHorizontal, TrendingUp } from 'lucide-react';
 import { useScenario } from '../contexts/ScenarioContext';
 import OnboardingCard from './OnboardingCard';
 import AnimatedFlame from './AnimatedFlame';
@@ -11,23 +11,23 @@ function HomePage() {
 
   const features = [
     {
-      icon: '📈',
+      Icon: TrendingUp,
       title: 'TSP Forecast',
       description: 'Calculate your Thrift Savings Plan growth with compound interest projections and compare Traditional vs Roth contribution strategies.',
       path: '/tsp-forecast',
       color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30'
     },
     {
-      icon: '💰',
+      Icon: Landmark,
       title: 'FERS Pension',
       description: 'Calculate your Federal Employees Retirement System pension and compare staying federal vs leaving early.',
       path: '/fers-pension',
       color: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-900/30'
     },
     {
-      icon: '📊',
-      title: 'Summary Dashboard',
-      description: 'Combined analysis of your retirement projections with FIRE calculations and smart recommendations.',
+      Icon: LayoutDashboard,
+      title: 'Summary',
+      description: 'A cross-check of the TSP and pension calculators against your income goal, with the FIRE gap at your separation age.',
       path: '/summary',
       color: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/30'
     }
@@ -91,7 +91,7 @@ function HomePage() {
             </div>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-4">
-            FIRE age, income goal, side income, and household all live on the inputs page. You never enter the same number twice.
+            Separation age, income goal, side income, and household all live on the inputs page. You never enter the same number twice.
           </p>
         </div>
       )}
@@ -105,7 +105,7 @@ function HomePage() {
             className={`block p-6 rounded-xl border-2 transition-all duration-200 hover:shadow-lg ${feature.color}`}
           >
             <div className="text-center">
-              <div className="text-4xl mb-4">{feature.icon}</div>
+              <feature.Icon className="h-9 w-9 mx-auto mb-4 text-navy-600 dark:text-navy-300" aria-hidden="true" />
               <h3 className="text-xl font-semibold navy-text mb-3">{feature.title}</h3>
               <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
                 {feature.description}
@@ -129,41 +129,41 @@ function HomePage() {
       {/* Key Features */}
       <div className="grid lg:grid-cols-2 gap-8 mb-12">
         <div className="card p-6">
-          <h3 className="text-xl font-semibold navy-text mb-4">✨ Smart Features</h3>
+          <h3 className="text-xl font-semibold navy-text mb-4">How it fits together</h3>
           <ul className="space-y-3 text-sm">
             <li className="flex items-start space-x-3">
-              <span className="text-green-500">✓</span>
+              <Check className="h-4 w-4 mt-0.5 shrink-0 text-green-600 dark:text-green-400" aria-hidden="true" />
               <div>
                 <div className="font-medium text-slate-700 dark:text-slate-300">One profile</div>
                 <div className="text-slate-500 dark:text-slate-400">Every calculator and the plan timeline read the same inputs</div>
               </div>
             </li>
             <li className="flex items-start space-x-3">
-              <span className="text-green-500">✓</span>
+              <Check className="h-4 w-4 mt-0.5 shrink-0 text-green-600 dark:text-green-400" aria-hidden="true" />
               <div>
-                <div className="font-medium text-slate-700 dark:text-slate-300">Scenario Management</div>
-                <div className="text-slate-500 dark:text-slate-400">Save and compare multiple retirement scenarios</div>
+                <div className="font-medium text-slate-700 dark:text-slate-300">Scenario comparison (Pro)</div>
+                <div className="text-slate-500 dark:text-slate-400">Compare saved scenarios side by side with a delta view</div>
               </div>
             </li>
             <li className="flex items-start space-x-3">
-              <span className="text-green-500">✓</span>
+              <Check className="h-4 w-4 mt-0.5 shrink-0 text-green-600 dark:text-green-400" aria-hidden="true" />
               <div>
                 <div className="font-medium text-slate-700 dark:text-slate-300">Roth vs Traditional</div>
                 <div className="text-slate-500 dark:text-slate-400">Compare TSP contribution strategies with tax implications</div>
               </div>
             </li>
             <li className="flex items-start space-x-3">
-              <span className="text-green-500">✓</span>
+              <Check className="h-4 w-4 mt-0.5 shrink-0 text-green-600 dark:text-green-400" aria-hidden="true" />
               <div>
-                <div className="font-medium text-slate-700 dark:text-slate-300">PDF Export</div>
-                <div className="text-slate-500 dark:text-slate-400">Download professional summary reports</div>
+                <div className="font-medium text-slate-700 dark:text-slate-300">PDF export (Pro)</div>
+                <div className="text-slate-500 dark:text-slate-400">Download the Federal Retirement Projection Report</div>
               </div>
             </li>
           </ul>
         </div>
 
         <div className="card p-6">
-          <h3 className="text-xl font-semibold navy-text mb-4">📋 Important Disclaimers</h3>
+          <h3 className="text-xl font-semibold navy-text mb-4">Important disclaimers</h3>
           <div className="space-y-3 text-sm">
             <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
               <div className="font-medium text-yellow-800 dark:text-yellow-300 mb-1">Educational Purpose</div>

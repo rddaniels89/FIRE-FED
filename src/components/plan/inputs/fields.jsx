@@ -35,16 +35,18 @@ export function Section({ id, title, summary, open, onToggle, badge = null, chil
               {badge}
             </span>
             {!open && summary ? (
-              <span className="block text-sm text-slate-500 dark:text-slate-400 truncate">{summary}</span>
+              <span title={summary} className="block text-sm text-slate-500 dark:text-slate-400 truncate">
+                {summary}
+              </span>
             ) : null}
           </span>
         </button>
       </h2>
-      {open ? (
-        <div id={panelId} className="px-4 pb-5 pt-2 border-t border-slate-200 dark:border-slate-700">
-          {children}
-        </div>
-      ) : null}
+      {/* Rendered even when collapsed so the button's `aria-controls` always
+          resolves; `hidden` does the collapsing. */}
+      <div id={panelId} hidden={!open} className="px-4 pb-5 pt-2 border-t border-slate-200 dark:border-slate-700">
+        {children}
+      </div>
     </section>
   );
 }
@@ -63,7 +65,7 @@ export function ProNotice({ reason, children }) {
   return (
     <div className="mb-4 p-3 rounded-lg border border-gold-200 dark:border-gold-700 bg-gold-50 dark:bg-gold-900/20 text-sm text-slate-700 dark:text-slate-300 flex flex-wrap items-center justify-between gap-3">
       <span>{children}</span>
-      <Link to="/pro-features" state={{ reason }} className="btn-primary text-sm py-2 px-4">
+      <Link to="/pro-features" state={{ reason }} className="btn-primary btn-sm">
         See Pro
       </Link>
     </div>
@@ -74,6 +76,9 @@ export function Grid({ children, className = '' }) {
   return <div className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${className}`}>{children}</div>;
 }
 
+/** The id a field's hint carries, so the control can point `aria-describedby` at it. */
+const hintId = (id) => `${id}-hint`;
+
 export function Field({ id, label, hint, children, className = '' }) {
   return (
     <div className={className}>
@@ -81,7 +86,11 @@ export function Field({ id, label, hint, children, className = '' }) {
         {label}
       </label>
       {children}
-      {hint ? <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{hint}</p> : null}
+      {hint ? (
+        <p id={hintId(id)} className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -181,6 +190,7 @@ export function NumberField({
       placeholder={placeholder}
       disabled={disabled}
       aria-label={label}
+      aria-describedby={hint ? hintId(id) : undefined}
       onChange={handleChange}
       onFocus={() => setFocused(true)}
       onBlur={() => {
@@ -225,6 +235,7 @@ export function SelectField({ id, label, value, onChange, options, hint, disable
         className="input-field w-full"
         value={value ?? ''}
         disabled={disabled}
+        aria-describedby={hint ? hintId(id) : undefined}
         onChange={(e) => onChange(e.target.value)}
       >
         {options.map((opt) => (
@@ -247,18 +258,23 @@ export function CheckField({ id, label, checked, onChange, hint, disabled = fals
           className="mt-1 h-4 w-4"
           checked={Boolean(checked)}
           disabled={disabled}
+          aria-describedby={hint ? hintId(id) : undefined}
           onChange={(e) => onChange(e.target.checked)}
         />
         <span className="font-medium">{label}</span>
       </label>
-      {hint ? <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 ml-7">{hint}</p> : null}
+      {hint ? (
+        <p id={hintId(id)} className="text-xs text-slate-500 dark:text-slate-400 mt-1 ml-7">
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }
 
 export function RadioField({ name, label, value, onChange, options, hint, disabled = false }) {
   return (
-    <fieldset className="min-w-0">
+    <fieldset className="min-w-0" aria-describedby={hint ? hintId(name) : undefined}>
       <legend className="label">{label}</legend>
       <div className="flex flex-col gap-2 text-sm text-slate-700 dark:text-slate-300">
         {options.map((opt) => (
@@ -276,7 +292,11 @@ export function RadioField({ name, label, value, onChange, options, hint, disabl
           </label>
         ))}
       </div>
-      {hint ? <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{hint}</p> : null}
+      {hint ? (
+        <p id={hintId(name)} className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          {hint}
+        </p>
+      ) : null}
     </fieldset>
   );
 }

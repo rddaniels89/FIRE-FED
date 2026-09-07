@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useScenario } from '../contexts/ScenarioContext';
@@ -174,6 +174,8 @@ function OnboardingCard() {
   const [goalId, setGoalId] = useState(() => safeParseJson(readStorage(PREFS_KEY), {})?.goalId ?? null);
   const [values, setValues] = useState({});
   const [seededFor, setSeededFor] = useState(null);
+  const headingRef = useRef(null);
+  const firstStepRef = useRef(true);
 
   // Seed the form once per scenario so the user never re-types a known value.
   useEffect(() => {
@@ -185,6 +187,18 @@ function OnboardingCard() {
   useEffect(() => {
     if (goalId) writeStorage(PREFS_KEY, JSON.stringify({ goalId }));
   }, [goalId]);
+
+  // Moving between steps unmounts the control that had focus (the goal button,
+  // the Next button), which would drop focus on <body>. Send it to the heading
+  // of the step that just appeared instead, so the new step is announced and
+  // tabbing continues from the top of it.
+  useEffect(() => {
+    if (firstStepRef.current) {
+      firstStepRef.current = false;
+      return;
+    }
+    headingRef.current?.focus();
+  }, [step]);
 
   if (dismissed) return null;
 
@@ -211,13 +225,18 @@ function OnboardingCard() {
 
   return (
     <section
-      className="mb-8 p-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm"
+      className="card p-6 mb-8"
       aria-labelledby="onboarding-heading"
       data-testid="onboarding"
     >
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
-          <h2 id="onboarding-heading" className="text-xl font-semibold navy-text">
+          <h2
+            id="onboarding-heading"
+            ref={headingRef}
+            tabIndex={-1}
+            className="focus-ring text-xl font-semibold navy-text"
+          >
             {step === 1 ? 'What do you want to explore?' : step === 2 ? goal?.title : 'Two optional details'}
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
@@ -232,7 +251,7 @@ function OnboardingCard() {
           <StepDots step={step} />
           <button
             type="button"
-            className="focus-ring text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-md"
+            className="focus-ring inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-700"
             onClick={dismiss}
             aria-label="Dismiss onboarding"
             title="Dismiss"
@@ -292,10 +311,15 @@ function OnboardingCard() {
                       inputMode="decimal"
                       className={`${inputClass} ${def.prefix ? 'pl-8' : ''}`}
                       value={values[key] ?? ''}
+                      aria-describedby={def.hint ? `${id}-hint` : undefined}
                       onChange={(e) => setValue(key, e.target.value)}
                     />
                   </div>
-                  {def.hint ? <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{def.hint}</p> : null}
+                  {def.hint ? (
+                    <p id={`${id}-hint`} className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      {def.hint}
+                    </p>
+                  ) : null}
                 </div>
               );
             })}
@@ -305,13 +329,22 @@ function OnboardingCard() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Back
             </button>
-            <button type="submit" className="btn-primary text-sm inline-flex items-center gap-2" disabled={missingRequired.length > 0}>
+            {/* aria-disabled rather than disabled: the button stays focusable,
+                so a keyboard user can reach it and hear why it does nothing. */}
+            <button
+              type="submit"
+              className={`btn-primary text-sm inline-flex items-center gap-2 ${
+                missingRequired.length ? 'opacity-50' : ''
+              }`}
+              aria-disabled={missingRequired.length > 0}
+              aria-describedby="onboarding-missing"
+            >
               Next
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
-            {missingRequired.length ? (
-              <span className="text-xs text-slate-500 dark:text-slate-400">Fill in every field to continue.</span>
-            ) : null}
+            <span id="onboarding-missing" role="status" className="text-xs text-slate-500 dark:text-slate-400">
+              {missingRequired.length ? 'Fill in every field to continue.' : ''}
+            </span>
           </div>
         </form>
       ) : null}
@@ -330,13 +363,16 @@ function OnboardingCard() {
                 id="onboarding-hireCohort"
                 className={inputClass}
                 value={values.hireCohort ?? ''}
+                aria-describedby="onboarding-hireCohort-hint"
                 onChange={(e) => setValue('hireCohort', e.target.value)}
               >
                 {COHORT_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Sets your FERS contribution rate. It does not change the pension formula.</p>
+              <p id="onboarding-hireCohort-hint" className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Sets your FERS contribution rate. It does not change the pension formula.
+              </p>
             </div>
             <div>
               <label className="label" htmlFor="onboarding-fehbYearsEnrolled">Years enrolled in FEHB</label>
@@ -346,9 +382,12 @@ function OnboardingCard() {
                 inputMode="decimal"
                 className={inputClass}
                 value={values.fehbYearsEnrolled ?? ''}
+                aria-describedby="onboarding-fehbYearsEnrolled-hint"
                 onChange={(e) => setValue('fehbYearsEnrolled', e.target.value)}
               />
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Five years before retiring keeps FEHB for life.</p>
+              <p id="onboarding-fehbYearsEnrolled-hint" className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Five years before retiring keeps FEHB for life.
+              </p>
             </div>
           </div>
           <div className="mt-5 flex flex-wrap items-center gap-3">

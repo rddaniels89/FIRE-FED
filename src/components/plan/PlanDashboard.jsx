@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import PlanEmptyState from './PlanEmptyState';
 import { useScenario } from '../../contexts/ScenarioContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { FEATURES, hasEntitlement } from '../../lib/entitlements';
@@ -7,12 +8,13 @@ import { buildTimeline } from '../../lib/projection/timeline';
 import { findFireDate, withSeparationAge } from '../../lib/projection/fireDate';
 import { oneYearDeltas, separationSweep } from '../../lib/projection/deltas';
 import HowCalculated from '../HowCalculated';
+import ProjectionDisclaimer from '../ProjectionDisclaimer';
 import SeparationAgeSlider from './SeparationAgeSlider';
 import DeltaCards from './DeltaCards';
 import BridgeSection from './BridgeSection';
 import IncomeSection from './IncomeSection';
 import TimelineChart from './TimelineChart';
-import YearByYearTable from './YearByYearTable';
+import YearByYearTable, { YEAR_BY_YEAR_PANEL_ID } from './YearByYearTable';
 import DurabilitySection from './DurabilitySection';
 import { fmtMoney, fmtYears } from './planFormat';
 
@@ -30,27 +32,6 @@ function Section({ id, title, lede, children }) {
   );
 }
 
-function EmptyState({ loading }) {
-  return (
-    <div className="animate-fade-in">
-      <h1 className="text-3xl font-bold navy-text mb-3">My Plan</h1>
-      <div className="card p-8 text-center">
-        {loading ? (
-          <p className="text-slate-600 dark:text-slate-400">Loading your scenario…</p>
-        ) : (
-          <>
-            <p className="text-slate-600 dark:text-slate-400 mb-4">
-              No scenario is loaded yet. Create or select one to see your projected timeline.
-            </p>
-            <Link to="/scenarios" className="btn-primary inline-block">
-              Go to scenarios
-            </Link>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /**
  * The plan dashboard: four questions, one model.
@@ -79,8 +60,26 @@ export default function PlanDashboard() {
     return withSeparationAge(currentScenario, previewAge);
   }, [currentScenario, previewAge, committedAge]);
 
-  const timeline = useMemo(() => (viewScenario ? buildTimeline(viewScenario) : null), [viewScenario]);
-  const fireDate = useMemo(() => (currentScenario ? findFireDate(currentScenario) : null), [currentScenario]);
+  // A throw here would reach AppErrorBoundary and blank the whole app, so the
+  // primary screen degrades to an in-page error instead.
+  const { timeline, timelineError } = useMemo(() => {
+    if (!viewScenario) return { timeline: null, timelineError: null };
+    try {
+      return { timeline: buildTimeline(viewScenario), timelineError: null };
+    } catch (e) {
+      console.error('Timeline failed', e);
+      return { timeline: null, timelineError: e?.message || 'Unknown error' };
+    }
+  }, [viewScenario]);
+  const fireDate = useMemo(() => {
+    if (!currentScenario) return null;
+    try {
+      return findFireDate(currentScenario);
+    } catch (e) {
+      console.error('FIRE date failed', e);
+      return null;
+    }
+  }, [currentScenario]);
   const deltas = useMemo(
     () => (viewScenario && timeline ? oneYearDeltas(viewScenario, { baseTimeline: timeline }) : null),
     [viewScenario, timeline]
@@ -114,12 +113,19 @@ export default function PlanDashboard() {
     [updateCurrentScenario]
   );
 
-  if (!currentScenario || !timeline) return <EmptyState loading={Boolean(isLoadingScenarios)} />;
+  if (!currentScenario || !timeline) {
+    return (
+      <PlanEmptyState title="My Plan" loading={Boolean(isLoadingScenarios)} error={currentScenario ? timelineError : null} />
+    );
+  }
 
   const { plan, summary, rows } = timeline;
   const profile = currentScenario.profile;
   const canStrategies = hasEntitlement(entitlements, FEATURES.BRIDGE_STRATEGIES);
   const isPreviewing = previewAge !== committedAge;
+  const previewSummary = `Age ${previewAge}: ${plan.pathLabel}, annuity ${fmtMoney(
+    plan.annuity.annualAtStart
+  )} a year, ${summary.isSustainable ? 'sustainable to end age' : `runs short at ${summary.firstShortfallAge}`}.`;
 
   return (
     <div className="animate-fade-in">
@@ -165,9 +171,7 @@ export default function PlanDashboard() {
                 </div>
               </>
             )}
-            <div className="text-xs text-slate-500 dark:text-slate-400 mt-3">
-              Educational projection under these assumptions, not advice.
-            </div>
+            <ProjectionDisclaimer compact className="mt-3" />
           </div>
 
           <div className="card p-6 lg:col-span-3">
@@ -207,11 +211,19 @@ export default function PlanDashboard() {
                 </div>
               </div>
             </div>
-            {isPreviewing && (
-              <p className="text-xs text-gold-700 dark:text-gold-300 mt-3">
-                Previewing age {previewAge}; release the slider to save it to the scenario.
-              </p>
-            )}
+            {/* Dragging the slider recomputes the whole page silently. The
+                region is always mounted so the announcement lands, and the
+                sentence carries the reading the four tiles above show. */}
+            <div role="status" aria-live="polite" className="mt-3 min-h-[1.25rem]">
+              {isPreviewing && (
+                <>
+                  <p className="text-xs text-gold-700 dark:text-gold-300">
+                    Previewing age {previewAge}; release the slider to save it to the scenario.
+                  </p>
+                  <span className="sr-only">{previewSummary}</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -249,7 +261,7 @@ export default function PlanDashboard() {
           <div className="inline-flex rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden text-sm" role="group" aria-label="Dollar basis">
             <button
               type="button"
-              className={`px-3 py-1.5 ${mode === 'nominal' ? 'bg-navy-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}
+              className={`focus-ring px-4 py-2.5 ${mode === 'nominal' ? 'bg-navy-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}
               onClick={() => setMode('nominal')}
               aria-pressed={mode === 'nominal'}
             >
@@ -257,7 +269,7 @@ export default function PlanDashboard() {
             </button>
             <button
               type="button"
-              className={`px-3 py-1.5 ${mode === 'real' ? 'bg-navy-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}
+              className={`focus-ring px-4 py-2.5 ${mode === 'real' ? 'bg-navy-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}
               onClick={() => setMode('real')}
               aria-pressed={mode === 'real'}
             >
@@ -265,7 +277,12 @@ export default function PlanDashboard() {
             </button>
           </div>
         </div>
-        <TimelineChart rows={rows} mode={mode} separationAge={plan.separationAge} />
+        <TimelineChart
+          rows={rows}
+          mode={mode}
+          separationAge={plan.separationAge}
+          describedById={YEAR_BY_YEAR_PANEL_ID}
+        />
       </div>
 
       <div className="mb-10">
@@ -280,15 +297,7 @@ export default function PlanDashboard() {
         <DurabilitySection scenario={viewScenario} timeline={timeline} entitlements={entitlements} />
       </Section>
 
-      <div className="mt-8 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-center">
-        <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          This projection is educational and is not financial, tax or legal advice.
-        </p>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Every figure depends on the assumptions you entered and on rules that change. Confirm eligibility and amounts
-          with OPM, the TSP, the Social Security Administration and a qualified adviser before acting.
-        </p>
-      </div>
+      <ProjectionDisclaimer className="mt-8" />
     </div>
   );
 }

@@ -7,6 +7,8 @@ import { runMonteCarloAnalytics, monteCarloBySeparationAge } from '../../lib/ana
 import { runStressTests } from '../../lib/analytics/stressTests';
 import { withSeparationAge } from '../../lib/projection/fireDate';
 import { trackEvent } from '../../lib/telemetry';
+import { useTheme } from '../../contexts/ThemeContext';
+import { themedPlugins, themedScale } from '../../lib/charts/theme';
 import { fmtDelta, fmtMoney, fmtPercent } from './planFormat';
 
 const MONTE_CARLO_SIMS = 750;
@@ -27,7 +29,7 @@ function ProGate({ locked, reason, children, preview }) {
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4">
         <Lock className="h-5 w-5 text-slate-500" aria-hidden="true" />
         <div className="text-sm font-medium text-slate-800 dark:text-slate-200">Pro feature</div>
-        <Link to="/pro-features" state={{ reason }} className="btn-primary py-2 px-4 text-sm">
+        <Link to="/pro-features" state={{ reason }} className="btn-primary btn-sm">
           Unlock Pro
         </Link>
       </div>
@@ -45,7 +47,23 @@ function MetricTile({ label, value, sub }) {
   );
 }
 
+/** The percentile band chart in a sentence. */
+function describeBand(byAge) {
+  if (!byAge.length) return 'Balance percentiles by age: no years to show.';
+  const first = byAge[0];
+  const last = byAge[byAge.length - 1];
+  const worst = byAge.reduce((min, b) => (b.p10 < min.p10 ? b : min), first);
+  return `Balance percentiles by age ${first.age} to ${last.age}: median ${fmtMoney(
+    Math.round(first.p50)
+  )} at the start and ${fmtMoney(Math.round(last.p50))} at the end; the 10th to 90th percentile band ends at ${fmtMoney(
+    Math.round(last.p10)
+  )} to ${fmtMoney(Math.round(last.p90))}; the 10th percentile is lowest at age ${worst.age}, ${fmtMoney(
+    Math.round(worst.p10)
+  )}.`;
+}
+
 function BandChart({ byAge }) {
+  const { isDarkMode } = useTheme();
   const data = useMemo(
     () => ({
       labels: byAge.map((b) => String(b.age)),
@@ -88,23 +106,20 @@ function BandChart({ byAge }) {
       maintainAspectRatio: false,
       animation: false,
       interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { position: 'bottom', labels: { color: '#64748b', boxWidth: 12 } },
+      plugins: themedPlugins(isDarkMode, {
+        legend: { position: 'bottom', labels: { boxWidth: 10, padding: 6, font: { size: 10 } } },
         tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${fmtMoney(item.parsed.y)}` } },
-      },
+      }),
       scales: {
-        x: { ticks: { color: '#64748b', maxTicksLimit: 14 }, grid: { display: false } },
-        y: {
-          ticks: { color: '#64748b', callback: (v) => `$${Math.round(v / 1000)}K` },
-          grid: { color: 'rgba(148, 163, 184, 0.25)' },
-        },
+        x: themedScale(isDarkMode, { ticks: { maxTicksLimit: 14 }, grid: false }),
+        y: themedScale(isDarkMode, { ticks: { callback: (v) => `$${Math.round(v / 1000)}K` } }),
       },
     }),
-    []
+    [isDarkMode]
   );
   return (
     <div className="h-56">
-      <Line data={data} options={options} />
+      <Line data={data} options={options} role="img" aria-label={describeBand(byAge)} />
     </div>
   );
 }
@@ -151,6 +166,10 @@ export default function DurabilitySection({ scenario, timeline, entitlements }) 
   }, [scenario]);
 
   const runMonteCarlo = () => {
+    // The buttons stay in the accessibility tree while running (aria-disabled
+    // rather than disabled, which would drop focus to <body>), so the handler
+    // has to refuse a second click itself.
+    if (mc.running) return;
     setMc({ running: true, result: null, error: '' });
     setTimeout(() => {
       try {
@@ -165,6 +184,7 @@ export default function DurabilitySection({ scenario, timeline, entitlements }) 
   };
 
   const runStress = () => {
+    if (stress.running) return;
     setStress({ running: true, result: null, error: '' });
     setTimeout(() => {
       try {
@@ -180,6 +200,7 @@ export default function DurabilitySection({ scenario, timeline, entitlements }) 
 
   // One age per tick so the list fills in and the page stays responsive.
   const runCompare = () => {
+    if (compare.running) return;
     const token = (cancelRef.current.compare += 1);
     const fromAge = Math.ceil(Number(scenario.profile.currentAge));
     const toAge = Math.min(70, fromAge + 15);
@@ -221,48 +242,56 @@ export default function DurabilitySection({ scenario, timeline, entitlements }) 
             </p>
           </div>
           {canMonteCarlo && (
-            <button type="button" className="btn-primary py-2 px-4 text-sm flex items-center gap-2" onClick={runMonteCarlo} disabled={mc.running}>
+            <button
+              type="button"
+              className={`btn-primary btn-sm flex items-center gap-2 ${mc.running ? 'opacity-60 cursor-not-allowed' : ''}`}
+              onClick={runMonteCarlo}
+              aria-disabled={mc.running}
+            >
               {mc.running ? <Spinner /> : null}
               {mc.running ? 'Running…' : mc.result ? 'Run again' : 'Run'}
+              <span className="sr-only"> Monte Carlo</span>
             </button>
           )}
         </div>
         <ProGate locked={!canMonteCarlo} reason="plan_montecarlo_pro" preview={PREVIEW_MC}>
-          {mc.error && <div className="text-sm text-red-700 dark:text-red-300">{mc.error}</div>}
-          {!mc.result && !mc.running && !mc.error && (
-            <p className="text-sm text-slate-500 dark:text-slate-400">Run the simulation to see the spread of outcomes.</p>
-          )}
-          {mc.running && (
-            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-              <Spinner /> Simulating {MONTE_CARLO_SIMS} lifetimes…
-            </div>
-          )}
-          {o && (
-            <div className="space-y-4">
-              <div className="grid sm:grid-cols-3 gap-3">
-                <MetricTile
-                  label="Funds last to end age"
-                  value={fmtPercent(o.probabilityFundsLastToEndAge)}
-                  sub={`to age ${mc.result.inputs.endAge}`}
-                />
-                <MetricTile
-                  label="Balance at end"
-                  value={fmtMoney(o.balanceAtEnd?.p50, { compact: true })}
-                  sub={`p10 ${fmtMoney(o.balanceAtEnd?.p10, { compact: true })} · p90 ${fmtMoney(o.balanceAtEnd?.p90, { compact: true })}`}
-                />
-                <MetricTile
-                  label="Most vulnerable age"
-                  value={o.mostVulnerableAge ?? '—'}
-                  sub={o.mostVulnerableP10Balance != null ? `p10 balance ${fmtMoney(o.mostVulnerableP10Balance, { compact: true })}` : undefined}
-                />
+          <div role="status" aria-live="polite" aria-atomic="true">
+            {mc.error && <div className="text-sm text-red-700 dark:text-red-300">{mc.error}</div>}
+            {!mc.result && !mc.running && !mc.error && (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Run the simulation to see the spread of outcomes.</p>
+            )}
+            {mc.running && (
+              <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                <Spinner /> Simulating {MONTE_CARLO_SIMS} lifetimes…
               </div>
-              <BandChart byAge={mc.result.byAge} />
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Band shows the 10th to 90th percentile of total balance by age; the line is the median. Seeded, so re-running
-                gives the same answer for the same inputs.
-              </p>
-            </div>
-          )}
+            )}
+            {o && (
+              <div className="space-y-4">
+                <div className="grid sm:grid-cols-3 gap-3">
+                  <MetricTile
+                    label="Funds last to end age"
+                    value={fmtPercent(o.probabilityFundsLastToEndAge)}
+                    sub={`to age ${mc.result.inputs.endAge}`}
+                  />
+                  <MetricTile
+                    label="Balance at end"
+                    value={fmtMoney(o.balanceAtEnd?.p50, { compact: true })}
+                    sub={`p10 ${fmtMoney(o.balanceAtEnd?.p10, { compact: true })} · p90 ${fmtMoney(o.balanceAtEnd?.p90, { compact: true })}`}
+                  />
+                  <MetricTile
+                    label="Most vulnerable age"
+                    value={o.mostVulnerableAge ?? '—'}
+                    sub={o.mostVulnerableP10Balance != null ? `p10 balance ${fmtMoney(o.mostVulnerableP10Balance, { compact: true })}` : undefined}
+                  />
+                </div>
+                <BandChart byAge={mc.result.byAge} />
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Band shows the 10th to 90th percentile of total balance by age; the line is the median. Seeded, so re-running
+                  gives the same answer for the same inputs.
+                </p>
+              </div>
+            )}
+          </div>
         </ProGate>
       </div>
 
@@ -273,56 +302,64 @@ export default function DurabilitySection({ scenario, timeline, entitlements }) 
             <p className="text-xs text-slate-500 dark:text-slate-400">The same timeline with one assumption bent at a time.</p>
           </div>
           {canStress && (
-            <button type="button" className="btn-primary py-2 px-4 text-sm flex items-center gap-2" onClick={runStress} disabled={stress.running}>
+            <button
+              type="button"
+              className={`btn-primary btn-sm flex items-center gap-2 ${stress.running ? 'opacity-60 cursor-not-allowed' : ''}`}
+              onClick={runStress}
+              aria-disabled={stress.running}
+            >
               {stress.running ? <Spinner /> : null}
               {stress.running ? 'Running…' : stress.result ? 'Run again' : 'Run'}
+              <span className="sr-only"> stress tests</span>
             </button>
           )}
         </div>
         <ProGate locked={!canStress} reason="plan_stress_tests_pro" preview={PREVIEW_STRESS}>
-          {stress.error && <div className="text-sm text-red-700 dark:text-red-300">{stress.error}</div>}
-          {!stress.result && !stress.running && !stress.error && (
-            <p className="text-sm text-slate-500 dark:text-slate-400">Run the tests to see which shocks the projection survives.</p>
-          )}
-          {stress.running && (
-            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-              <Spinner /> Running stress tests…
-            </div>
-          )}
-          {stress.result && (
-            <div>
-              <div className="text-sm font-medium text-slate-800 dark:text-slate-200 mb-2">
-                {stress.result.survivedCount} of {stress.result.totalCount} survive
+          <div role="status" aria-live="polite" aria-atomic="true">
+            {stress.error && <div className="text-sm text-red-700 dark:text-red-300">{stress.error}</div>}
+            {!stress.result && !stress.running && !stress.error && (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Run the tests to see which shocks the projection survives.</p>
+            )}
+            {stress.running && (
+              <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                <Spinner /> Running stress tests…
               </div>
-              <ul className="space-y-2">
-                {stress.result.results.map((r) => (
-                  <li key={r.key} className="flex items-start justify-between gap-3 text-sm">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-block text-xs px-2 py-0.5 rounded-full ${
-                            r.survives
-                              ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                              : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                          }`}
-                        >
-                          {r.survives ? 'pass' : `fails at ${r.firstShortfallAge}`}
-                        </span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">{r.label}</span>
+            )}
+            {stress.result && (
+              <div>
+                <div className="text-sm font-medium text-slate-800 dark:text-slate-200 mb-2">
+                  {stress.result.survivedCount} of {stress.result.totalCount} survive
+                </div>
+                <ul className="space-y-2">
+                  {stress.result.results.map((r) => (
+                    <li key={r.key} className="flex items-start justify-between gap-3 text-sm">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-block text-xs px-2 py-0.5 rounded-full ${
+                              r.survives
+                                ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                                : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                            }`}
+                          >
+                            {r.survives ? 'pass' : `fails at ${r.firstShortfallAge}`}
+                          </span>
+                          <span className="font-medium text-slate-800 dark:text-slate-200">{r.label}</span>
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">{r.description}</div>
                       </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">{r.description}</div>
-                    </div>
-                    <span
-                      className={`whitespace-nowrap tabular-nums text-xs ${r.balanceAtEndDelta < 0 ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'}`}
-                      title="Change in balance at end age versus the base projection"
-                    >
-                      {fmtDelta(r.balanceAtEndDelta)} at end
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+                      <span
+                        className={`whitespace-nowrap tabular-nums text-xs ${r.balanceAtEndDelta < 0 ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'}`}
+                        title="Change in balance at end age versus the base projection"
+                      >
+                        {fmtDelta(r.balanceAtEndDelta)} at end
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </ProGate>
       </div>
 
@@ -335,9 +372,15 @@ export default function DurabilitySection({ scenario, timeline, entitlements }) 
             </p>
           </div>
           {canMonteCarlo && (
-            <button type="button" className="btn-primary py-2 px-4 text-sm flex items-center gap-2" onClick={runCompare} disabled={compare.running}>
+            <button
+              type="button"
+              className={`btn-primary btn-sm flex items-center gap-2 ${compare.running ? 'opacity-60 cursor-not-allowed' : ''}`}
+              onClick={runCompare}
+              aria-disabled={compare.running}
+            >
               {compare.running ? <Spinner /> : null}
               {compare.running ? 'Running…' : compare.rows ? 'Run again' : 'Run'}
+              <span className="sr-only"> separation-age comparison</span>
             </button>
           )}
         </div>
@@ -352,40 +395,42 @@ export default function DurabilitySection({ scenario, timeline, entitlements }) 
             </div>
           }
         >
-          {compare.error && <div className="text-sm text-red-700 dark:text-red-300">{compare.error}</div>}
-          {!compare.rows && !compare.running && !compare.error && (
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Run to see how the success probability shifts with each year of separation.
-            </p>
-          )}
-          {compare.rows && (
-            <div className="space-y-1.5">
-              {compare.rows.map((r) => {
-                const p = r.probabilityFundsLastToEndAge;
-                const tone = p >= 0.9 ? 'bg-green-500' : p >= 0.75 ? 'bg-gold-500' : 'bg-red-500';
-                const isCurrent = r.separationAge === Number(scenario.profile.separationAge);
-                return (
-                  <div key={r.separationAge} className="flex items-center gap-3 text-sm">
-                    <span className={`w-8 text-right tabular-nums ${isCurrent ? 'font-bold navy-text' : 'text-slate-600 dark:text-slate-400'}`}>
-                      {r.separationAge}
-                    </span>
-                    <div className="flex-1 h-4 rounded bg-slate-100 dark:bg-slate-700 overflow-hidden">
-                      <div className={`h-full ${tone}`} style={{ width: `${Math.round(p * 100)}%` }} />
+          <div role="status" aria-live="polite" aria-atomic="true">
+            {compare.error && <div className="text-sm text-red-700 dark:text-red-300">{compare.error}</div>}
+            {!compare.rows && !compare.running && !compare.error && (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Run to see how the success probability shifts with each year of separation.
+              </p>
+            )}
+            {compare.rows && (
+              <div className="space-y-1.5">
+                {compare.rows.map((r) => {
+                  const p = r.probabilityFundsLastToEndAge;
+                  const tone = p >= 0.9 ? 'bg-green-500' : p >= 0.75 ? 'bg-gold-500' : 'bg-red-500';
+                  const isCurrent = r.separationAge === Number(scenario.profile.separationAge);
+                  return (
+                    <div key={r.separationAge} className="flex items-center gap-3 text-sm">
+                      <span className={`w-8 text-right tabular-nums ${isCurrent ? 'font-bold navy-text' : 'text-slate-600 dark:text-slate-400'}`}>
+                        {r.separationAge}
+                      </span>
+                      <div className="flex-1 h-4 rounded bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                        <div className={`h-full ${tone}`} style={{ width: `${Math.round(p * 100)}%` }} />
+                      </div>
+                      <span className="w-12 text-right tabular-nums text-slate-800 dark:text-slate-200">{fmtPercent(p)}</span>
+                      <span className="w-24 text-right tabular-nums text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">
+                        p10 {fmtMoney(r.minBalanceP10, { compact: true })}
+                      </span>
                     </div>
-                    <span className="w-12 text-right tabular-nums text-slate-800 dark:text-slate-200">{fmtPercent(p)}</span>
-                    <span className="w-24 text-right tabular-nums text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">
-                      p10 {fmtMoney(r.minBalanceP10, { compact: true })}
-                    </span>
+                  );
+                })}
+                {compare.running && (
+                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 pt-1">
+                    <Spinner /> simulating…
                   </div>
-                );
-              })}
-              {compare.running && (
-                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 pt-1">
-                  <Spinner /> simulating…
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
         </ProGate>
       </div>
     </div>

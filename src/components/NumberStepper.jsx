@@ -17,7 +17,7 @@ export default function NumberStepper({
         aria-label={incrementLabel}
         onClick={onIncrement}
         disabled={disabledIncrement}
-        className="focus-ring h-6 w-9 rounded-t-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="focus-ring h-10 w-11 rounded-t-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         +
       </button>
@@ -26,7 +26,7 @@ export default function NumberStepper({
         aria-label={decrementLabel}
         onClick={onDecrement}
         disabled={disabledDecrement}
-        className="focus-ring h-6 w-9 -mt-px rounded-b-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="focus-ring h-10 w-11 -mt-px rounded-b-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         −
       </button>

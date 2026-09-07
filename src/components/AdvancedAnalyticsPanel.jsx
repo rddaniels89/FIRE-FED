@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import ProjectionDisclaimer from './ProjectionDisclaimer';
 import { FEATURES, hasEntitlement } from '../lib/entitlements';
 import { runMonteCarloAnalytics } from '../lib/analytics/monteCarlo';
 import { trackEvent } from '../lib/telemetry';
@@ -19,6 +20,11 @@ function formatMoney(amount) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(n);
+}
+
+function formatCount(n) {
+  const value = Number(n);
+  return Number.isFinite(value) ? value.toLocaleString() : '—';
 }
 
 /**
@@ -70,6 +76,13 @@ export default function AdvancedAnalyticsPanel({ scenario, entitlements }) {
           <h3 className="text-xl font-semibold navy-text">📊 Advanced analytics</h3>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             Monte Carlo simulations estimate variability in outcomes (not guarantees).
+          </p>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+            The fuller version of this lives on{' '}
+            <Link to="/plan" className="underline underline-offset-2 text-navy-700 dark:text-navy-300">
+              your plan
+            </Link>
+            , alongside the durability view.
           </p>
         </div>
         {!canAnalytics && (
@@ -125,6 +138,12 @@ export default function AdvancedAnalyticsPanel({ scenario, entitlements }) {
             </div>
           </div>
 
+          {/* The count behind the answer, stated before the run as well as after. */}
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            {formatCount(settings.simulations)} simulated lifetimes through age {settings.endAge}, each with its own
+            sequence of returns.
+          </p>
+
           {error && (
             <div className="mt-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-700 dark:text-red-200">
               {error}
@@ -172,21 +191,21 @@ export default function AdvancedAnalyticsPanel({ scenario, entitlements }) {
                       At separation ({result.inputs.retirementAge})
                     </div>
                     <div className="text-slate-600 dark:text-slate-400">
-                      P10 {formatMoney(outcomes.balanceAtRetirement?.p10)} · P50 {formatMoney(outcomes.balanceAtRetirement?.p50)} · P90{' '}
+                      p10 {formatMoney(outcomes.balanceAtRetirement?.p10)} · p50 {formatMoney(outcomes.balanceAtRetirement?.p50)} · p90{' '}
                       {formatMoney(outcomes.balanceAtRetirement?.p90)}
                     </div>
                   </div>
                   <div>
                     <div className="font-medium text-slate-700 dark:text-slate-200 mb-1">At end age ({result.inputs.endAge})</div>
                     <div className="text-slate-600 dark:text-slate-400">
-                      P10 {formatMoney(outcomes.balanceAtEnd?.p10)} · P50 {formatMoney(outcomes.balanceAtEnd?.p50)} · P90{' '}
+                      p10 {formatMoney(outcomes.balanceAtEnd?.p10)} · p50 {formatMoney(outcomes.balanceAtEnd?.p50)} · p90{' '}
                       {formatMoney(outcomes.balanceAtEnd?.p90)}
                     </div>
                   </div>
                   <div>
                     <div className="font-medium text-slate-700 dark:text-slate-200 mb-1">Lowest balance</div>
                     <div className="text-slate-600 dark:text-slate-400">
-                      P10 {formatMoney(outcomes.minBalance?.p10)} · P50 {formatMoney(outcomes.minBalance?.p50)}
+                      p10 {formatMoney(outcomes.minBalance?.p10)} · p50 {formatMoney(outcomes.minBalance?.p50)}
                     </div>
                   </div>
                 </div>
@@ -200,10 +219,7 @@ export default function AdvancedAnalyticsPanel({ scenario, entitlements }) {
                 </div>
               </div>
 
-              <div className="text-xs text-slate-500 dark:text-slate-400">
-                Educational estimates only. Each run is the full lifetime timeline with a different sequence of returns;
-                taxes, penalties and healthcare follow the same rules as the deterministic view.
-              </div>
+              <ProjectionDisclaimer compact />
             </div>
           )}
         </>

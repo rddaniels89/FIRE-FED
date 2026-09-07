@@ -144,7 +144,7 @@ export default function OptimizationPanel() {
     <div className="card p-6 mb-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-xl font-semibold navy-text">🎯 Optimization suggestions</h3>
+          <h3 className="text-xl font-semibold navy-text">Optimization suggestions</h3>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             Each line is one change run through the full timeline, with what it moves. Educational projections, not
             individualized advice.
@@ -208,10 +208,10 @@ export default function OptimizationPanel() {
                     <div className="flex gap-2 shrink-0">
                       <button
                         className="btn-secondary"
-                        onClick={() => navigate('/summary')}
-                        title="Review the Summary dashboard after applying"
+                        onClick={() => navigate('/plan')}
+                        title="Open My Plan, where the baseline above is read from"
                       >
-                        Review
+                        See the change on your plan
                       </button>
                       {s.updates && (
                         <button className="btn-primary" onClick={() => applySuggestion(s)}>

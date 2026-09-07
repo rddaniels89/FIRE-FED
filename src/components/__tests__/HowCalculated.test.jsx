@@ -75,6 +75,75 @@ describe('HowCalculated', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('returns focus to the trigger when an outside click closes a focused popover', () => {
+    render(
+      <div>
+        <p>outside</p>
+        <HowCalculated ruleId="tsp.employer_match">
+          <span>5%</span>
+        </HowCalculated>
+      </div>
+    );
+    const button = screen.getByRole('button', { name: /how was this calculated/i });
+    fireEvent.click(button);
+    // Opening moves focus into the dialog; closing must not drop it on <body>.
+    expect(screen.getByRole('dialog')).toHaveFocus();
+    fireEvent.mouseDown(screen.getByText('outside'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(button).toHaveFocus();
+  });
+
+  it('leaves focus alone on an outside click when focus had moved out of the popover', () => {
+    render(
+      <div>
+        <button type="button">elsewhere</button>
+        <HowCalculated ruleId="tsp.employer_match">
+          <span>5%</span>
+        </HowCalculated>
+      </div>
+    );
+    const trigger = screen.getByRole('button', { name: /how was this calculated/i });
+    fireEvent.click(trigger);
+    const elsewhere = screen.getByRole('button', { name: 'elsewhere' });
+    elsewhere.focus();
+    fireEvent.mouseDown(elsewhere);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(elsewhere).toHaveFocus();
+    expect(trigger).not.toHaveFocus();
+  });
+
+  it('keeps both triggers working when two sit next to each other', () => {
+    render(
+      <div>
+        <HowCalculated ruleId="fers.annuity">
+          <span>$40,000</span>
+        </HowCalculated>{' '}
+        <HowCalculated ruleId="srs.amount">
+          <span>$1,200/mo</span>
+        </HowCalculated>
+      </div>
+    );
+    const [first, second] = screen.getAllByRole('button', { name: /how was this calculated/i });
+    fireEvent.click(first);
+    expect(screen.getByRole('heading', { name: getRule('fers.annuity').title })).toBeInTheDocument();
+    fireEvent.mouseDown(second);
+    fireEvent.click(second);
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: getRule('srs.amount').title })).toBeInTheDocument();
+  });
+
+  it('anchors right from sm up when align="right"', () => {
+    render(
+      <HowCalculated ruleId="fers.annuity" align="right">
+        <span>$40,000</span>
+      </HowCalculated>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /how was this calculated/i }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.className).toContain('sm:right-0');
+    expect(dialog.className).toContain('max-w-[90vw]');
+  });
+
   it('shows a placeholder for an unknown rule id instead of crashing', () => {
     render(
       <HowCalculated ruleId="not.a.rule">

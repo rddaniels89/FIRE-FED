@@ -26,6 +26,12 @@
   .btn-secondary {
     @apply focus-ring bg-slate-600 hover:bg-slate-700 text-white font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-200 hover:shadow-lg;
   }
+
+  /* Small variant. Previously copy-pasted as `btn-primary py-2 px-4 text-sm`
+     in eight places, where the utility layer won and shrank the target to 36px. */
+  .btn-sm {
+    @apply py-2.5 px-4 text-sm;
+  }
   
   .card {
     @apply bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-md hover:shadow-lg transition-all duration-200;
@@ -96,10 +102,7 @@
     @apply border-slate-600;
   }
   
-  /* Custom chart background for dark mode */
-  .dark canvas {
-    filter: brightness(0.9);
-  }
+  /* Charts pick their colours from lib/charts/theme.js, so no blanket filter. */
 }
 
 @layer utilities {
@@ -157,8 +160,21 @@
     .flame-luxe,
     .flame-inner,
     .flame-core,
-    .flame-glow {
+    .flame-glow,
+    .animate-fade-in {
       animation: none !important;
+    }
+
+    /* Spinners still need to convey "working", just without the fast rotation. */
+    .animate-spin {
+      animation-duration: 1.6s !important;
+    }
+
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
     }
   }
 }

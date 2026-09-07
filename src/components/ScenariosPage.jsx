@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Check, Copy, Pencil, Trash2, X } from 'lucide-react';
 import { useScenario } from '../contexts/ScenarioContext';
 import { useAuth } from '../contexts/AuthContext';
 import { FEATURES, hasEntitlement } from '../lib/entitlements';
@@ -70,14 +71,17 @@ function ScenariosPage() {
   const getScenarioSummary = (scenario) => {
     // Calculate key metrics for preview
     const tspBalance = scenario.tsp?.currentBalance || 0;
-    const fireAge = scenario.fire?.desiredFireAge || 0;
+    // The profile owns the separation age; fire.desiredFireAge only mirrors it.
+    const separationAge = scenario.profile?.separationAge || 0;
     const fireGoal = scenario.fire?.monthlyFireIncomeGoal || 0;
-    
+    const yearsOfService =
+      Number(scenario.fers?.yearsOfService || 0) + Number(scenario.fers?.monthsOfService || 0) / 12;
+
     return {
       tspBalance,
-      fireAge,
+      separationAge,
       fireGoal,
-      yearsOfService: scenario.fers?.yearsOfService || 0
+      yearsOfService
     };
   };
 
@@ -86,7 +90,7 @@ function ScenariosPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold navy-text mb-2">💼 Retirement Scenarios</h1>
+          <h1 className="text-3xl font-bold navy-text mb-2">Retirement scenarios</h1>
           <p className="text-slate-600 dark:text-slate-400">
             Manage and compare your retirement planning scenarios
           </p>
@@ -97,11 +101,12 @@ function ScenariosPage() {
           {entitlements?.isPro && (
             <span className="px-3 py-1 bg-gold-100 dark:bg-gold-900 text-gold-800 dark:text-gold-200 
                            text-xs font-semibold rounded-full border border-gold-200 dark:border-gold-700">
-              ✨ PRO FEATURES
+              PRO
             </span>
           )}
-          <Link to="/" className="btn-secondary">
-            ← Back to Home
+          <Link to="/" className="btn-secondary inline-flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Back to home
           </Link>
         </div>
       </div>
@@ -131,7 +136,7 @@ function ScenariosPage() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-semibold text-gold-800 dark:text-gold-300">
-                🔥 Scenario Comparison Ready
+                Ready to compare
               </h3>
               <p className="text-sm text-gold-700 dark:text-gold-400">
                 Compare {selectedScenarios.length} scenarios side-by-side
@@ -149,7 +154,7 @@ function ScenariosPage() {
                 navigate('/scenarios/compare', { state: { scenarioIds: selectedScenarios } });
               }}
             >
-              {canCompare ? '📊 Compare Scenarios' : '🔒 Pro Feature'}
+              {canCompare ? 'Compare scenarios' : 'Pro feature'}
             </button>
           </div>
         </div>
@@ -159,13 +164,12 @@ function ScenariosPage() {
       <div className="space-y-4">
         {scenarios.length === 0 ? (
           <div className="card p-8 text-center">
-            <div className="text-4xl mb-4">📋</div>
             <h3 className="text-xl font-semibold navy-text mb-2">No scenarios yet</h3>
             <p className="text-slate-600 dark:text-slate-400 mb-4">
               Create your first retirement scenario to get started
             </p>
             <Link to="/" className="btn-primary">
-              📈 Create Scenario
+              Create a scenario
             </Link>
           </div>
         ) : (
@@ -216,17 +220,19 @@ function ScenariosPage() {
                             }}
                             autoFocus
                           />
-                          <button 
+                          <button
                             onClick={() => saveRename(scenario.id)}
-                            className="text-green-600 hover:text-green-700 text-sm"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-green-600 hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-900/30"
+                            aria-label="Save name"
                           >
-                            ✓
+                            <Check className="h-4 w-4" aria-hidden="true" />
                           </button>
-                          <button 
+                          <button
                             onClick={cancelRename}
-                            className="text-red-600 hover:text-red-700 text-sm"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                            aria-label="Cancel rename"
                           >
-                            ✕
+                            <X className="h-4 w-4" aria-hidden="true" />
                           </button>
                         </div>
                       ) : (
@@ -251,16 +257,16 @@ function ScenariosPage() {
                         <div className="font-medium">{formatCurrency(summary.tspBalance)}</div>
                       </div>
                       <div className="text-sm">
-                        <div className="text-slate-500 dark:text-slate-400">FIRE Age</div>
-                        <div className="font-medium">{summary.fireAge || 'Not set'}</div>
+                        <div className="text-slate-500 dark:text-slate-400">Separation age</div>
+                        <div className="font-medium">{summary.separationAge || 'Not set'}</div>
                       </div>
                       <div className="text-sm">
                         <div className="text-slate-500 dark:text-slate-400">Monthly Goal</div>
                         <div className="font-medium">{formatCurrency(summary.fireGoal)}</div>
                       </div>
                       <div className="text-sm">
-                        <div className="text-slate-500 dark:text-slate-400">Years of Service</div>
-                        <div className="font-medium">{summary.yearsOfService} years</div>
+                        <div className="text-slate-500 dark:text-slate-400">Years of service</div>
+                        <div className="font-medium">{summary.yearsOfService.toFixed(1)} years</div>
                       </div>
                     </div>
 
@@ -286,25 +292,28 @@ function ScenariosPage() {
                           navigate('/pro-features', { state: { reason: 'scenario_limit', limit: result.error.scenarioLimit } });
                         }
                       }}
-                      className="btn-secondary text-sm"
+                      className="btn-secondary text-sm inline-flex items-center justify-center"
                       title="Duplicate scenario"
+                      aria-label={`Duplicate ${scenario.name}`}
                     >
-                      📋
+                      <Copy className="h-4 w-4" aria-hidden="true" />
                     </button>
                     <button
                       onClick={() => handleRename(scenario)}
-                      className="btn-secondary text-sm"
+                      className="btn-secondary text-sm inline-flex items-center justify-center"
                       title="Rename scenario"
+                      aria-label={`Rename ${scenario.name}`}
                     >
-                      ✏️
+                      <Pencil className="h-4 w-4" aria-hidden="true" />
                     </button>
                     {scenarios.length > 1 && (
                       <button
                         onClick={() => deleteScenario(scenario.id)}
-                        className="btn-secondary text-sm text-red-600 hover:text-red-700"
+                        className="btn-secondary text-sm inline-flex items-center justify-center text-red-600 hover:text-red-700"
                         title="Delete scenario"
+                        aria-label={`Delete ${scenario.name}`}
                       >
-                        🗑️
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
                       </button>
                     )}
                   </div>
@@ -319,7 +328,7 @@ function ScenariosPage() {
       {!entitlements?.isPro && (
         <div className="mt-8 card p-6 text-center bg-gradient-to-r from-gold-50 to-navy-50 dark:from-gold-900/20 dark:to-navy-900/20 
                         border border-gold-200 dark:border-gold-700">
-          <h3 className="text-xl font-semibold navy-text mb-2">🔥 Unlock FireFed Pro</h3>
+          <h3 className="text-xl font-semibold navy-text mb-2">Unlock FireFed Pro</h3>
           <p className="text-slate-600 dark:text-slate-400 mb-4">
             Get advanced scenario comparison, Supabase sync, and premium retirement planning tools
           </p>
@@ -327,7 +336,7 @@ function ScenariosPage() {
             to="/pro-features"
             className="btn-primary bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-600 hover:to-gold-700 inline-flex items-center justify-center"
           >
-            ⭐ Upgrade to Pro
+            Upgrade to Pro
           </Link>
         </div>
       )}
