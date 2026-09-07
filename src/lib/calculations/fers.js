@@ -330,6 +330,10 @@ export function calculateFersResults({
   // numbers that cannot be compared.
   cpiIncrease = 0.025,
   isSpecialProvision = false,
+  // The 1.1% factor requires age 62 with 20 years *at separation*. A deferred
+  // or postponed annuity that begins at 62 does not earn it, so the age the
+  // multiplier keys off can differ from the age the annuity starts.
+  multiplierAge = undefined,
 }) {
   const totalYears = Number(yearsOfService ?? 0) + Number(monthsOfService ?? 0) / 12;
   const ageNow = Number(currentAge ?? 0);
@@ -348,7 +352,7 @@ export function calculateFersResults({
   // threshold sick leave cannot satisfy, consistent with sick leave being barred
   // from establishing eligibility — so the multiplier keys off service alone.
   const multiplier = calculateFersMultiplier({
-    retirementAge: retireAge,
+    retirementAge: multiplierAge === undefined ? retireAge : Number(multiplierAge),
     totalYearsOfService: projectedYears,
   });
 

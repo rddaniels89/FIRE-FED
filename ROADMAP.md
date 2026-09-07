@@ -17,7 +17,7 @@ is Pro.
 - [x] 2. Add a hire-date cohort so the FERS contribution rate (0.8%, 3.1%, 4.4%) drives take-home pay and savings rate. — Free
 - [x] 3. Make separation age, annuity commencement age, and Social Security claiming age three separate profile fields. — Free
 - [x] 4. Build a year-by-year cash-flow engine: one row per age with salary, pension, SRS, Social Security, TSP withdrawals, other income, healthcare, taxes, spending, ending balance. — Free (deterministic)
-- [~] 5. Replace the level-dollar, no-growth bridge estimate with the timeline-driven version that sequences each income start. — Free
+- [x] 5. Replace the level-dollar, no-growth bridge estimate with the timeline-driven version that sequences each income start. — Free
 - [x] 6. Make Monte Carlo consume the same timeline rows. — Pro
 - [~] 7. Point the optimizer, the PDF, and the dashboard at the timeline. — Free/Pro as before
 
@@ -38,7 +38,7 @@ is Pro.
 - [x] 17. Add federal brackets, standard deduction, and filing status to the yearly parameter sets. — Free
 - [x] 18. Characterize each income line: pension and SRS taxable, Traditional TSP taxable, Roth tax-free, brokerage at capital-gains rates, Social Security under provisional income. — Free
 - [x] 19. Add a state rate plus a "state exempts federal pensions" flag. — Free
-- [~] 20. Replace the flat tax-now and tax-later percentages in the TSP projection with the bracket engine. — Free
+- [x] 20. Replace the flat tax-now and tax-later percentages in the TSP projection with the bracket engine. — Free
 - [x] 21. Add Roth conversion planning in low-bracket bridge years. — Pro
 
 ## D. Social Security
@@ -97,10 +97,10 @@ is Pro.
 
 ## L. Tests
 
-- [~] 52. Build a golden-case library from OPM's published examples, one per path. — n/a
-- [~] 53. Snapshot full timeline projections as regression fixtures. — n/a
-- [~] 54. Test the tax engine against IRS worksheets. — n/a
-- [~] 55. Add household and claiming-age cases. — n/a
+- [x] 52. Build a golden-case library from OPM's published examples, one per path. — n/a
+- [x] 53. Snapshot full timeline projections as regression fixtures. — n/a
+- [x] 54. Test the tax engine against IRS worksheets. — n/a
+- [x] 55. Add household and claiming-age cases. — n/a
 - [~] 56. Add an end-to-end test for the onboarding flow. — n/a
 
 ## M. Onboarding, dashboard, report
@@ -108,4 +108,4 @@ is Pro.
 - [~] 57. Goal-first onboarding that asks only the inputs the chosen question needs. — Free
 - [~] 58. Rebuild the dashboard around four questions with the timeline as the central view. — Free (Monte Carlo card Pro)
 - [~] 59. Rebuild the PDF from the timeline: bridge, Social Security, healthcare, taxes, stress results, assumptions, sources. — Pro
-- [~] 60. Wire the GS pay module into a career projection: step increases, raises, promotions, and the resulting High-3. — Pro
+- [x] 60. Wire the GS pay module into a career projection: step increases, raises, promotions, and the resulting High-3. — Pro

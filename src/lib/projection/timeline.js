@@ -252,7 +252,11 @@ export function buildTimeline(scenario, options = {}) {
     let srs = 0;
     if (plan.srs.isEligible && age >= plan.srs.startAge && age < plan.srs.endAge) {
       const exempt = getSrsEarningsTestExemptAmount(CURRENT_PARAMETER_YEAR) * deflator;
-      srs = applySrsEarningsTest({ srsAnnual: plan.srs.annual, annualEarnedIncome: sideHustle, exemptAmount: exempt }).srsAnnualAfterTest;
+      // Special provision retirees are exempt from the earnings test until MRA.
+      const exemptFromTest = plan.isSpecialProvision && age < plan.mra;
+      srs = exemptFromTest
+        ? plan.srs.annual
+        : applySrsEarningsTest({ srsAnnual: plan.srs.annual, annualEarnedIncome: sideHustle, exemptAmount: exempt }).srsAnnualAfterTest;
     }
 
     let socialSecurity = 0;

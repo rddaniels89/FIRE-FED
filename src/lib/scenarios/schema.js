@@ -225,6 +225,7 @@ export function createDefaultCareer() {
     localityCode: 'RUS',
     annualRaisePercent: 2,
     promotions: [],
+    yearsInCurrentStep: 0,
   };
 }
 

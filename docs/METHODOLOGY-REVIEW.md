@@ -26,11 +26,11 @@ worked example.
 |---|---|---|---|
 | Eligibility | MRA+30, 60+20, 62+5 unreduced; MRA+10 reduced 5/12% per month under 62; deferred with 5+ years; VERA 50/20 or any/25 when offered; special provisions 50/20 or any/25 | `src/lib/calculations/retirementPaths.js`, `fers.js`, `specialProvisions.js` | `__tests__/retirementPaths.test.js`, `goldenCases.test.js`, `opmConformance.test.js` |
 | Service | Years and months carried; sick leave credited only on immediate annuities and only for computation; High-3 at separation grown from today's salary or from a GS career path | `fers.js`, `projection/plan.js`, `careerProjection.js` | `fers.test.js`, `careerProjection.test.js` |
-| Multiplier | 1.0%; 1.1% at 62 with 20 years, applied at the annuity's commencement age including deferred annuities | `fers.js` | `goldenCases.test.js` |
+| Multiplier | 1.0%; 1.1% at 62 with 20 years at separation; not earned by a deferred or postponed annuity that merely begins at 62 | `fers.js` | `goldenCases.test.js` |
 | Survivor | 10% reduction for 50%, 5% for 25%, survivor share computed before the reduction | `fers.js` | `fers.test.js` |
 | COLA | Diet COLA (CPI ≤2 → CPI; 2–3 → 2; >3 → CPI−1); none before 62 except special provisions | `cola.js` | `cola.test.js` |
 | Deferred freeze | Deferred and postponed annuities computed on the separation-day High-3, no COLA until commencement | `projection/plan.js` | `timeline.test.js` |
-| SRS | SS-at-62 × civilian years / 40; immediate unreduced only; VERA payable from MRA; ends at 62; earnings test with the under-FRA exempt amount | `srs.js`, `ssaEarningsTest.js` | `srs.test.js` |
+| SRS | SS-at-62 × civilian years / 40; immediate unreduced only; VERA payable from MRA; special provisions paid immediately and exempt from the earnings test until MRA; ends at 62; earnings test with the under-FRA exempt amount | `srs.js`, `ssaEarningsTest.js` | `srs.test.js` |
 | FEHB | Five-year rule; continues on immediate; suspended/reinstated on postponed; lost on deferred; premiums grown at an assumed rate; Medicare Part B at 65 with FEHB kept or dropped; IRMAA two-year lookback | `fehb.js`, `healthcareCosts.js` | `specialProvisionsAndFehb.test.js`, `healthcareCosts.test.js` |
 | TSP access | Penalty-free from separation in or after the year of turning 55 (50 public safety), else 59½; 72(t) amortization over single life expectancy; Roth contributions accessible once rolled to an IRA; conversions seasoned five years; Roth earnings qualified at 59½ with five years | `tspAccess.js` | `tspAccess.test.js` |
 | Contributions | FERS 0.8/3.1/4.4% by hire cohort; TSP elective and catch-up limits; 1% automatic plus 4% match | `fers.js`, `contributionLimits.js`, `tsp.js` | `tsp.test.js`, `contributionLimits.test.js` |
@@ -47,9 +47,10 @@ worked example.
 2. The High-3 at a future separation is projected from today's salary at the
    assumed growth rate, or from the GS career path when enabled. It is not a
    36-month average of actual pay.
-3. The 1.1% multiplier is applied to deferred annuities commencing at 62 or
-   later with 20 or more years. We believe this matches OPM's deferred
-   retirement computation; please confirm.
+3. The 1.1% multiplier is keyed on age at separation: a deferred or postponed
+   annuity that begins at 62 with 20 years is computed at 1.0%. This is the
+   conservative reading of 5 U.S.C. 8415(h) ("at the time of retirement");
+   please confirm.
 4. Roth TSP withdrawals are modeled as if rolled to a Roth IRA at separation,
    making contributions accessible first. The TSP itself pays pro rata.
 5. Military service deposits are modeled separately (`militaryDeposit.js`) and

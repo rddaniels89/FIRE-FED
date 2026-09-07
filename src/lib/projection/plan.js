@@ -120,6 +120,7 @@ export function resolveHigh3AtSeparation(scenario) {
       separationAge: profile.separationAge,
       annualRaisePercent: career.annualRaisePercent,
       promotions: career.promotions ?? [],
+      yearsInCurrentStep: career.yearsInCurrentStep ?? 0,
     });
     return {
       high3AtSeparation: path.high3AtSeparation,
@@ -218,6 +219,7 @@ export function resolveRetirementPlan(scenario, { asOfYear = new Date().getFullY
           cpiIncrease: num(scenario.tsp?.inflationRate, 2.5) / 100,
           isSpecialProvision: Boolean(special?.isEligible),
           retirementEndAge: num(scenario.summary?.assumptions?.endAge, 95),
+          multiplierAge: separationAge,
         })
       : null;
 
@@ -237,6 +239,7 @@ export function resolveRetirementPlan(scenario, { asOfYear = new Date().getFullY
           mra,
           isVoluntaryEarlyRetirement: path === RETIREMENT_PATHS.VERA,
           isDeferredOrPostponed: isDeferred || isPostponed || path === RETIREMENT_PATHS.MRA10_IMMEDIATE,
+          isSpecialProvision: Boolean(special?.isEligible),
         })
       : null;
 
