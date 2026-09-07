@@ -65,7 +65,7 @@ function DeltaCard({ title, icon, shift, onUse }) {
               <dt className="text-slate-600 dark:text-slate-400">{label}</dt>
               <dd className="text-right tabular-nums">
                 <span className={`font-medium ${tone}`}>{fmtDelta(delta)}</span>
-                <span className="text-xs text-slate-400 ml-1">→ {fmtMoney(d.to)}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">→ {fmtMoney(d.to)}</span>
               </dd>
             </div>
           );
@@ -80,8 +80,17 @@ function DeltaCard({ title, icon, shift, onUse }) {
         </div>
       )}
 
-      <button type="button" className="btn-secondary mt-4 py-2 px-4 text-sm" onClick={() => onUse(to.separationAge)}>
+      {/* Both cards read "Use this age", so the age is appended for screen
+          readers. An aria-label replacing the visible text would break the
+          label-in-name rule for anyone using voice control. */}
+      <button
+        type="button"
+        className="btn-secondary btn-sm mt-4"
+
+        onClick={() => onUse(to.separationAge)}
+      >
         Use this age
+        <span className="sr-only"> {to.separationAge}</span>
       </button>
     </div>
   );

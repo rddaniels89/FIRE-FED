@@ -23,6 +23,7 @@ import { evaluateFehbContinuation } from '../lib/calculations/fehb';
 import TooltipWrapper from './TooltipWrapper';
 import NumberStepper from './NumberStepper';
 import HowCalculated from './HowCalculated';
+import ProjectionDisclaimer from './ProjectionDisclaimer';
 
 ChartJS.register(
   CategoryScale,
@@ -198,8 +199,17 @@ function FERSPensionCalc() {
         // Only update if we have actual input values
         const hasValidInputs = inputs.currentAge && inputs.retirementAge;
         if (hasValidInputs) {
+          const parsed = parseNumericInputs(inputs);
+          // This page's age control is a separation age: every figure on it is
+          // computed from separating then (it is what is handed to
+          // evaluateAllRetirementPaths as `separationAge`). The legacy mirror
+          // reads `fers.retirementAge` as "when the pension starts", so writing
+          // only that would move the plan's annuity start age and leave its
+          // separation age behind. Write the separation mirror too, which makes
+          // the plan take the annuity start from the path default.
           updateCurrentScenario({
-            fers: parseNumericInputs(inputs)
+            fers: parsed,
+            fire: { desiredFireAge: parsed.retirementAge }
           });
         }
       }
@@ -261,7 +271,7 @@ function FERSPensionCalc() {
       errors.currentAge = 'Current age must be between 18 and 999';
     }
     if (numericInputs.retirementAge <= numericInputs.currentAge || numericInputs.retirementAge > 999) {
-      errors.retirementAge = 'Retirement age must be greater than current age and less than 999';
+      errors.retirementAge = 'Separation age must be greater than current age and less than 999';
     }
     if (numericInputs.showComparison && numericInputs.privateJobSalary <= 0) {
       errors.privateJobSalary = 'Private sector salary must be greater than 0';
@@ -511,15 +521,15 @@ function FERSPensionCalc() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-8">
+      <div className="grid lg:grid-cols-2 gap-8 min-w-0 [&>*]:min-w-0">
         <div className="space-y-6">
           <div className="card p-6">
             <h3 className="text-xl font-semibold navy-text mb-6">Service Information</h3>
             <div className="grid grid-cols-2 gap-6">
-              <TooltipWrapper text="Years completed so far. We'll project additional service from your current age to your planned retirement age to estimate total years at retirement.">
+              <TooltipWrapper text="Years completed so far. We'll project additional service from your current age to your separation age to estimate total years at separation.">
                 <div>
                   <label className="label">Years of Service</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       type="text"
                       value={getDisplayValue('yearsOfService')}
@@ -545,7 +555,7 @@ function FERSPensionCalc() {
               <TooltipWrapper text="Additional months of service (0-11)">
                 <div>
                   <label className="label">Additional Months</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       type="text"
                       value={getDisplayValue('monthsOfService')}
@@ -664,7 +674,7 @@ function FERSPensionCalc() {
               <TooltipWrapper text="Average of your highest 3 consecutive years of basic pay">
                 <div>
                   <label className="label">High-3 Average Salary</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       type="text"
                       value={getDisplayValue('high3Salary')}
@@ -691,7 +701,7 @@ function FERSPensionCalc() {
                 <TooltipWrapper text="Your current age in years">
                   <div>
                     <label className="label" htmlFor="currentAge">Current Age</label>
-                    <div className="flex items-stretch gap-2">
+                    <div className="flex items-start gap-2">
                       <input
                         id="currentAge"
                         type="text"
@@ -715,11 +725,12 @@ function FERSPensionCalc() {
                   </div>
                 </TooltipWrapper>
                 
-                <TooltipWrapper text="Age when you plan to retire">
+                <TooltipWrapper text="The age your federal employment ends. Every figure on this page is computed from separating at this age; when the annuity itself begins depends on the path you take out, shown below.">
                   <div>
-                    <label className="label">Planned Retirement Age</label>
-                    <div className="flex items-stretch gap-2">
+                    <label className="label" htmlFor="fersSeparationAge">Separation age</label>
+                    <div className="flex items-start gap-2">
                       <input
+                        id="fersSeparationAge"
                         type="text"
                         value={getDisplayValue('retirementAge')}
                         onChange={(e) => handleInputChange('retirementAge', e.target.value)}
@@ -728,8 +739,8 @@ function FERSPensionCalc() {
                         inputMode="numeric"
                       />
                       <NumberStepper
-                        incrementLabel="Increase planned retirement age"
-                        decrementLabel="Decrease planned retirement age"
+                        incrementLabel="Increase separation age"
+                        decrementLabel="Decrease separation age"
                         onIncrement={() => stepField('retirementAge', { step: 1, min: 19, max: 999, integer: true })(+1)}
                         onDecrement={() => stepField('retirementAge', { step: 1, min: 19, max: 999, integer: true })(-1)}
                         disabledDecrement={numericInputs.retirementAge <= 19}
@@ -754,7 +765,7 @@ function FERSPensionCalc() {
               <TooltipWrapper text="Unused sick leave adds to the service used to compute your annuity. It cannot make you eligible to retire and does not raise your high-3.">
                 <div>
                   <label className="label" htmlFor="unusedSickLeaveHours">Unused Sick Leave (hours)</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       id="unusedSickLeaveHours"
                       type="text"
@@ -1049,7 +1060,7 @@ function FERSPensionCalc() {
               <TooltipWrapper text="Your estimated Social Security benefit at age 62, from your Social Security statement. Used only to estimate the Special Retirement Supplement.">
                 <div>
                   <label className="label" htmlFor="socialSecurityAt62Monthly">Estimated Social Security at 62 (monthly)</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       id="socialSecurityAt62Monthly"
                       type="text"
@@ -1095,7 +1106,7 @@ function FERSPensionCalc() {
                 <TooltipWrapper text="Expected salary in private sector job">
                   <div>
                     <label className="label">Private Sector Salary</label>
-                    <div className="flex items-stretch gap-2">
+                    <div className="flex items-start gap-2">
                       <input
                         type="text"
                         value={getDisplayValue('privateJobSalary')}
@@ -1121,7 +1132,7 @@ function FERSPensionCalc() {
                 <TooltipWrapper text="Expected years working in private sector">
                   <div>
                     <label className="label">Private Sector Working Years</label>
-                    <div className="flex items-stretch gap-2">
+                    <div className="flex items-start gap-2">
                       <input
                         type="text"
                         value={getDisplayValue('privateJobYears')}
@@ -1224,11 +1235,11 @@ function FERSPensionCalc() {
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <div className="text-slate-500 dark:text-slate-400">Service for eligibility</div>
-                      <div className="font-medium text-slate-900 dark:text-white">{results.service.eligibilityYears.toFixed(2)} years</div>
+                      <div className="font-medium text-slate-900 dark:text-white">{results.service.eligibilityYears.toFixed(1)} years</div>
                     </div>
                     <div>
                       <div className="text-slate-500 dark:text-slate-400">Service for computation</div>
-                      <div className="font-medium text-slate-900 dark:text-white">{results.service.computationYears.toFixed(2)} years</div>
+                      <div className="font-medium text-slate-900 dark:text-white">{results.service.computationYears.toFixed(1)} years</div>
                     </div>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
@@ -1289,7 +1300,7 @@ function FERSPensionCalc() {
                 <div className="font-medium text-slate-900 dark:text-white text-sm mb-2">Special Retirement Supplement</div>
                 {results.srs.isEligible && numericInputs.socialSecurityAt62Monthly <= 0 ? (
                   <p className="text-xs text-slate-600 dark:text-slate-400">
-                    You would qualify for the supplement at this retirement age. Add your estimated Social
+                    You would qualify for the supplement at this separation age. Add your estimated Social
                     Security at 62 above and it will be calculated &mdash; it is often over $1,000 a month.
                   </p>
                 ) : results.srs.isEligible ? (
@@ -1325,7 +1336,7 @@ function FERSPensionCalc() {
                 ) : (
                   <p className="text-xs text-slate-600 dark:text-slate-400">
                     {results.srs.reason === 'age_62_or_over'
-                      ? 'Not payable: the supplement bridges the gap to age 62, and this retirement age is already 62 or later.'
+                      ? 'Not payable: the supplement bridges the gap to age 62, and this separation age is already 62 or later.'
                       : results.srs.reason === 'deferred_or_postponed'
                       ? 'Not payable on a deferred or postponed retirement.'
                       : 'Not payable: the supplement requires an immediate, unreduced annuity — MRA with 30 years, or age 60 with 20. MRA+10 is a reduced annuity and does not qualify.'}
@@ -1428,6 +1439,8 @@ function FERSPensionCalc() {
           </div>
         </div>
       </div>
+
+      <ProjectionDisclaimer className="mt-8" />
     </div>
   );
 }

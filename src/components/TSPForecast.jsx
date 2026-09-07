@@ -26,6 +26,7 @@ import {
   ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
   CATCH_UP_AGE,
 } from '../lib/calculations/contributionLimits';
+import ProjectionDisclaimer from './ProjectionDisclaimer';
 
 ChartJS.register(
   CategoryScale,
@@ -404,7 +405,7 @@ function TSPForecast() {
       errors.currentAge = 'Current age must be between 18 and 999';
     }
     if (numericInputs.retirementAge <= numericInputs.currentAge || numericInputs.retirementAge > 999) {
-      errors.retirementAge = 'Retirement age must be greater than current age and less than 999';
+      errors.retirementAge = 'Separation age must be greater than current age and less than 999';
     }
     if (numericInputs.monthlyContributionPercent < 0 || numericInputs.monthlyContributionPercent > 100) {
       errors.monthlyContributionPercent = 'Contribution percentage must be between 0 and 100';
@@ -673,7 +674,7 @@ function TSPForecast() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-8">
+      <div className="grid lg:grid-cols-2 gap-8 min-w-0 [&>*]:min-w-0">
         {/* Input Section */}
         <div className="space-y-6">
           <div className="card p-6">
@@ -682,7 +683,7 @@ function TSPForecast() {
               <TooltipWrapper text="Your current TSP account balance">
                 <div>
                   <label className="label" htmlFor="currentBalance">Starting TSP Balance</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       id="currentBalance"
                       type="text"
@@ -709,7 +710,7 @@ function TSPForecast() {
               <TooltipWrapper text="Your current age in years">
                 <div>
                   <label className="label" htmlFor="currentAge">Current Age</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       id="currentAge"
                       type="text"
@@ -733,10 +734,10 @@ function TSPForecast() {
                 </div>
               </TooltipWrapper>
               
-              <TooltipWrapper text="Age when you plan to retire">
+              <TooltipWrapper text="The age your federal employment ends. Contributions stop here; when you start drawing is a separate question.">
                 <div>
-                  <label className="label" htmlFor="retirementAge">Target Retirement Age</label>
-                  <div className="flex items-stretch gap-2">
+                  <label className="label" htmlFor="retirementAge">Separation age</label>
+                  <div className="flex items-start gap-2">
                     <input
                       id="retirementAge"
                       type="text"
@@ -747,8 +748,8 @@ function TSPForecast() {
                       inputMode="numeric"
                     />
                     <NumberStepper
-                      incrementLabel="Increase target retirement age"
-                      decrementLabel="Decrease target retirement age"
+                      incrementLabel="Increase separation age"
+                      decrementLabel="Decrease separation age"
                       onIncrement={() => stepField('retirementAge', { step: 1, min: 19, max: 999, integer: true })(+1)}
                       onDecrement={() => stepField('retirementAge', { step: 1, min: 19, max: 999, integer: true })(-1)}
                       disabledDecrement={numericInputs.retirementAge <= 19}
@@ -763,7 +764,7 @@ function TSPForecast() {
               <TooltipWrapper text="Your current annual salary">
                 <div>
                   <label className="label" htmlFor="annualSalary">Annual Salary</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       id="annualSalary"
                       type="text"
@@ -834,7 +835,7 @@ function TSPForecast() {
             <TooltipWrapper text="Percentage of salary contributed to TSP each month">
               <div className="mb-4">
                 <label className="label" htmlFor="monthlyContributionPercent">Monthly Contribution %</label>
-                <div className="flex items-stretch gap-2">
+                <div className="flex items-start gap-2">
                   <input
                     id="monthlyContributionPercent"
                     type="text"
@@ -905,7 +906,7 @@ function TSPForecast() {
                 <TooltipWrapper text="Your current marginal tax rate">
                   <div>
                     <label className="label">Current Tax Rate %</label>
-                    <div className="flex items-stretch gap-2">
+                    <div className="flex items-start gap-2">
                       <input
                         type="text"
                         value={getDisplayValue('currentTaxRate')}
@@ -931,7 +932,7 @@ function TSPForecast() {
                 <TooltipWrapper text="Expected tax rate in retirement">
                   <div>
                     <label className="label">Retirement Tax Rate %</label>
-                    <div className="flex items-stretch gap-2">
+                    <div className="flex items-start gap-2">
                       <input
                         type="text"
                         value={getDisplayValue('retirementTaxRate')}
@@ -986,7 +987,7 @@ function TSPForecast() {
               <TooltipWrapper text="Expected annual salary growth used for future contributions">
                 <div>
                   <label className="label" htmlFor="annualSalaryGrowthRate">Salary Growth % (annual)</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       id="annualSalaryGrowthRate"
                       type="text"
@@ -1012,7 +1013,7 @@ function TSPForecast() {
               <TooltipWrapper text="Used only when displaying values in today's dollars (inflation-adjusted)">
                 <div>
                   <label className="label" htmlFor="inflationRate">Inflation % (annual)</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       id="inflationRate"
                       type="text"
@@ -1073,7 +1074,7 @@ function TSPForecast() {
               <TooltipWrapper text="Annual employee elective deferral limit (editable; limits change over time)">
                 <div>
                   <label className="label" htmlFor="annualEmployeeDeferralLimit">Annual deferral limit ($)</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       id="annualEmployeeDeferralLimit"
                       type="text"
@@ -1100,7 +1101,7 @@ function TSPForecast() {
               <TooltipWrapper text="Additional catch-up amount allowed at/after the catch-up age (editable)">
                 <div>
                   <label className="label" htmlFor="annualCatchUpLimit">Catch-up limit ($)</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       id="annualCatchUpLimit"
                       type="text"
@@ -1129,7 +1130,7 @@ function TSPForecast() {
               <TooltipWrapper text="Age at which catch-up is applied in this model (editable)">
                 <div>
                   <label className="label" htmlFor="catchUpAge">Catch-up age</label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       id="catchUpAge"
                       type="text"
@@ -1158,7 +1159,7 @@ function TSPForecast() {
                   <label className="label" htmlFor="priorYearWages">
                     Prior-year wages ($) <span className="font-normal text-slate-500">— optional</span>
                   </label>
-                  <div className="flex items-stretch gap-2">
+                  <div className="flex items-start gap-2">
                     <input
                       id="priorYearWages"
                       type="text"
@@ -1229,7 +1230,7 @@ function TSPForecast() {
               {Object.entries(numericInputs.allocation).map(([fund, percentage]) => (
                 <div key={fund} className="flex items-center space-x-4">
                   <div className="w-20 text-sm text-slate-600 dark:text-slate-400 font-medium">{fund} Fund</div>
-                  <div className="flex items-stretch gap-2 flex-1">
+                  <div className="flex items-start gap-2 flex-1">
                     <input
                       type="text"
                       value={getAllocationDisplayValue(fund)}
@@ -1313,7 +1314,7 @@ function TSPForecast() {
                   <div className="text-3xl font-bold text-slate-600 dark:text-slate-400 mb-2">
                     {numericInputs.retirementAge - numericInputs.currentAge}
                   </div>
-                  <div className="text-sm text-slate-500 dark:text-slate-400">Years to Retirement</div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400">Years to separation</div>
                 </div>
               </div>
             </div>
@@ -1464,7 +1465,7 @@ function TSPForecast() {
                 <div key={fund} className="flex justify-between items-center gap-3">
                   <span className="text-slate-600 dark:text-slate-400">{fund} Fund</span>
                   {canEditFundAssumptions ? (
-                    <div className="flex items-stretch gap-2">
+                    <div className="flex items-start gap-2">
                       <input
                         aria-label={`${fund} fund return`}
                         type="text"
@@ -1487,6 +1488,8 @@ function TSPForecast() {
           </div>
         </div>
       </div>
+
+      <ProjectionDisclaimer className="mt-8" />
     </div>
   );
 }

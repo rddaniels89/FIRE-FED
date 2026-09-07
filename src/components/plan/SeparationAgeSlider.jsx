@@ -1,5 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 
+// Green versus red was the only signal on the sustainability strip, so the
+// "runs short" segments also carry a diagonal hatch.
+const SHORT_HATCH = {
+  backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.85) 0 2px, transparent 2px 5px)',
+};
+
+/** "sustainable from 51 to 75; runs short below 51" from the sweep. */
+function describeSweep(sweep) {
+  const runs = [];
+  for (const s of sweep) {
+    const last = runs[runs.length - 1];
+    if (last && last.isSustainable === s.isSustainable) last.toAge = s.separationAge;
+    else runs.push({ isSustainable: s.isSustainable, fromAge: s.separationAge, toAge: s.separationAge });
+  }
+  return runs
+    .map((r) => {
+      const what = r.isSustainable ? 'sustainable' : 'runs short';
+      return r.fromAge === r.toAge ? `${what} at ${r.fromAge}` : `${what} from ${r.fromAge} to ${r.toAge}`;
+    })
+    .join('; ');
+}
+
 /**
  * The separation-age slider with the sustainability strip beneath it.
  *
@@ -62,10 +84,7 @@ export default function SeparationAgeSlider({
         onTouchEnd={() => commit(value)}
         onKeyUp={() => commit(value)}
         className="w-full accent-navy-600"
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={value}
-        aria-label="Separation age"
+        aria-valuetext={`age ${value}`}
       />
       <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
         <span>{min} (now)</span>
@@ -74,7 +93,7 @@ export default function SeparationAgeSlider({
 
       {Array.isArray(sweep) && sweep.length > 0 && (
         <div className="mt-3">
-          <div className="flex gap-px" role="img" aria-label="Sustainability by separation age">
+          <div className="flex gap-px" role="img" aria-label={`Sustainability by separation age: ${describeSweep(sweep)}`}>
             {sweep.map((s) => {
               const isSelected = s.separationAge === value;
               const isFire = s.separationAge === fireAge;
@@ -82,6 +101,7 @@ export default function SeparationAgeSlider({
                 <div
                   key={s.separationAge}
                   title={`Age ${s.separationAge}: ${s.isSustainable ? 'sustainable' : 'not sustainable'} · ${s.pathLabel}`}
+                  style={s.isSustainable ? undefined : SHORT_HATCH}
                   className={`h-3 flex-1 rounded-sm ${
                     s.isSustainable ? 'bg-green-500 dark:bg-green-400' : 'bg-red-400 dark:bg-red-500'
                   } ${isSelected ? 'ring-2 ring-navy-700 dark:ring-white ring-offset-1 ring-offset-white dark:ring-offset-slate-800' : ''} ${
@@ -91,16 +111,25 @@ export default function SeparationAgeSlider({
               );
             })}
           </div>
-          <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400 mt-1">
+          {/* The strip is hover-only for a sighted mouse user; this is the same
+              reading, age by age, for anyone who cannot hover or see the hue. */}
+          <ul className="sr-only">
+            {sweep.map((s) => (
+              <li key={s.separationAge}>{`age ${s.separationAge}: ${s.isSustainable ? 'sustainable' : 'runs short'}`}</li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400 mt-1">
             <span className="inline-flex items-center gap-1">
-              <span className="inline-block w-3 h-2 rounded-sm bg-green-500" /> sustainable to end age
+              <span className="inline-block w-3 h-2 rounded-sm bg-green-500 dark:bg-green-400" /> sustainable to end age
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="inline-block w-3 h-2 rounded-sm bg-red-400" /> runs short
+              <span className="inline-block w-3 h-2 rounded-sm bg-red-400 dark:bg-red-500" style={SHORT_HATCH} /> runs short
+              (hatched)
             </span>
             {fireAge != null && (
               <span className="inline-flex items-center gap-1">
-                <span className="inline-block w-3 h-2 rounded-sm outline outline-2 outline-gold-500" /> projected earliest
+                <span className="inline-block w-3 h-2 rounded-sm outline outline-2 outline-gold-500 dark:outline-gold-400" />{' '}
+                projected earliest
               </span>
             )}
           </div>

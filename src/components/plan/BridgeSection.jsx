@@ -13,25 +13,33 @@ function Stat({ label, children, sub }) {
   );
 }
 
-function StrategyToggle({ label, description, enabled, canUse, onToggle }) {
+function StrategyToggle({ id, label, description, enabled, canUse, onToggle }) {
+  const labelId = `${id}-label`;
+  const descriptionId = `${id}-description`;
   return (
     <label
       className={`flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 ${canUse ? '' : 'opacity-60'}`}
     >
+      {/* The wrapping <label> covers the description too, so an aria-label was
+          used to trim the name — which suppressed the description entirely.
+          Naming from the title and describing from the sentence keeps both. */}
       <input
         type="checkbox"
         className="mt-1 w-4 h-4"
         checked={Boolean(enabled)}
         disabled={!canUse}
         onChange={(e) => onToggle(e.target.checked)}
-        aria-label={label}
+        aria-labelledby={labelId}
+        aria-describedby={descriptionId}
       />
       <div>
-        <div className="font-medium text-slate-800 dark:text-slate-200 flex items-center gap-2">
+        <div id={labelId} className="font-medium text-slate-800 dark:text-slate-200 flex items-center gap-2">
           {label}
           {!canUse && <Lock className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />}
         </div>
-        <div className="text-xs text-slate-500 dark:text-slate-400">{description}</div>
+        <div id={descriptionId} className="text-xs text-slate-500 dark:text-slate-400">
+          {description}
+        </div>
       </div>
     </label>
   );
@@ -84,9 +92,11 @@ export default function BridgeSection({ timeline, scenario, canUseStrategies, on
         <div
           className="h-3 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden"
           role="progressbar"
+          aria-label="Bridge funded"
           aria-valuenow={Math.round(funded)}
           aria-valuemin={0}
           aria-valuemax={100}
+          aria-valuetext={`${Math.round(funded)}% of bridge spending funded`}
         >
           <div
             className={`h-full rounded-full ${funded >= 100 ? 'bg-green-500' : funded >= 75 ? 'bg-gold-500' : 'bg-red-500'}`}
@@ -181,6 +191,7 @@ export default function BridgeSection({ timeline, scenario, canUseStrategies, on
         </div>
         <div className="grid md:grid-cols-2 gap-3">
           <StrategyToggle
+            id="strategy-sepp"
             label="72(t) SEPP payments"
             description="Substantially equal periodic payments from Traditional TSP, penalty-free before 59½ for at least five years."
             enabled={strategies.sepp?.enabled}
@@ -188,6 +199,7 @@ export default function BridgeSection({ timeline, scenario, canUseStrategies, on
             onToggle={(enabled) => onToggleStrategy('sepp', enabled)}
           />
           <StrategyToggle
+            id="strategy-roth-conversion"
             label="Roth conversion ladder"
             description="Convert Traditional to Roth up to a target bracket each year; each conversion is penalty-free five tax years later."
             enabled={strategies.rothConversion?.enabled}

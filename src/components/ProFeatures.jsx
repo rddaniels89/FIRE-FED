@@ -1,16 +1,39 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { Check } from 'lucide-react';
 import { supabase, isSupabaseAvailable } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { FEATURES, FEATURE_LABELS } from '../lib/entitlements';
 import { trackEvent } from '../lib/telemetry';
 
-// Every status message is prefixed with one of these markers; the leading glyph
-// decides the banner tone so the copy and the styling cannot drift apart.
-const messageToneClasses = (message) => {
-  if (message.startsWith('❌')) return 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300';
-  if (message.startsWith('✅')) return 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300';
+// The tone is carried alongside the text rather than inferred from a leading
+// glyph, so the copy can stay plain without the styling drifting from it.
+const messageToneClasses = (tone) => {
+  if (tone === 'error') return 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300';
+  if (tone === 'success') return 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300';
   return 'bg-slate-100 dark:bg-slate-700/40 text-slate-800 dark:text-slate-200';
 };
+
+/**
+ * What Pro includes. `FEATURES` in lib/entitlements is the authoritative list —
+ * this map only adds a one-line gloss per key, so a shipped feature cannot go
+ * missing from this page the way stress tests, bridge strategies, household
+ * modeling, the career simulator and IRMAA all had.
+ */
+const FEATURE_NOTES = Object.freeze({
+  [FEATURES.UNLIMITED_SCENARIOS]: 'No free-tier cap',
+  [FEATURES.PDF_EXPORT]: 'Multi-page report from the Summary screen',
+  [FEATURES.SCENARIO_COMPARE]: 'Side-by-side with what changed between them',
+  [FEATURES.ADVANCED_ANALYTICS]: 'Success rates and percentile balances',
+  [FEATURES.OPTIMIZATION]: 'One change at a time, run through the timeline',
+  [FEATURES.STRESS_TESTS]: 'An early crash, high inflation, a lower return',
+  [FEATURES.BRIDGE_STRATEGIES]: 'Reach the TSP before 59½ without the penalty',
+  [FEATURES.HOUSEHOLD]: 'A second person, federal or not',
+  [FEATURES.CAREER_SIMULATOR]: 'GS grade, step and locality over time',
+  [FEATURES.IRMAA]: 'The Medicare surcharge your income triggers',
+});
+
+const PRO_FEATURE_KEYS = Object.values(FEATURES);
 
 const PRO_MONTHLY_PRICE_ID = import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY || '';
 const PRO_ANNUAL_PRICE_ID = import.meta.env.VITE_STRIPE_PRICE_PRO_ANNUAL || '';
@@ -19,7 +42,7 @@ const ProFeatures = () => {
   const { user, isAuthenticated, isProUser, subscription, subscriptionLoading, refreshSubscription } = useAuth();
   const location = useLocation();
   const [isBillingAction, setIsBillingAction] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(null);
 
   const subscriptionStatus = (subscription?.status || '').toString().toLowerCase();
   const isSubscriptionActive = subscriptionStatus === 'active' || subscriptionStatus === 'trialing';
@@ -32,14 +55,14 @@ const ProFeatures = () => {
     if (!checkout) return;
 
     if (checkout === 'success') {
-      setMessage('✅ Payment complete. Your Pro access should unlock shortly.');
+      setMessage({ tone: 'success', text: 'Payment complete. Your Pro access should unlock shortly.' });
       trackEvent('pro_checkout_return', { status: 'success' });
       // Must carry the user id: refreshSubscription treats a missing one as
       // "no user" and clears the subscription, which would blank out the Pro
       // state on the very screen meant to confirm the payment.
       refreshSubscription?.(user?.id);
     } else if (checkout === 'canceled') {
-      setMessage('ℹ️ Checkout canceled. You can upgrade anytime.');
+      setMessage({ tone: 'info', text: 'Checkout canceled. You can upgrade anytime.' });
       trackEvent('pro_checkout_return', { status: 'canceled' });
     }
   }, [refreshSubscription, user?.id]);
@@ -63,17 +86,17 @@ const ProFeatures = () => {
   };
 
   const startCheckout = async ({ plan }) => {
-    setMessage('');
+    setMessage(null);
     setIsBillingAction(true);
     try {
       if (!isSupabaseAvailable) {
-        setMessage('❌ Billing is unavailable without Supabase configured.');
+        setMessage({ tone: 'error', text: 'Billing is unavailable without Supabase configured.' });
         return;
       }
 
       const accessToken = await getAccessToken();
       if (!accessToken) {
-        setMessage('❌ Please sign in again to upgrade.');
+        setMessage({ tone: 'error', text: 'Please sign in again to upgrade.' });
         return;
       }
 
@@ -98,7 +121,7 @@ const ProFeatures = () => {
       window.location.assign(json.url);
     } catch (err) {
       console.error(err);
-      setMessage(`❌ ${err?.message || 'Unable to start checkout.'}`);
+      setMessage({ tone: 'error', text: err?.message || 'Unable to start checkout.' });
       trackEvent('pro_checkout_failed', { message: err?.message || 'unknown' });
     } finally {
       setIsBillingAction(false);
@@ -106,17 +129,17 @@ const ProFeatures = () => {
   };
 
   const openBillingPortal = async () => {
-    setMessage('');
+    setMessage(null);
     setIsBillingAction(true);
     try {
       if (!isSupabaseAvailable) {
-        setMessage('❌ Billing is unavailable without Supabase configured.');
+        setMessage({ tone: 'error', text: 'Billing is unavailable without Supabase configured.' });
         return;
       }
 
       const accessToken = await getAccessToken();
       if (!accessToken) {
-        setMessage('❌ Please sign in again to manage your subscription.');
+        setMessage({ tone: 'error', text: 'Please sign in again to manage your subscription.' });
         return;
       }
 
@@ -136,7 +159,7 @@ const ProFeatures = () => {
       window.location.assign(json.url);
     } catch (err) {
       console.error(err);
-      setMessage(`❌ ${err?.message || 'Unable to open billing portal.'}`);
+      setMessage({ tone: 'error', text: err?.message || 'Unable to open billing portal.' });
       trackEvent('pro_billing_portal_failed', { message: err?.message || 'unknown' });
     } finally {
       setIsBillingAction(false);
@@ -149,7 +172,7 @@ const ProFeatures = () => {
         {/* Header */}
         <div className="text-center mb-16">
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-            ⭐ Upgrade to Pro
+            Upgrade to Pro
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">
             Unlock powerful tools for serious federal retirement planners.
@@ -158,12 +181,10 @@ const ProFeatures = () => {
           {/* User Status */}
           {isAuthenticated && isProUser ? (
             <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-full text-sm font-medium mb-3">
-              <span className="mr-2">✅</span>
-              Pro Active
+              Pro active
             </div>
           ) : (
             <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full text-sm font-medium mb-3">
-              <span className="mr-2">⭐</span>
               Upgrade to Pro
             </div>
           )}
@@ -192,49 +213,34 @@ const ProFeatures = () => {
         <div className="bg-white dark:bg-slate-800 rounded-lg p-8 shadow-sm border border-slate-200 dark:border-slate-700 mb-10">
           <div className="grid md:grid-cols-2 gap-8">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">
-                ✅ Available now with Pro
-              </h2>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">Available now with Pro</h2>
               <div className="grid sm:grid-cols-2 gap-3">
+                {PRO_FEATURE_KEYS.map((key) => (
+                  <div
+                    key={key}
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3"
+                  >
+                    <div className="font-medium text-slate-900 dark:text-white">{FEATURE_LABELS[key]}</div>
+                    <div className="text-xs text-slate-600 dark:text-slate-400">{FEATURE_NOTES[key]}</div>
+                  </div>
+                ))}
                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3">
-                  <div className="font-medium text-slate-900 dark:text-white">Unlimited scenarios</div>
-                  <div className="text-xs text-slate-600 dark:text-slate-400">No free-tier cap</div>
-                </div>
-                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3">
-                  <div className="font-medium text-slate-900 dark:text-white">PDF export</div>
-                  <div className="text-xs text-slate-600 dark:text-slate-400">From the Summary dashboard</div>
-                </div>
-                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3">
-                  <div className="font-medium text-slate-900 dark:text-white">Scenario comparison</div>
-                  <div className="text-xs text-slate-600 dark:text-slate-400">Side-by-side metrics</div>
-                </div>
-                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3">
-                  <div className="font-medium text-slate-900 dark:text-white">Export / import</div>
+                  <div className="font-medium text-slate-900 dark:text-white">Export and import</div>
                   <div className="text-xs text-slate-600 dark:text-slate-400">Scenario JSON bundle</div>
-                </div>
-                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3">
-                  <div className="font-medium text-slate-900 dark:text-white">Monte Carlo analytics</div>
-                  <div className="text-xs text-slate-600 dark:text-slate-400">Probabilities + percentiles</div>
-                </div>
-                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3">
-                  <div className="font-medium text-slate-900 dark:text-white">Optimization tools</div>
-                  <div className="text-xs text-slate-600 dark:text-slate-400">Suggestions + allocation presets</div>
                 </div>
               </div>
             </div>
 
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">
-                🛠️ Coming next
-              </h2>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">Coming next</h2>
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3">
-                  <div className="font-medium text-slate-900 dark:text-white">AI insights</div>
-                  <div className="text-xs text-slate-600 dark:text-slate-400">Q&A on your scenario</div>
+                  <div className="font-medium text-slate-900 dark:text-white">Scenario Q&amp;A</div>
+                  <div className="text-xs text-slate-600 dark:text-slate-400">Ask questions of your own numbers</div>
                 </div>
                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3">
-                  <div className="font-medium text-slate-900 dark:text-white">Deeper analytics</div>
-                  <div className="text-xs text-slate-600 dark:text-slate-400">More charts and stress tests</div>
+                  <div className="font-medium text-slate-900 dark:text-white">More charts</div>
+                  <div className="text-xs text-slate-600 dark:text-slate-400">More ways to read the timeline</div>
                 </div>
                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 sm:col-span-2">
                   <div className="font-medium text-slate-900 dark:text-white">More optimization</div>
@@ -270,7 +276,7 @@ const ProFeatures = () => {
             {isProUser ? (
               <div className="grid md:grid-cols-2 gap-6 items-start">
                 <div className="bg-green-50 dark:bg-green-900/20 p-5 rounded-lg border border-green-200 dark:border-green-800">
-                  <div className="text-green-700 dark:text-green-300 font-semibold mb-2">✅ Pro is active</div>
+                  <div className="text-green-700 dark:text-green-300 font-semibold mb-2">Pro is active</div>
                   <div className="text-sm text-slate-700 dark:text-slate-200">
                     Status: <span className="font-medium">{subscriptionStatus || 'active'}</span>
                   </div>
@@ -308,13 +314,12 @@ const ProFeatures = () => {
                   <div className="text-3xl font-bold text-slate-900 dark:text-white mt-2">$9.99</div>
                   <div className="text-sm text-slate-600 dark:text-slate-400">per month</div>
                   <ul className="mt-4 space-y-2 text-sm text-slate-700 dark:text-slate-200">
-                    <li>✅ Household and dual-fed modeling</li>
-                    <li>✅ Monte Carlo durability and named stress tests</li>
-                    <li>✅ 72(t) and Roth conversion ladder strategies</li>
-                    <li>✅ GS career and High-3 simulator</li>
-                    <li>✅ Compare up to five scenarios with a delta view</li>
-                    <li>✅ Federal Retirement Projection Report (PDF)</li>
-                    <li>✅ Unlimited scenarios, import/export, optimization</li>
+                    {PRO_FEATURE_KEYS.map((key) => (
+                      <li key={key} className="flex items-start gap-2">
+                        <Check className="h-4 w-4 mt-0.5 shrink-0 text-green-600 dark:text-green-400" aria-hidden="true" />
+                        <span>{FEATURE_LABELS[key]}</span>
+                      </li>
+                    ))}
                   </ul>
                   <button
                     onClick={() => startCheckout({ plan: 'monthly' })}
@@ -335,9 +340,12 @@ const ProFeatures = () => {
                   <div className="text-3xl font-bold text-slate-900 dark:text-white mt-2">$99</div>
                   <div className="text-sm text-slate-600 dark:text-slate-400">per year</div>
                   <ul className="mt-4 space-y-2 text-sm text-slate-700 dark:text-slate-200">
-                    <li>✅ Everything in Monthly</li>
-                    <li>✅ Save 17% vs monthly</li>
-                    <li>✅ Priority access to new tools</li>
+                    {['Everything in Monthly', 'Save 17% against monthly', 'Early access to new tools'].map((item) => (
+                      <li key={item} className="flex items-start gap-2">
+                        <Check className="h-4 w-4 mt-0.5 shrink-0 text-green-600 dark:text-green-400" aria-hidden="true" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
                   </ul>
                   <button
                     onClick={() => startCheckout({ plan: 'annual' })}
@@ -351,8 +359,8 @@ const ProFeatures = () => {
             )}
 
             {message && (
-              <div className={`mt-4 p-3 rounded-lg text-sm ${messageToneClasses(message)}`}>
-                {message}
+              <div className={`mt-4 p-3 rounded-lg text-sm ${messageToneClasses(message.tone)}`} role="status">
+                {message.text}
               </div>
             )}
 
@@ -370,20 +378,17 @@ const ProFeatures = () => {
             Why upgrade to Pro?
           </h3>
           <div className="grid sm:grid-cols-3 gap-6 text-sm">
-            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-              <div className="text-2xl mb-2">🎁</div>
-              <div className="font-medium text-gray-900 dark:text-white">Early Access</div>
-              <div className="text-gray-600 dark:text-gray-300">Be first to try new features</div>
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+              <div className="font-medium text-gray-900 dark:text-white">Early access</div>
+              <div className="text-gray-600 dark:text-gray-300">New tools reach Pro first</div>
             </div>
-            <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
-              <div className="text-2xl mb-2">💰</div>
-              <div className="font-medium text-gray-900 dark:text-white">Special Pricing</div>
-              <div className="text-gray-600 dark:text-gray-300">Exclusive launch discounts</div>
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+              <div className="font-medium text-gray-900 dark:text-white">Launch pricing</div>
+              <div className="text-gray-600 dark:text-gray-300">Current rates are held while in launch</div>
             </div>
-            <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
-              <div className="text-2xl mb-2">🗣️</div>
-              <div className="font-medium text-gray-900 dark:text-white">Shape Features</div>
-              <div className="text-gray-600 dark:text-gray-300">Your feedback matters</div>
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+              <div className="font-medium text-gray-900 dark:text-white">Shape what ships</div>
+              <div className="text-gray-600 dark:text-gray-300">Pro feedback drives the roadmap</div>
             </div>
           </div>
         </div>

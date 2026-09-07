@@ -20,66 +20,78 @@ const PHASE_STYLE = {
   retired: 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300',
 };
 
+/** The panel the disclosure button controls, and the chart's aria-describedby target. */
+export const YEAR_BY_YEAR_PANEL_ID = 'year-by-year-panel';
+
 /** Collapsible year-by-year table of the timeline. */
 export default function YearByYearTable({ rows, deflate, mode }) {
   const [open, setOpen] = useState(false);
 
   return (
     <div className="card p-4">
-      <button
-        type="button"
-        className="w-full flex items-center justify-between text-left"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-      >
-        <span className="font-semibold navy-text">Year by year</span>
-        <span className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-          {rows.length} rows · {mode === 'real' ? "today's dollars" : 'nominal'}
-          {open ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
-        </span>
-      </button>
+      <h2 className="m-0">
+        <button
+          type="button"
+          className="focus-ring w-full flex items-center justify-between text-left"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          aria-controls={YEAR_BY_YEAR_PANEL_ID}
+        >
+          <span className="font-semibold navy-text">Year by year</span>
+          <span className="flex items-center gap-2 text-xs font-normal text-slate-500 dark:text-slate-400">
+            {rows.length} rows · {mode === 'real' ? "today's dollars" : 'nominal'}
+            {open ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
+          </span>
+        </button>
+      </h2>
 
-      {open && (
-        <div className="overflow-x-auto mt-3">
-          <table className="w-full text-xs tabular-nums">
-            <thead>
-              <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-                <th className="py-1.5 pr-2 font-medium">Age</th>
-                <th className="py-1.5 pr-2 font-medium">Phase</th>
-                {COLUMNS.map((c) => (
-                  <th key={c.key} className="py-1.5 pr-2 font-medium text-right">
-                    {c.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr
-                  key={r.age}
-                  className={`border-b border-slate-100 dark:border-slate-800 ${r.shortfall > 0 ? 'bg-red-50 dark:bg-red-900/20' : ''}`}
-                >
-                  <td className="py-1 pr-2 font-medium text-slate-800 dark:text-slate-200">{r.age}</td>
-                  <td className="py-1 pr-2">
-                    <span className={`inline-block px-1.5 rounded ${PHASE_STYLE[r.phase] ?? ''}`}>{r.phase}</span>
-                  </td>
-                  {COLUMNS.map((c) => {
-                    const v = deflate(c.pick(r), r);
-                    return (
-                      <td key={c.key} className="py-1 pr-2 text-right text-slate-700 dark:text-slate-300">
-                        {v ? fmtMoney(v) : '—'}
-                      </td>
-                    );
-                  })}
-                </tr>
+      {/* Rendered even when closed so `aria-controls` and the charts'
+          `aria-describedby` always resolve; `hidden` does the collapsing. */}
+      <div id={YEAR_BY_YEAR_PANEL_ID} hidden={!open} className="overflow-x-auto mt-3">
+        <table className="w-full text-xs tabular-nums">
+          <caption className="sr-only">
+            Year by year projection, one row per age, {mode === 'real' ? "in today's dollars" : 'in nominal dollars'}
+          </caption>
+          <thead>
+            <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+              <th scope="col" className="py-1.5 pr-2 font-medium">Age</th>
+              <th scope="col" className="py-1.5 pr-2 font-medium">Phase</th>
+              {COLUMNS.map((c) => (
+                <th key={c.key} scope="col" className="py-1.5 pr-2 font-medium text-right">
+                  {c.label}
+                </th>
               ))}
-            </tbody>
-          </table>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-            Rows shaded red record a shortfall: outflows the model could not fund from income or assets that year.
-          </p>
-        </div>
-      )}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr
+                key={r.age}
+                className={`border-b border-slate-100 dark:border-slate-800 ${r.shortfall > 0 ? 'bg-red-50 dark:bg-red-900/20' : ''}`}
+              >
+                <th scope="row" className="py-1 pr-2 text-left font-medium text-slate-800 dark:text-slate-200">
+                  {r.shortfall > 0 ? <span className="sr-only">Shortfall year. </span> : null}
+                  {r.age}
+                </th>
+                <td className="py-1 pr-2">
+                  <span className={`inline-block px-1.5 rounded ${PHASE_STYLE[r.phase] ?? ''}`}>{r.phase}</span>
+                </td>
+                {COLUMNS.map((c) => {
+                  const v = deflate(c.pick(r), r);
+                  return (
+                    <td key={c.key} className="py-1 pr-2 text-right text-slate-700 dark:text-slate-300">
+                      {v ? fmtMoney(v) : '—'}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+          Rows shaded red record a shortfall: outflows the model could not fund from income or assets that year.
+        </p>
+      </div>
     </div>
   );
 }

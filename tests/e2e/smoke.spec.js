@@ -25,7 +25,7 @@ test.describe('Smoke: core flows', () => {
     // Use role+name to avoid matching stepper buttons with similar aria-labels.
     await page.getByRole('textbox', { name: 'Starting TSP Balance' }).fill('50000');
     await page.getByRole('textbox', { name: 'Current Age' }).fill('35');
-    await page.getByRole('textbox', { name: 'Target Retirement Age' }).fill('62');
+    await page.getByRole('textbox', { name: 'Separation age' }).fill('62');
     await page.getByRole('textbox', { name: 'Annual Salary' }).fill('80000');
     await page.getByRole('textbox', { name: 'Monthly Contribution %' }).fill('10');
 
@@ -63,7 +63,7 @@ test.describe('Smoke: core flows', () => {
     await page.goto('/tsp-forecast');
 
     await page.getByRole('textbox', { name: 'Current Age' }).fill('55');
-    await page.getByRole('textbox', { name: 'Target Retirement Age' }).fill('62');
+    await page.getByRole('textbox', { name: 'Separation age' }).fill('62');
     await page.getByRole('textbox', { name: 'Monthly Contribution %' }).fill('30');
 
     const notice = page.getByText('Your catch-up contributions must be Roth.');
@@ -81,7 +81,7 @@ test.describe('Smoke: core flows', () => {
     await page.goto('/tsp-forecast');
 
     await page.getByRole('textbox', { name: 'Current Age' }).fill('55');
-    await page.getByRole('textbox', { name: 'Target Retirement Age' }).fill('62');
+    await page.getByRole('textbox', { name: 'Separation age' }).fill('62');
     await page.getByRole('textbox', { name: 'Monthly Contribution %' }).fill('30');
     await page.getByRole('textbox', { name: 'Annual Salary' }).fill('90000');
 

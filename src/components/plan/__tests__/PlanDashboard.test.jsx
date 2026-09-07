@@ -4,8 +4,14 @@ import { MemoryRouter } from 'react-router-dom';
 import { createDefaultScenario, normalizeScenario } from '../../../lib/scenarios/schema';
 import { findFireDate } from '../../../lib/projection/fireDate';
 
-// jsdom has no canvas.
-vi.mock('react-chartjs-2', () => ({ Bar: () => null, Line: () => null }));
+// jsdom has no canvas. react-chartjs-2 spreads unknown props onto the canvas,
+// so the stub does the same and the charts' text alternatives stay testable.
+vi.mock('react-chartjs-2', () => {
+  const chartStub = (props) => (
+    <canvas role={props.role} aria-label={props['aria-label']} aria-describedby={props['aria-describedby']} />
+  );
+  return { Bar: chartStub, Line: chartStub };
+});
 
 const scenario = normalizeScenario(createDefaultScenario('Test'));
 const updateCurrentScenario = vi.fn();
@@ -16,6 +22,11 @@ vi.mock('../../../contexts/ScenarioContext', () => ({
 
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({ entitlements: { isPro: false, features: {} } }),
+}));
+
+// The charts read the theme to pick axis and gridline colours.
+vi.mock('../../../contexts/ThemeContext', () => ({
+  useTheme: () => ({ isDarkMode: false }),
 }));
 
 import PlanDashboard from '../PlanDashboard';
@@ -49,6 +60,34 @@ describe('PlanDashboard', () => {
       expect(card.getByText(/Not found before 75/)).toBeInTheDocument();
     }
     expect(card.getByText('Educational projection under these assumptions, not advice.')).toBeInTheDocument();
+  });
+
+  it('gives every chart, control and region a text alternative', () => {
+    renderPage();
+
+    // The charts are canvases: each states its own reading and points at the
+    // year-by-year table for the detail.
+    const income = screen.getByRole('img', { name: /^Income by source from age \d+ to \d+/ });
+    expect(income).toHaveAttribute('aria-describedby', 'year-by-year-panel');
+    expect(screen.getByRole('img', { name: /^Total balance in nominal dollars from age/ })).toBeInTheDocument();
+
+    // The sustainability strip reads out rather than relying on green vs red.
+    expect(screen.getByRole('img', { name: /^Sustainability by separation age: / })).toBeInTheDocument();
+
+    // The disclosure controls a panel that exists whether or not it is open.
+    const yearByYear = screen.getByRole('button', { name: /Year by year/ });
+    expect(yearByYear).toHaveAttribute('aria-controls', 'year-by-year-panel');
+    expect(document.getElementById('year-by-year-panel')).toBeTruthy();
+
+    expect(screen.getByRole('progressbar', { name: 'Bridge funded' })).toBeInTheDocument();
+
+    // Two "Use this age" buttons, told apart by the age each one sets.
+    // The visible text is "Use this age" on both cards, so the age is appended
+    // for screen readers rather than replacing the label — an aria-label that
+    // dropped the visible words would break the label-in-name rule.
+    const useButtons = screen.getAllByRole('button', { name: /^Use this age \d+$/ });
+    expect(useButtons).toHaveLength(2);
+    expect(new Set(useButtons.map((b) => b.textContent))).toHaveProperty('size', 2);
   });
 
   it('binds the slider to the scenario separation age and gates Pro tools', () => {

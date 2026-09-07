@@ -225,7 +225,15 @@ function AuthenticatedApp() {
         Skip to content
       </a>
       <Navigation />
-      <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 focus:outline-none">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        /* Hover tooltips are absolutely positioned and stay laid out while
+           hidden, so near the right edge they pushed the page wider than the
+           viewport. `clip` contains them without creating a scroll container,
+           so sticky headers inside still work. */
+        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-x-clip focus:outline-none"
+      >
         <CloudSyncBanner />
         <Suspense fallback={<RouteLoading />}>
           <Routes>

@@ -128,6 +128,30 @@ describe('PlanInputs', () => {
     });
   });
 
+  it('wires every hint to its control and keeps collapsed panels addressable', () => {
+    renderPage();
+
+    // The hint under a field is only reachable if the control points at it.
+    const separationAge = screen.getByRole('textbox', { name: 'Separation age' });
+    expect(separationAge).toHaveAttribute('aria-describedby', 'profile-separationAge-hint');
+    expect(document.getElementById('profile-separationAge-hint')).toHaveTextContent(
+      /When federal employment ends/
+    );
+
+    const claimAge = screen.getByLabelText('Social Security claim age');
+    expect(claimAge).toHaveAttribute('aria-describedby', 'profile-socialSecurityClaimAge-hint');
+
+    const vera = screen.getByLabelText('My agency has offered an early out (VERA)');
+    expect(vera).toHaveAttribute('aria-describedby', 'profile-isVeraOffered-hint');
+
+    // A collapsed section still renders its panel, so aria-controls resolves.
+    const taxes = screen.getByRole('button', { name: /^Taxes/ });
+    expect(taxes).toHaveAttribute('aria-expanded', 'false');
+    const panel = document.getElementById(taxes.getAttribute('aria-controls'));
+    expect(panel).toBeTruthy();
+    expect(panel.hidden).toBe(true);
+  });
+
   it('summarises the profile from the schema fields', () => {
     expect(youSummary(mocks.scenario)).toMatch(/Age 42 · leaves at 55 · annuity at separation · Social Security at 67/);
   });

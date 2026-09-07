@@ -111,6 +111,20 @@ describe('legacy writes are translated onto the profile', () => {
     expect(next.fire.spouseIncome).toBe(2500);
   });
 
+  it('writing both legacy mirrors together sets separation and leaves the annuity at the path default', () => {
+    // The FERS pension calculator's age control is a separation age: every
+    // figure on that page is computed from separating then. Writing only
+    // fers.retirementAge would move the annuity start instead, so it writes
+    // both mirrors. This pins that behaviour.
+    const next = applyScenarioUpdates(current, {
+      fers: { retirementAge: 60, yearsOfService: 25 },
+      fire: { desiredFireAge: 60 },
+    });
+    expect(next.profile.separationAge).toBe(60);
+    expect(next.profile.annuityStartAge).toBeNull();
+    expect(next.fers.yearsOfService).toBe(25);
+  });
+
   it('leaves non-legacy updates alone', () => {
     const translated = translateLegacyUpdates({ profile: { hireCohort: 'fers' } }, current);
     expect(translated).toEqual({ profile: { hireCohort: 'fers' } });

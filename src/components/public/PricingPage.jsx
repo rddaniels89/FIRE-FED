@@ -18,7 +18,7 @@ const ROWS = [
   ['Named stress tests: bad first decade, crash at separation, inflation, longevity, healthcare, Social Security cut', '—', 'Yes'],
   ['Bridge strategies: 72(t) schedule and Roth conversion ladder', '—', 'Yes'],
   ['GS career and High-3 simulator with step increases and promotions', '—', 'Yes'],
-  ['Compare three to five scenarios with a delta view', '—', 'Yes'],
+  ['Compare two to five scenarios with a delta view', '—', 'Yes'],
   ['Medicare IRMAA estimates', '—', 'Yes'],
   ['Federal Retirement Projection Report (PDF) and scenario import/export', '—', 'Yes'],
 ];

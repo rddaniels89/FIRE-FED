@@ -4,6 +4,9 @@ import { Line } from 'react-chartjs-2';
 import { CategoryScale, Chart as ChartJS, Legend, LineElement, LinearScale, PointElement, Tooltip } from 'chart.js';
 import { useScenario } from '../contexts/ScenarioContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import ProjectionDisclaimer from './ProjectionDisclaimer';
+import { chartTheme, themedPlugins, themedScale } from '../lib/charts/theme';
 import { FEATURES, hasEntitlement } from '../lib/entitlements';
 import { buildTimeline } from '../lib/projection/timeline';
 import { runMonteCarloAnalytics } from '../lib/analytics/monteCarlo';
@@ -18,9 +21,22 @@ const MONTE_CARLO_SIMULATIONS = 300;
 
 const SERIES_COLORS = ['#1e3a8a', '#0d9488', '#d97706', '#be185d', '#6d28d9'];
 
-const TONE_CLASSES = Object.freeze({
-  better: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-900/25 dark:text-emerald-200',
-  worse: 'bg-rose-50 text-rose-800 dark:bg-rose-900/25 dark:text-rose-200',
+/**
+ * Better / worse cannot be carried by the background tint alone: it disappears
+ * under the common colour-vision deficiencies and in a greyscale print. Each
+ * toned cell also gets a glyph and a phrase only a screen reader announces.
+ */
+const TONE_META = Object.freeze({
+  better: {
+    className: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-900/25 dark:text-emerald-200',
+    glyph: '▲',
+    description: 'better than baseline',
+  },
+  worse: {
+    className: 'bg-rose-50 text-rose-800 dark:bg-rose-900/25 dark:text-rose-200',
+    glyph: '▼',
+    description: 'worse than baseline',
+  },
 });
 
 function compactMoney(value) {
@@ -35,6 +51,7 @@ function compactMoney(value) {
 function ScenarioCompare() {
   const { scenarios, currentScenario, getScenarioDiff, isLoadingScenarios } = useScenario();
   const { entitlements } = useAuth();
+  const { isDarkMode } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -135,21 +152,25 @@ function ScenarioCompare() {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { position: 'bottom', labels: { color: '#64748b', usePointStyle: true } },
+      plugins: themedPlugins(isDarkMode, {
+        legend: { position: 'bottom', labels: { usePointStyle: true } },
         tooltip: {
           callbacks: {
             title: (items) => (items[0] ? `Age ${items[0].label}` : ''),
             label: (item) => `${item.dataset.label}: ${compactMoney(item.parsed.y)}`,
           },
         },
-      },
+      }),
       scales: {
-        x: { title: { display: true, text: 'Age', color: '#64748b' }, ticks: { color: '#64748b', maxTicksLimit: 12 }, grid: { display: false } },
-        y: { ticks: { color: '#64748b', callback: (v) => compactMoney(v) }, grid: { color: '#e2e8f0' } },
+        x: themedScale(isDarkMode, {
+          grid: false,
+          title: { display: true, text: 'Age', color: chartTheme(isDarkMode).axis },
+          ticks: { maxTicksLimit: 12 },
+        }),
+        y: themedScale(isDarkMode, { ticks: { callback: (v) => compactMoney(v) } }),
       },
     }),
-    []
+    [isDarkMode]
   );
 
   useEffect(() => {
@@ -219,7 +240,7 @@ function ScenarioCompare() {
 
   return (
     <div className="animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold navy-text">Scenario Comparison</h1>
           <p className="text-slate-600 dark:text-slate-400">
@@ -250,27 +271,32 @@ function ScenarioCompare() {
               const position = selectedIds.indexOf(s.id);
               return (
                 <li key={s.id}>
-                  <label
+                  {/* The "Make baseline" button is a sibling of the label, not a
+                      child of it: a button inside a label leaves the label with
+                      two targets and needs preventDefault to behave. */}
+                  <div
                     className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
                       checked
                         ? 'border-navy-300 dark:border-navy-700 bg-navy-50 dark:bg-navy-900/30'
                         : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'
-                    } ${disabled ? 'opacity-50' : 'cursor-pointer'}`}
+                    } ${disabled ? 'opacity-50' : ''}`}
                   >
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4"
-                      checked={checked}
-                      disabled={disabled}
-                      onChange={() => toggleScenario(s.id)}
-                      aria-label={`Compare ${s.name}`}
-                    />
-                    <span className="flex-1 text-slate-800 dark:text-slate-100 truncate">
-                      {s.name}
-                      {currentScenario?.id === s.id && (
-                        <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">(current)</span>
-                      )}
-                    </span>
+                    <label className={`flex min-w-0 flex-1 items-center gap-3 ${disabled ? '' : 'cursor-pointer'}`}>
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4"
+                        checked={checked}
+                        disabled={disabled}
+                        onChange={() => toggleScenario(s.id)}
+                        aria-label={`Compare ${s.name}`}
+                      />
+                      <span className="flex-1 text-slate-800 dark:text-slate-100 truncate" title={s.name}>
+                        {s.name}
+                        {currentScenario?.id === s.id && (
+                          <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">(current)</span>
+                        )}
+                      </span>
+                    </label>
                     {checked && (
                       position === 0 ? (
                         <span className="text-xs px-2 py-0.5 rounded-full bg-navy-100 text-navy-800 dark:bg-navy-800 dark:text-navy-100">
@@ -279,17 +305,15 @@ function ScenarioCompare() {
                       ) : (
                         <button
                           type="button"
-                          className="text-xs text-navy-700 dark:text-navy-300 hover:underline"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            makeBaseline(s.id);
-                          }}
+                          className="focus-ring rounded text-xs text-navy-700 dark:text-navy-300 hover:underline whitespace-nowrap"
+                          aria-label={`Make ${s.name} the baseline`}
+                          onClick={() => makeBaseline(s.id)}
                         >
                           Make baseline
                         </button>
                       )
                     )}
-                  </label>
+                  </div>
                 </li>
               );
             })}
@@ -322,7 +346,8 @@ function ScenarioCompare() {
                         <li key={d.path} className="flex justify-between gap-3">
                           <span className="text-slate-600 dark:text-slate-400">{d.label}</span>
                           <span className="text-slate-800 dark:text-slate-100 text-right">
-                            {formatDiffValue(d, d.from)} <span className="text-slate-400">→</span> {formatDiffValue(d, d.to)}
+                            {formatDiffValue(d, d.from)} <span className="text-slate-500 dark:text-slate-400">→</span>{' '}
+                            {formatDiffValue(d, d.to)}
                           </span>
                         </li>
                       ))}
@@ -339,10 +364,11 @@ function ScenarioCompare() {
               <div>
                 <h2 className="text-lg font-semibold navy-text">What the timeline says</h2>
                 <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Green is better than the baseline for that row, red is worse. Rows with no direction are descriptive.
+                  ▲ green is better than the baseline for that row, ▼ red is worse. Rows with no direction are
+                  descriptive.
                 </p>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                   <input
                     type="checkbox"
@@ -362,16 +388,23 @@ function ScenarioCompare() {
                   {isRunningMonteCarlo ? 'Running…' : monteCarloDone ? 'Re-run Monte Carlo' : 'Run Monte Carlo for each'}
                   {!canMonteCarlo && <span className="text-xs opacity-80">(Pro)</span>}
                 </button>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {MONTE_CARLO_SIMULATIONS} simulations per scenario
+                </span>
               </div>
             </div>
 
             <div className="overflow-x-auto">
               <table className="min-w-[760px] w-full text-sm">
+                <caption className="sr-only">
+                  Timeline results for each selected scenario. The first column after the metric is the baseline; later
+                  columns are marked better or worse than it.
+                </caption>
                 <thead>
                   <tr className="text-left text-slate-600 dark:text-slate-300">
-                    <th className="py-2 pr-4 font-medium">Metric</th>
+                    <th scope="col" className="py-2 pr-4 font-medium">Metric</th>
                     {columns.map((c, idx) => (
-                      <th key={c.scenario.id} className="py-2 pr-4 font-medium">
+                      <th scope="col" key={c.scenario.id} className="py-2 pr-4 font-medium">
                         <div className="flex items-center gap-2">
                           <span
                             className="inline-block w-2.5 h-2.5 rounded-full"
@@ -398,15 +431,24 @@ function ScenarioCompare() {
                   ) : (
                     visibleRows.map((row) => (
                       <tr key={row.key} className="border-t border-slate-200 dark:border-slate-700">
-                        <td className="py-2.5 pr-4 font-medium whitespace-nowrap">{row.label}</td>
+                        <th scope="row" className="py-2.5 pr-4 text-left font-medium whitespace-nowrap">
+                          {row.label}
+                        </th>
                         {row.cells.map((cell, idx) => {
                           const tone = cellTone(row, idx);
+                          const meta = tone ? TONE_META[tone] : null;
                           return (
                             <td
                               key={columns[idx]?.scenario.id ?? idx}
-                              className={`py-2.5 pr-4 whitespace-nowrap rounded ${tone ? TONE_CLASSES[tone] : ''}`}
+                              className={`py-2.5 pr-4 whitespace-nowrap rounded ${meta ? meta.className : ''}`}
                             >
                               {cell.text}
+                              {meta && (
+                                <>
+                                  <span aria-hidden="true" className="ml-1.5">{meta.glyph}</span>
+                                  <span className="sr-only"> {meta.description}</span>
+                                </>
+                              )}
                             </td>
                           );
                         })}
@@ -419,7 +461,9 @@ function ScenarioCompare() {
             {monteCarloDone && (
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
                 Monte Carlo: {MONTE_CARLO_SIMULATIONS} simulations per scenario, each the full timeline with returns drawn from the
-                allocation&apos;s mean and volatility.
+                allocation&apos;s mean and volatility. The analytics panel on the plan page runs its own, adjustable number
+                of simulations, so its probability for the same scenario will differ a little from the one above; both are
+                estimates from a random draw, not a fixed figure.
               </p>
             )}
           </div>
@@ -436,6 +480,8 @@ function ScenarioCompare() {
               </div>
             </div>
           )}
+
+          <ProjectionDisclaimer className="mt-6" />
         </>
       )}
     </div>

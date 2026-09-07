@@ -8,6 +8,7 @@ import { DEFAULT_MARKETPLACE_ANNUAL_PREMIUM } from '../lib/calculations/healthca
 import { DEFAULT_PIA_REPLACEMENT_PERCENT, DEFAULT_TRUST_FUND_HAIRCUT } from '../lib/calculations/socialSecurity';
 import { FERS_HIRE_COHORT_LABELS } from '../lib/calculations/fers';
 import { listRulesByCategory } from '../lib/rules/registry';
+import ProjectionDisclaimer from './ProjectionDisclaimer';
 
 /**
  * The assumptions page (ROADMAP.md item 47): everything the plan rests on, in
@@ -277,15 +278,15 @@ function assumedRows(scenario, timeline) {
 
 function Table({ caption, rows }) {
   return (
-    <table className="w-full border-collapse text-sm">
+    <table className="w-full border-collapse text-sm print:break-inside-avoid">
       {caption && <caption className="sr-only">{caption}</caption>}
       <tbody>
         {rows.map(([label, value]) => (
-          <tr key={label} className="border-b border-slate-200 dark:border-slate-700 align-top">
-            <th scope="row" className="w-1/2 py-1.5 pr-3 text-left font-medium text-slate-600 dark:text-slate-300">
+          <tr key={label} className="border-b border-slate-200 dark:border-slate-700 align-top print:break-inside-avoid">
+            <th scope="row" className="w-[45%] sm:w-1/2 py-1.5 pr-3 text-left font-medium text-slate-600 dark:text-slate-300 print:text-black">
               {label}
             </th>
-            <td className="py-1.5 text-slate-900 dark:text-slate-100">{value}</td>
+            <td className="py-1.5 text-slate-900 dark:text-slate-100 print:text-black">{value}</td>
           </tr>
         ))}
       </tbody>
@@ -295,8 +296,8 @@ function Table({ caption, rows }) {
 
 function Section({ id, title, children }) {
   return (
-    <section id={id} className="mb-10 break-inside-avoid">
-      <h2 className="mb-3 text-xl font-semibold navy-text">{title}</h2>
+    <section id={id} className="mb-10 break-inside-avoid print:mb-6 print:break-inside-avoid">
+      <h2 className="mb-3 text-xl font-semibold navy-text print:text-black">{title}</h2>
       {children}
     </section>
   );
@@ -319,20 +320,16 @@ export default function AssumptionsPage() {
   const rulesByCategory = useMemo(() => listRulesByCategory(), []);
 
   return (
-    <div className="mx-auto max-w-4xl p-6 print:p-0">
+    <div className="mx-auto max-w-4xl py-6 sm:p-6 print:p-0 print:text-black">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold navy-text">Assumptions</h1>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+          <h1 className="text-3xl font-bold navy-text print:text-black">Assumptions</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300 print:text-black">
             Everything this plan rests on: what you entered, what FireFed derived, what it assumed, and the rules it
             applied. {currentScenario?.name ? <>Scenario: <strong>{currentScenario.name}</strong>.</> : null}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800 print:hidden"
-        >
+        <button type="button" onClick={() => window.print()} className="btn-secondary btn-sm print:hidden">
           Print
         </button>
       </div>
@@ -355,7 +352,7 @@ export default function AssumptionsPage() {
             <div className="space-y-5">
               {enteredRows(currentScenario).map((g) => (
                 <div key={g.title}>
-                  <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{g.title}</h3>
+                  <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 print:text-black">{g.title}</h3>
                   <Table caption={`You entered: ${g.title}`} rows={g.rows} />
                 </div>
               ))}
@@ -364,10 +361,11 @@ export default function AssumptionsPage() {
 
           <Section id="calculated" title="FireFed calculated">
             <Table caption="FireFed calculated" rows={calculatedRows(derived.plan, derived.timeline)} />
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 print:text-black">
               The projected sustainable separation age and the year-by-year table are on the plan page; they are readings
               from the same timeline these figures come from.
             </p>
+            <ProjectionDisclaimer className="mt-4" />
           </Section>
 
           <Section id="assumed" title="Assumed">
@@ -383,12 +381,13 @@ export default function AssumptionsPage() {
         </p>
         <div className="space-y-6">
           {rulesByCategory.map((g) => (
-            <div key={g.category} className="break-inside-avoid">
-              <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{g.label}</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-sm">
+            <div key={g.category} className="break-inside-avoid print:break-inside-avoid">
+              <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 print:text-black">{g.label}</h3>
+              <div className="overflow-x-auto print:overflow-visible">
+                <table className="w-full min-w-[34rem] border-collapse text-sm print:min-w-0 print:break-inside-avoid">
+                  <caption className="sr-only">{g.label} rules, with source, rule year and last verified date</caption>
                   <thead>
-                    <tr className="border-b border-slate-300 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:text-slate-400">
+                    <tr className="border-b border-slate-300 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:text-slate-400 print:text-black">
                       <th scope="col" className="py-1.5 pr-3 font-medium">Rule</th>
                       <th scope="col" className="py-1.5 pr-3 font-medium">Source</th>
                       <th scope="col" className="py-1.5 pr-3 font-medium">Rule year</th>
@@ -397,10 +396,10 @@ export default function AssumptionsPage() {
                   </thead>
                   <tbody>
                     {g.rules.map((r) => (
-                      <tr key={r.id} className="border-b border-slate-200 align-top dark:border-slate-700">
+                      <tr key={r.id} className="border-b border-slate-200 align-top dark:border-slate-700 print:break-inside-avoid">
                         <td className="py-1.5 pr-3">
-                          <div className="font-medium text-slate-900 dark:text-slate-100">{r.title}</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                          <div className="font-medium text-slate-900 dark:text-slate-100 print:text-black">{r.title}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 print:text-black">
                             <code>{r.id}</code>
                             {r.statute ? ` · ${r.statute}` : ''}
                           </div>
@@ -410,7 +409,7 @@ export default function AssumptionsPage() {
                             href={r.source.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-navy-700 underline hover:text-navy-900 dark:text-navy-300"
+                            className="text-navy-700 underline hover:text-navy-900 dark:text-navy-300 print:text-black"
                           >
                             {r.source.name}
                           </a>

@@ -68,7 +68,7 @@ export default function PlanInputs() {
       <div className="sticky top-0 z-20 -mx-4 px-4 py-3 mb-4 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold navy-text">Plan inputs</h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
+          <p className="hidden sm:block text-sm text-slate-600 dark:text-slate-400">
             Editing <span className="font-medium">{currentScenario.name}</span>. Changes save as you type.
           </p>
         </div>
@@ -80,7 +80,7 @@ export default function PlanInputs() {
           >
             {allOpen ? 'Collapse all' : 'Expand all'}
           </button>
-          <ViewPlanLink className="text-sm py-2 px-4" />
+          <ViewPlanLink className="btn-sm" />
         </div>
       </div>
 
@@ -105,7 +105,9 @@ export default function PlanInputs() {
         })}
       </div>
 
-      <div className="sticky bottom-0 z-20 -mx-4 px-4 py-3 mt-6 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur border-t border-slate-200 dark:border-slate-700 flex items-center justify-end">
+      {/* Two sticky bars ate 176px of a 667px phone viewport, and the header
+          already carries the same link, so the bottom bar is desktop-only. */}
+      <div className="sticky bottom-0 z-20 -mx-4 px-4 py-3 mt-6 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur border-t border-slate-200 dark:border-slate-700 hidden sm:flex items-center justify-end">
         <ViewPlanLink />
       </div>
     </div>

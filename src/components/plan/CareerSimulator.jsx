@@ -28,6 +28,9 @@ import {
   Filler,
 } from 'chart.js';
 import { useScenario } from '../../contexts/ScenarioContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import ProjectionDisclaimer from '../ProjectionDisclaimer';
+import { themedPlugins, themedScale } from '../../lib/charts/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { FEATURES, hasEntitlement } from '../../lib/entitlements';
 import {
@@ -127,6 +130,7 @@ function ResultCard({ label, value, detail, ruleId, tone = 'default' }) {
 export default function CareerSimulator() {
   const { currentScenario, updateCurrentScenario, isLoadingScenarios } = useScenario();
   const { entitlements } = useAuth();
+  const { isDarkMode } = useTheme();
   const isPro = hasEntitlement(entitlements, FEATURES.CAREER_SIMULATOR);
   const hasScenario = Boolean(currentScenario?.profile);
 
@@ -210,7 +214,7 @@ export default function CareerSimulator() {
     () => ({
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
+      plugins: themedPlugins(isDarkMode, {
         legend: { display: false },
         tooltip: {
           callbacks: {
@@ -221,12 +225,13 @@ export default function CareerSimulator() {
             },
           },
         },
-      },
+      }),
       scales: {
-        y: { ticks: { callback: (v) => fmtMoney(v, { compact: true }) } },
+        x: themedScale(isDarkMode, { grid: false }),
+        y: themedScale(isDarkMode, { ticks: { callback: (v) => fmtMoney(v, { compact: true }) } }),
       },
     }),
-    [projection],
+    [projection, isDarkMode],
   );
 
   // --- Writes -------------------------------------------------------------
@@ -308,7 +313,7 @@ export default function CareerSimulator() {
               and to use the projected High-3 across your plan.
             </p>
           </div>
-          <Link to="/pro-features" state={{ reason: 'career_simulator_pro' }} className="btn-primary text-sm py-2 px-4">
+          <Link to="/pro-features" state={{ reason: 'career_simulator_pro' }} className="btn-primary btn-sm">
             See Pro features
           </Link>
         </div>
@@ -397,7 +402,7 @@ export default function CareerSimulator() {
             <label className="label" htmlFor="careerYearsInStep">
               Years already at this step
             </label>
-            <div className="flex items-stretch gap-2">
+            <div className="flex items-start gap-2">
               <input
                 id="careerYearsInStep"
                 type="number"
@@ -430,7 +435,7 @@ export default function CareerSimulator() {
             <label className="label" htmlFor="careerRaise">
               Assumed January raise (% per year)
             </label>
-            <div className="flex items-stretch gap-2">
+            <div className="flex items-start gap-2">
               <input
                 id="careerRaise"
                 type="number"
@@ -616,7 +621,12 @@ export default function CareerSimulator() {
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
                 The annuity change includes the extra year of service and any change in eligibility or age reduction,
-                not just the higher High-3.
+                not just the higher High-3. This card is the pay side of one more year;{' '}
+                <Link to="/plan" className="text-navy-600 dark:text-navy-400 hover:underline">
+                  see the plan
+                </Link>{' '}
+                for what that year does to the whole projection, including savings, the bridge and how long the money
+                lasts.
               </p>
             </div>
           )}
@@ -644,21 +654,25 @@ export default function CareerSimulator() {
             <h3 className="font-semibold navy-text mb-2">Year by year</h3>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
+                <caption className="sr-only">
+                  Projected salary path, one row per year of age, with grade, step, base pay, locality percentage and
+                  the step increases and promotions along the way.
+                </caption>
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-                    <th className="py-2 pr-3">Age</th>
-                    <th className="py-2 pr-3">Year</th>
-                    <th className="py-2 pr-3">Grade / step</th>
-                    <th className="py-2 pr-3 text-right">Base pay</th>
-                    <th className="py-2 pr-3 text-right">Locality</th>
-                    <th className="py-2 pr-3 text-right">Salary</th>
-                    <th className="py-2">Event</th>
+                    <th scope="col" className="py-2 pr-3">Age</th>
+                    <th scope="col" className="py-2 pr-3">Year</th>
+                    <th scope="col" className="py-2 pr-3">Grade / step</th>
+                    <th scope="col" className="py-2 pr-3 text-right">Base pay</th>
+                    <th scope="col" className="py-2 pr-3 text-right">Locality</th>
+                    <th scope="col" className="py-2 pr-3 text-right">Salary</th>
+                    <th scope="col" className="py-2">Event</th>
                   </tr>
                 </thead>
                 <tbody>
                   {years.map((r) => (
                     <tr key={r.age} className="border-b border-slate-100 dark:border-slate-800">
-                      <td className="py-1.5 pr-3">{r.age}</td>
+                      <th scope="row" className="py-1.5 pr-3 text-left font-normal">{r.age}</th>
                       <td className="py-1.5 pr-3">{r.year}</td>
                       <td className="py-1.5 pr-3">
                         GS-{r.grade} / {r.step}
@@ -749,6 +763,8 @@ export default function CareerSimulator() {
           salaries. A real High-3 uses the highest 36 consecutive months of basic pay and your actual step history.
         </p>
       </section>
+
+      <ProjectionDisclaimer />
     </div>
   );
 }

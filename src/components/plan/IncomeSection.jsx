@@ -51,42 +51,52 @@ function MilestoneStrip({ milestones, currentAge, endAge }) {
 
   return (
     <div>
-      <div className="relative h-28 mt-2">
-        <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-slate-300 dark:bg-slate-600" />
-        {items.map((m, i) => {
-          const pct = ((m.age - currentAge) / span) * 100;
-          const above = i % 2 === 0;
-          const isSelected = selected?.key === m.key;
-          return (
-            <button
-              key={m.key}
-              type="button"
-              title={m.detail}
-              onClick={() => setSelected(isSelected ? null : m)}
-              className="absolute -translate-x-1/2 group focus:outline-none"
-              style={{ left: `${pct}%`, top: above ? '0' : 'auto', bottom: above ? 'auto' : '0' }}
-              aria-label={`${m.label} at age ${fmtAge(m.age)}: ${m.detail}`}
-            >
-              <div className={`flex flex-col items-center ${above ? '' : 'flex-col-reverse'}`}>
-                <span
-                  className={`text-[11px] leading-tight max-w-[7rem] text-center ${
-                    isSelected ? 'font-semibold navy-text' : 'text-slate-600 dark:text-slate-400'
-                  }`}
-                >
-                  {m.label}
-                </span>
-                <span className="text-[10px] text-slate-400 leading-tight">{fmtAge(m.age)}</span>
-                <span
-                  className={`block w-2.5 h-2.5 rounded-full border-2 ${above ? 'mt-1' : 'mb-1'} ${
-                    isSelected
-                      ? 'bg-navy-600 border-navy-600'
-                      : 'bg-white dark:bg-slate-800 border-navy-500 group-hover:bg-navy-200'
-                  }`}
-                />
-              </div>
-            </button>
-          );
-        })}
+      {/* The track scrolls sideways rather than crushing the labels together:
+          at 375px the card is only ~295px wide, which overlapped every pair of
+          adjacent labels and painted the first and last markers past the edge. */}
+      <div className="overflow-x-auto -mx-2 px-2">
+        <div className="relative h-36 mt-2 min-w-[36rem]">
+          <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-slate-300 dark:bg-slate-600" />
+          {items.map((m, i) => {
+            const pct = ((m.age - currentAge) / span) * 100;
+            const above = i % 2 === 0;
+            const isSelected = selected?.key === m.key;
+            // The end markers hug their edge instead of centring, so nothing
+            // paints outside the track.
+            const isFirst = i === 0;
+            const isLast = i === items.length - 1;
+            const shift = isFirst ? 'translate-x-0' : isLast ? '-translate-x-full' : '-translate-x-1/2';
+            return (
+              <button
+                key={m.key}
+                type="button"
+                title={m.detail}
+                onClick={() => setSelected(isSelected ? null : m)}
+                className={`focus-ring absolute group ${shift}`}
+                style={{ left: `${pct}%`, top: above ? '0' : 'auto', bottom: above ? 'auto' : '0' }}
+                aria-label={`${m.label} at age ${fmtAge(m.age)}: ${m.detail}`}
+              >
+                <div className={`flex flex-col items-center ${above ? '' : 'flex-col-reverse'}`}>
+                  <span
+                    className={`text-[11px] leading-tight max-w-[5.5rem] text-center ${
+                      isSelected ? 'font-semibold navy-text' : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    {m.label}
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">{fmtAge(m.age)}</span>
+                  <span
+                    className={`block w-2.5 h-2.5 rounded-full border-2 ${above ? 'mt-1' : 'mb-1'} ${
+                      isSelected
+                        ? 'bg-navy-600 border-navy-600'
+                        : 'bg-white dark:bg-slate-800 border-navy-500 group-hover:bg-navy-200'
+                    }`}
+                  />
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
       <div className="min-h-[2.5rem] mt-1 text-sm text-slate-600 dark:text-slate-400" aria-live="polite">
         {selected ? (
@@ -97,7 +107,9 @@ function MilestoneStrip({ milestones, currentAge, endAge }) {
             {selected.detail}
           </span>
         ) : (
-          <span className="text-slate-400">Tap or hover a milestone to see what changes at that age.</span>
+          <span className="text-slate-500 dark:text-slate-400">
+            Tap or hover a milestone to see what changes at that age.
+          </span>
         )}
       </div>
     </div>
@@ -118,14 +130,15 @@ export default function IncomeSection({ timeline, deflate }) {
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[36rem] text-sm">
+            <caption className="sr-only">Guaranteed income sources, when each starts and ends, and the first-year amount</caption>
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-                <th className="py-2 pr-3 font-medium">Source</th>
-                <th className="py-2 pr-3 font-medium">Starts</th>
-                <th className="py-2 pr-3 font-medium">Ends</th>
-                <th className="py-2 pr-3 font-medium text-right">First-year amount</th>
-                <th className="py-2 font-medium">Note</th>
+                <th scope="col" className="py-2 pr-3 font-medium">Source</th>
+                <th scope="col" className="py-2 pr-3 font-medium">Starts</th>
+                <th scope="col" className="py-2 pr-3 font-medium">Ends</th>
+                <th scope="col" className="py-2 pr-3 font-medium text-right">First-year amount</th>
+                <th scope="col" className="py-2 font-medium">Note</th>
               </tr>
             </thead>
             <tbody>
@@ -143,12 +156,16 @@ export default function IncomeSection({ timeline, deflate }) {
                 }
                 return (
                   <tr key={s.source} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="py-2 pr-3 font-medium text-slate-800 dark:text-slate-200">{s.source}</td>
+                    <th scope="row" className="py-2 pr-3 text-left font-medium text-slate-800 dark:text-slate-200">
+                      {s.source}
+                    </th>
                     <td className="py-2 pr-3 tabular-nums">{fmtAge(s.age)}</td>
                     <td className="py-2 pr-3 tabular-nums">{s.endAge ? fmtAge(s.endAge) : 'for life'}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {ruleId ? (
-                        <HowCalculated ruleId={ruleId}>{fmtMoney(deflate(amount, s.age))}</HowCalculated>
+                        <HowCalculated ruleId={ruleId} align="right">
+                          {fmtMoney(deflate(amount, s.age))}
+                        </HowCalculated>
                       ) : (
                         fmtMoney(deflate(amount, s.age))
                       )}
