@@ -669,45 +669,44 @@ function SummaryDashboard() {
       )}
 
       <div ref={summaryRef} className="bg-white dark:bg-slate-900 p-6 rounded-lg">
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <div className="card p-6 text-center">
-            <div className="text-2xl lg:text-3xl font-bold navy-text mb-2 tabular-nums">
+        {/* One figure per tile. The third previously packed two numbers and a
+            bordered amber panel into a single slot, which read as an error
+            state rather than a headline. */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+          <div className="card p-6">
+            <div className="stat-label">Net worth at retirement</div>
+            <div className="stat-figure mt-2 text-3xl font-semibold text-navy-700 dark:text-navy-300">
               ${fireData.totalNetWorth.toLocaleString()}
             </div>
-            <div className="text-sm text-slate-500 dark:text-slate-400">Total Net Worth at Retirement</div>
           </div>
-          <div className="card p-6 text-center">
-            <div className="text-2xl lg:text-3xl font-bold gold-accent mb-2 tabular-nums">
+
+          <div className="card p-6">
+            <div className="stat-label">Annual retirement income</div>
+            <div className="stat-figure mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
               ${Math.round(pensionData.annualPension + (tspData.projectedBalance * 0.04)).toLocaleString()}
             </div>
-            <div className="text-sm text-slate-500 dark:text-slate-400">Annual Retirement Income</div>
-          </div>
-          <div className="card p-6 text-center">
-            <div className="grid grid-cols-2 gap-4 items-start">
-              <div>
-                <div className="text-2xl lg:text-3xl font-bold text-slate-600 dark:text-slate-400 mb-1 tabular-nums">
-                  {fireData.separationAge}
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Separation age</div>
-              </div>
-              <Link
-                to="/plan"
-                className="block rounded-lg border border-gold-200 dark:border-gold-700 bg-gold-50 dark:bg-gold-900/20 p-2 hover:border-gold-400 dark:hover:border-gold-500"
-              >
-                <div className="text-2xl lg:text-3xl font-bold text-gold-700 dark:text-gold-300 mb-1 tabular-nums">
-                  {fireDate?.found ? fireDate.separationAge : '—'}
-                </div>
-                <div className="text-xs font-semibold text-gold-700 dark:text-gold-300">
-                  Projected sustainable separation age
-                </div>
-              </Link>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {Math.round(((pensionData.annualPension + (tspData.projectedBalance * 0.04)) / pensionData.high3Salary) * 100)}% of your High-3
             </div>
           </div>
-          <div className="card p-6 text-center">
-            <div className="text-2xl lg:text-3xl font-bold text-slate-600 dark:text-slate-400 mb-2 tabular-nums">
-              {Math.round(((pensionData.annualPension + (tspData.projectedBalance * 0.04)) / pensionData.high3Salary) * 100)}%
+
+          <Link
+            to="/plan"
+            className="focus-ring card p-6 transition-colors hover:border-gold-300 dark:hover:border-gold-700"
+          >
+            <div className="stat-label">Projected sustainable separation age</div>
+            <div className="stat-figure mt-2 text-3xl font-semibold text-gold-600 dark:text-gold-400">
+              {fireDate?.found ? fireDate.separationAge : 'Not found'}
             </div>
-            <div className="text-sm text-slate-500 dark:text-slate-400">Income Replacement</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">See it on My Plan</div>
+          </Link>
+
+          <div className="card p-6">
+            <div className="stat-label">Separation age on file</div>
+            <div className="stat-figure mt-2 text-3xl font-semibold text-slate-900 dark:text-white">
+              {fireData.separationAge}
+            </div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Edit under Plan inputs</div>
           </div>
         </div>
 

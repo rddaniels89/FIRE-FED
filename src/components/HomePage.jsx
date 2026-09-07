@@ -50,7 +50,11 @@ function HomePage() {
       <div className="text-center mb-10">
         <h1 className="text-4xl font-bold navy-text mb-4">
           <span className="inline-flex items-center justify-center gap-3">
-            <AnimatedFlame className="h-11 w-11" />
+            {/* aria-hidden on the wrapper: the mark carries its own label, and
+                the heading text already names the product. */}
+            <span aria-hidden="true" className="inline-flex">
+              <AnimatedFlame className="h-11 w-11" />
+            </span>
             <span>FireFed - Federal FIRE Planning</span>
           </span>
         </h1>
@@ -102,7 +106,7 @@ function HomePage() {
           <Link
             key={index}
             to={feature.path}
-            className={`block p-6 rounded-xl border-2 transition-all duration-200 hover:shadow-lg ${feature.color}`}
+            className={`block p-6 rounded-xl border-2 transition-all duration-200 hover:shadow-card ${feature.color}`}
           >
             <div className="text-center">
               <feature.Icon className="h-9 w-9 mx-auto mb-4 text-navy-600 dark:text-navy-300" aria-hidden="true" />
@@ -197,19 +201,19 @@ function HomePage() {
         <div className="flex flex-wrap justify-center gap-4">
           <Link to="/plan" className="btn-primary">
             <span className="inline-flex items-center gap-2">
-              <Map className="h-4 w-4" />
+              <Map className="h-4 w-4" aria-hidden="true" />
               View my plan
             </span>
           </Link>
           <Link to="/tsp-forecast" className="btn-secondary">
             <span className="inline-flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
+              <TrendingUp className="h-4 w-4" aria-hidden="true" />
               TSP Forecast
             </span>
           </Link>
           <Link to="/fers-pension" className="btn-secondary">
             <span className="inline-flex items-center gap-2">
-              <Landmark className="h-4 w-4" />
+              <Landmark className="h-4 w-4" aria-hidden="true" />
               Calculate Pension
             </span>
           </Link>
@@ -219,7 +223,7 @@ function HomePage() {
       {/* Footer */}
       <div className="mt-12 text-center text-sm text-slate-500 dark:text-slate-400">
         <p>
-          Made with ❤️ for federal employees •
+          Built for federal employees •
           <a href="https://www.tsp.gov" target="_blank" rel="noopener noreferrer" className="text-navy-600 dark:text-navy-400 hover:text-gold-600 dark:hover:text-gold-400 mx-2">
             TSP.gov
           </a>

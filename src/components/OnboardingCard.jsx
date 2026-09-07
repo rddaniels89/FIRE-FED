@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
 import { useScenario } from '../contexts/ScenarioContext';
 import { FERS_HIRE_COHORT_LABELS } from '../lib/calculations/fers';
 
@@ -256,7 +256,7 @@ function OnboardingCard() {
             aria-label="Dismiss onboarding"
             title="Dismiss"
           >
-            ✕
+            <X className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
           </button>
         </div>
       </div>

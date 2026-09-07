@@ -115,17 +115,22 @@ function ScenariosPage() {
       <div className="grid md:grid-cols-3 gap-6 mb-8">
         <div className="card p-4 text-center">
           <div className="text-2xl font-bold navy-text">{scenarios.length}</div>
-          <div className="text-sm text-slate-600 dark:text-slate-400">Total Scenarios</div>
+          <div className="text-sm text-slate-600 dark:text-slate-400">Total scenarios</div>
         </div>
         <div className="card p-4 text-center">
           <div className="text-2xl font-bold navy-text">{selectedScenarios.length}</div>
-          <div className="text-sm text-slate-600 dark:text-slate-400">Selected for Comparison</div>
+          <div className="text-sm text-slate-600 dark:text-slate-400">Selected for comparison</div>
         </div>
         <div className="card p-4 text-center">
-          <div className="text-2xl font-bold text-gold-600">
-            {currentScenario?.name?.slice(0, 10) || 'None'}...
+          {/* Truncate in CSS with the full name in the title, rather than
+              slicing at 10 characters and always appending an ellipsis. */}
+          <div
+            className="truncate text-2xl font-semibold text-gold-600 dark:text-gold-400"
+            title={currentScenario?.name || undefined}
+          >
+            {currentScenario?.name || 'None'}
           </div>
-          <div className="text-sm text-slate-600 dark:text-slate-400">Active Scenario</div>
+          <div className="text-sm text-slate-600 dark:text-slate-400">Active scenario</div>
         </div>
       </div>
 
@@ -183,8 +188,8 @@ function ScenariosPage() {
                 key={scenario.id} 
                 className={`card p-6 transition-all duration-200 ${
                   isActive 
-                    ? 'ring-2 ring-navy-500 bg-navy-50 dark:bg-navy-900/20' 
-                    : 'hover:shadow-lg'
+                    ? 'ring-2 ring-navy-500 bg-navy-50 dark:bg-navy-900/20'
+                    : ''
                 } ${
                   isSelected 
                     ? 'ring-2 ring-gold-500 bg-gold-50 dark:bg-gold-900/20' 

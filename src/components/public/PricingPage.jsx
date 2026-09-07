@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { Check, Minus } from 'lucide-react';
 
 const ROWS = [
   ['One profile: every calculator reads the same person', 'Yes', 'Yes'],
@@ -23,9 +24,25 @@ const ROWS = [
   ['Federal Retirement Projection Report (PDF) and scenario import/export', '—', 'Yes'],
 ];
 
+// The mark is decorative; the sr-only word is what a screen reader hears, since
+// a lone glyph in a table cell says nothing about whether the row is included.
 function Cell({ value }) {
-  if (value === 'Yes') return <span className="text-green-600 dark:text-green-400 font-medium">✓</span>;
-  if (value === '—') return <span className="text-slate-400 dark:text-slate-500">—</span>;
+  if (value === 'Yes') {
+    return (
+      <span className="inline-flex items-center justify-center text-green-600 dark:text-green-400">
+        <Check className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+        <span className="sr-only">Included</span>
+      </span>
+    );
+  }
+  if (value === '—') {
+    return (
+      <span className="inline-flex items-center justify-center text-slate-400 dark:text-slate-500">
+        <Minus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+        <span className="sr-only">Not included</span>
+      </span>
+    );
+  }
   return <span className="font-medium text-slate-900 dark:text-white">{value}</span>;
 }
 

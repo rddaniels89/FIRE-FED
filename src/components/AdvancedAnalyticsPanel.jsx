@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { BarChart3 } from 'lucide-react';
 import ProjectionDisclaimer from './ProjectionDisclaimer';
 import { FEATURES, hasEntitlement } from '../lib/entitlements';
 import { runMonteCarloAnalytics } from '../lib/analytics/monteCarlo';
@@ -73,7 +74,10 @@ export default function AdvancedAnalyticsPanel({ scenario, entitlements }) {
     <div className="card p-6 mb-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-xl font-semibold navy-text">📊 Advanced analytics</h3>
+          <h3 className="inline-flex items-center gap-2 text-xl font-semibold navy-text">
+            <BarChart3 className="h-5 w-5 shrink-0 text-navy-600 dark:text-navy-300" strokeWidth={1.75} aria-hidden="true" />
+            Advanced analytics
+          </h3>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             Monte Carlo simulations estimate variability in outcomes (not guarantees).
           </p>
