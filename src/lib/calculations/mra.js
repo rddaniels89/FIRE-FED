@@ -63,18 +63,48 @@ export function formatMinimumRetirementAge(birthYear) {
 }
 
 /**
- * FireFed stores an age rather than a date of birth, so the birth year is
- * derived. This is accurate to within a year, which is enough to place someone
- * in the right band except in the transition years, where the app should let
- * the user confirm.
+ * The year of birth implied by an age given in years and months.
+ *
+ * An age in whole years cannot settle the year: someone aged 60 in September
+ * 2026 was born in 1965 if their birthday has not yet come round, and in 1966 if
+ * it has. Adding the months pins the birth month, and with it the year — 60
+ * years 4 months resolves to May 1966, and 60 years 11 months to October 1965.
+ *
+ * FireFed still stores an age rather than a date of birth. The day is never
+ * asked for and never derived.
  */
-export function minimumRetirementAgeForCurrentAge({ currentAge, asOfYear = new Date().getFullYear() } = {}) {
-  const age = Number(currentAge);
-  if (!Number.isFinite(age)) return MRA_1970_ONWARD;
-  return minimumRetirementAge(Math.round(asOfYear - Math.floor(age)));
+export function birthYearFromAgeAndMonths({ currentAge, currentAgeMonths = 0, asOfDate = new Date() } = {}) {
+  const years = Number(currentAge);
+  if (!Number.isFinite(years)) return null;
+  const months = Math.min(11, Math.max(0, Math.floor(Number(currentAgeMonths) || 0)));
+
+  const d = asOfDate instanceof Date ? asOfDate : new Date(asOfDate);
+  // Months since year zero, so the subtraction cannot straddle a year boundary
+  // incorrectly.
+  const nowMonths = d.getFullYear() * 12 + d.getMonth();
+  const birthMonths = nowMonths - Math.floor(years) * 12 - months;
+  return Math.floor(birthMonths / 12);
 }
 
-/** Whether a birth year sits in a band where the derived year could be off by one. */
+/**
+ * The MRA implied by an age in years and months.
+ *
+ * `bornOnJanuaryFirst` exists because both SSA and OPM say to use the previous
+ * year for a birthday of 1 January. That is a day-level rule, and the day is
+ * not collected, so a caller who knows it can say so.
+ */
+export function minimumRetirementAgeForCurrentAge({
+  currentAge,
+  currentAgeMonths = 0,
+  asOfDate = new Date(),
+  bornOnJanuaryFirst = false,
+} = {}) {
+  const birthYear = birthYearFromAgeAndMonths({ currentAge, currentAgeMonths, asOfDate });
+  if (birthYear === null) return MRA_1970_ONWARD;
+  return minimumRetirementAge(bornOnJanuaryFirst ? birthYear - 1 : birthYear);
+}
+
+/** Whether a birth year sits in a band where the MRA is not a whole number of years. */
 export function isMraTransitionYear(birthYear) {
   const year = Number(birthYear);
   return (year >= 1948 && year <= 1952) || (year >= 1965 && year <= 1969);

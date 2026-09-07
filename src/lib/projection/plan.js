@@ -28,13 +28,12 @@ import { evaluateFehbContinuation } from '../calculations/fehb';
 import { describeTspAccess } from '../calculations/tspAccess';
 import { SPECIAL_PROVISION_TYPES, evaluateSpecialProvisionEligibility, getMandatoryRetirementAge } from '../calculations/specialProvisions';
 import {
-  birthYearFromAge,
   estimatePiaFromSalary,
   estimateSocialSecurityAt62,
   fullRetirementAge,
 } from '../calculations/socialSecurity';
 import { projectCareerSalaries } from '../calculations/careerProjection';
-import { isMraTransitionYear, minimumRetirementAge } from '../calculations/mra';
+import { birthYearFromAgeAndMonths, isMraTransitionYear, minimumRetirementAge } from '../calculations/mra';
 import { RETIREMENT_PATH_AUTO } from '../scenarios/schema';
 
 const num = (v, fallback = 0) => {
@@ -60,7 +59,7 @@ export function serviceAtSeparation({ yearsOfService, monthsOfService = 0, curre
  * amount at full retirement age, or a coarse salary-based estimate when the
  * user has not entered one.
  */
-export function resolveSocialSecurityInputs(scenario, { asOfYear = new Date().getFullYear() } = {}) {
+export function resolveSocialSecurityInputs(scenario, { asOfYear = new Date().getFullYear(), birthYear } = {}) {
   const ss = scenario?.summary?.socialSecurity ?? {};
   const profile = scenario?.profile ?? {};
   const mode = ss.mode ?? 'not_configured';
@@ -70,16 +69,23 @@ export function resolveSocialSecurityInputs(scenario, { asOfYear = new Date().ge
   if (mode === 'manual') piaMonthlyAtFra = num(ss.monthlyBenefit, 0);
   else if (mode === 'estimate') piaMonthlyAtFra = estimatePiaFromSalary({ annualSalary: salary, replacementPercent: num(ss.percentOfSalary, 30) });
 
-  const birthYear = birthYearFromAge({ currentAge: num(profile.currentAge, 42), asOfYear });
-  const fra = fullRetirementAge({ birthYear });
+  // Full retirement age is a year-of-birth rule too, so it takes the exact
+  // year when the caller has derived one from age in years and months.
+  const resolvedBirthYear =
+    birthYear ?? birthYearFromAgeAndMonths({
+      currentAge: num(profile.currentAge, 42),
+      currentAgeMonths: num(profile.currentAgeMonths, 0),
+      asOfDate: new Date(asOfYear, new Date().getMonth(), 1),
+    });
+  const fra = fullRetirementAge({ birthYear: resolvedBirthYear });
 
   return {
     mode,
     piaMonthlyAtFra,
-    birthYear,
+    birthYear: resolvedBirthYear,
     fra,
     claimAge: num(profile.socialSecurityClaimAge, 67),
-    monthlyAt62: estimateSocialSecurityAt62({ piaMonthlyAtFra, birthYear }),
+    monthlyAt62: estimateSocialSecurityAt62({ piaMonthlyAtFra, birthYear: resolvedBirthYear }),
     trustFundHaircut: ss.trustFundHaircut ?? null,
   };
 }
@@ -143,12 +149,19 @@ export function resolveHigh3AtSeparation(scenario) {
 /**
  * The plan. Every field is nominal at the age it applies.
  */
-export function resolveRetirementPlan(scenario, { asOfYear = new Date().getFullYear() } = {}) {
+export function resolveRetirementPlan(scenario, options = {}) {
+  const { asOfYear = new Date().getFullYear() } = options;
   const profile = scenario.profile;
   const fers = scenario.fers ?? {};
   // OPM's MRA runs from 55 to 57 by year of birth. Assuming 57 for everyone
   // overstates it for anyone born before 1970, which delays their eligibility.
-  const birthYear = birthYearFromAge({ currentAge: num(profile.currentAge, 42), asOfYear });
+  // The months are what make the birth year exact rather than approximate.
+  const derivedBirthYear = birthYearFromAgeAndMonths({
+    currentAge: num(profile.currentAge, 42),
+    currentAgeMonths: num(profile.currentAgeMonths, 0),
+    asOfDate: options.asOfDate ?? new Date(asOfYear, (options.asOfMonth ?? new Date().getMonth()), 1),
+  });
+  const birthYear = profile.bornOnJanuaryFirst ? derivedBirthYear - 1 : derivedBirthYear;
   const mra =
     profile.mra === null || profile.mra === undefined || profile.mra === ''
       ? minimumRetirementAge(birthYear)
@@ -239,7 +252,7 @@ export function resolveRetirementPlan(scenario, { asOfYear = new Date().getFullY
   const inflation = num(scenario.tsp?.inflationRate, 2.5) / 100;
   const yearsToStart = annuityStartAge != null ? Math.max(0, annuityStartAge - currentAge) : 0;
 
-  const socialSecurity = resolveSocialSecurityInputs(scenario, { asOfYear });
+  const socialSecurity = resolveSocialSecurityInputs(scenario, { asOfYear, birthYear });
 
   const srs =
     isEligibleForAnnuity && !takeRefund
@@ -298,7 +311,9 @@ export function resolveRetirementPlan(scenario, { asOfYear = new Date().getFullY
     exceedsMandatoryAge,
     mraBirthYear: birthYear,
     mraIsDerived: profile.mra === null || profile.mra === undefined || profile.mra === '',
-    mraNeedsConfirming: isMraTransitionYear(birthYear),
+    // The birth year is now exact, so nothing needs confirming except the one
+    // day-level rule the app cannot see.
+    mraIsTransitionBand: isMraTransitionYear(birthYear),
     currentAge,
     separationAge,
     annuityStartAge,

@@ -48,9 +48,11 @@ worked example.
 
 ## Known simplifications the reviewer should weigh
 
-1. Ages, not dates. FireFed stores ages in whole years and derives birth year
-   as current year minus age. The year-of-turning-55 TSP rule and the
-   month-based MRA+10 reduction are therefore approximated to the year.
+1. Ages, not dates. FireFed stores current age in years and months, which pins
+   the year of birth exactly, and derives the minimum retirement age and full
+   retirement age from it. The day of birth is never collected, so the rule that
+   a 1 January birthday counts as the previous year is declared by the user
+   rather than inferred.
 2. The High-3 at a future separation is projected from today's salary at the
    assumed growth rate, or from the GS career path when enabled. It is not a
    36-month average of actual pay.

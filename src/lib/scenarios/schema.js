@@ -74,6 +74,14 @@ export function deepMerge(base, patch) {
 export function createDefaultProfile() {
   return {
     currentAge: 42,
+    // Months past the last birthday, 0-11. Whole years cannot settle a birth
+    // year — someone aged 60 today was born in 1965 or 1966 depending on
+    // whether their birthday has come round — and the FERS minimum retirement
+    // age is a year-of-birth rule.
+    currentAgeMonths: 0,
+    // Both SSA and OPM use the previous year for a 1 January birthday. That is
+    // a day-level rule and the day is never collected, so the user tells us.
+    bornOnJanuaryFirst: false,
     separationAge: 55,
     annuityStartAge: null,
     socialSecurityClaimAge: 67,
@@ -379,6 +387,7 @@ export function applyProfileMirrors(scenario) {
 /** Coerces the profile into a consistent state. */
 function sanitizeProfile(profile) {
   const currentAge = Math.min(100, Math.max(16, num(profile.currentAge, 42)));
+  const currentAgeMonths = Math.min(11, Math.max(0, Math.floor(num(profile.currentAgeMonths, 0))));
   const separationAge = Math.min(100, Math.max(currentAge, num(profile.separationAge, currentAge)));
   const rawStart = profile.annuityStartAge;
   const annuityStartAge =
@@ -389,6 +398,8 @@ function sanitizeProfile(profile) {
   return {
     ...profile,
     currentAge,
+    currentAgeMonths,
+    bornOnJanuaryFirst: Boolean(profile.bornOnJanuaryFirst),
     separationAge,
     annuityStartAge,
     socialSecurityClaimAge,
@@ -554,6 +565,7 @@ export const getValueByPath = (obj, path) => {
 
 export const DIFF_FIELDS = Object.freeze([
   { path: 'profile.currentAge', label: 'Current age' },
+  { path: 'profile.currentAgeMonths', label: 'Current age (months)' },
   { path: 'profile.separationAge', label: 'Separation age' },
   { path: 'profile.annuityStartAge', label: 'Annuity start age' },
   { path: 'profile.socialSecurityClaimAge', label: 'Social Security claim age' },

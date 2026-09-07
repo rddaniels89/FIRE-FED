@@ -2,10 +2,10 @@ import { getFersContributionRate } from '../../../lib/calculations/fers';
 import {
   SS_EARLIEST_CLAIM_AGE,
   SS_LATEST_CLAIM_AGE,
-  birthYearFromAge,
   estimatePiaFromSalary,
   socialSecurityByClaimAge,
 } from '../../../lib/calculations/socialSecurity';
+import { birthYearFromAgeAndMonths } from '../../../lib/calculations/mra';
 import { CheckField, Grid, NumberField, RadioField, Section, SelectField } from './fields';
 import { money, pct } from './format';
 import { COHORT_OPTIONS, EMPLOYEE_TYPE_OPTIONS, PATH_OPTIONS } from './options';
@@ -27,7 +27,7 @@ export default function YouSection({ scenario, write, open, onToggle }) {
 
   const pia = resolvePia(scenario);
   const rows = pia > 0
-    ? socialSecurityByClaimAge({ piaMonthlyAtFra: pia, birthYear: birthYearFromAge({ currentAge: p.currentAge }) })
+    ? socialSecurityByClaimAge({ piaMonthlyAtFra: pia, birthYear: birthYearFromAgeAndMonths({ currentAge: p.currentAge, currentAgeMonths: p.currentAgeMonths }) })
     : null;
   const claimOptions = [];
   for (let age = SS_EARLIEST_CLAIM_AGE; age <= SS_LATEST_CLAIM_AGE; age += 1) {
@@ -44,11 +44,30 @@ export default function YouSection({ scenario, write, open, onToggle }) {
         <NumberField
           id="profile-currentAge"
           label="Current age"
+          hint="Years and months since your last birthday. The months settle which year you were born, which is what sets your minimum retirement age."
           value={p.currentAge}
           min={16}
           max={100}
           stepper
           onCommit={(v) => writeProfile({ currentAge: v })}
+        />
+        <NumberField
+          id="profile-currentAgeMonths"
+          label="…and months"
+          suffix="months"
+          hint="0 to 11, since your last birthday."
+          value={p.currentAgeMonths ?? 0}
+          min={0}
+          max={11}
+          stepper
+          onCommit={(v) => writeProfile({ currentAgeMonths: v })}
+        />
+        <CheckField
+          id="profile-bornOnJanuaryFirst"
+          label="I was born on 1 January"
+          hint="OPM and the Social Security Administration both count a 1 January birthday as the previous year. FireFed does not ask for your birth date, so tell it here."
+          checked={Boolean(p.bornOnJanuaryFirst)}
+          onChange={(checked) => writeProfile({ bornOnJanuaryFirst: checked })}
         />
         <NumberField
           id="profile-separationAge"
