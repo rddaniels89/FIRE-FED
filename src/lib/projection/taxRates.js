@@ -9,7 +9,7 @@
  * supplement, Social Security and the state.
  */
 
-import { calculateStandardDeduction, marginalRateForTaxableIncome } from '../taxes';
+import { calculateStandardDeduction, calculateTaxableSocialSecurity, marginalRateForTaxableIncome } from '../taxes';
 import { buildTimeline } from './timeline';
 import { CURRENT_PARAMETER_YEAR } from '../calculations/annualParameters';
 
@@ -35,7 +35,18 @@ export function retirementTaxRates(scenario, { timeline } = {}) {
   const startAge = t.plan.annuityStartAge ?? t.plan.separationAge;
   const row = t.rows.find((r) => r.age === startAge + 1) ?? t.rows.find((r) => r.age >= startAge) ?? t.rows[t.rows.length - 1];
   const filingStatus = scenario?.taxes?.filingStatus ?? 'single';
-  const ordinary = row.pension + row.srs + row.spousePension + row.withdrawals.traditional + row.sideHustle + row.socialSecurity * 0.85;
+  // 85% is the ceiling on the taxable share of Social Security, not the rule.
+  // The Publication 915 worksheet is right here, and using it stops the
+  // Traditional-versus-Roth comparison being biased by an overstated rate for
+  // anyone whose provisional income sits below the top tier.
+  const ordinaryBeforeSs =
+    row.pension + row.srs + row.spousePension + row.withdrawals.traditional + row.sideHustle;
+  const taxableSs = calculateTaxableSocialSecurity({
+    filingStatus,
+    otherIncome: ordinaryBeforeSs,
+    socialSecurityBenefits: row.socialSecurity,
+  }).taxablePortion;
+  const ordinary = ordinaryBeforeSs + taxableSs;
   const deduction = calculateStandardDeduction({ year: CURRENT_PARAMETER_YEAR, filingStatus, ages: [row.age] }).total;
   return {
     age: row.age,
