@@ -3,8 +3,7 @@ import { Check, LayoutDashboard, Landmark, Map, SlidersHorizontal, TrendingUp } 
 import { useScenario } from '../contexts/ScenarioContext';
 import OnboardingCard from './OnboardingCard';
 import AnimatedFlame from './AnimatedFlame';
-import { birthYearFromAge } from '../lib/calculations/socialSecurity';
-import { formatMinimumRetirementAge } from '../lib/calculations/mra';
+import { birthYearFromAgeAndMonths, formatMinimumRetirementAge } from '../lib/calculations/mra';
 
 const money = (n) => (Number.isFinite(Number(n)) ? `$${Math.round(Number(n)).toLocaleString()}` : '—');
 
@@ -42,7 +41,12 @@ function HomePage() {
   // year of birth. Stating a flat 57 here is the same error the plan resolver
   // used to make, and it is wrong for anyone born before 1970.
   const yourMra = profile?.currentAge
-    ? formatMinimumRetirementAge(birthYearFromAge({ currentAge: profile.currentAge }))
+    ? formatMinimumRetirementAge(
+        birthYearFromAgeAndMonths({
+          currentAge: profile.currentAge,
+          currentAgeMonths: profile.currentAgeMonths,
+        }) - (profile.bornOnJanuaryFirst ? 1 : 0)
+      )
     : null;
 
   const quickStats = [

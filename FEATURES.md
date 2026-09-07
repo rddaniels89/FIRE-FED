@@ -296,7 +296,10 @@ The years between leaving and the first guaranteed income, costed properly:
 
 ## 14. Privacy by design
 
-FireFed stores ages, not birth dates. It never asks for:
+FireFed stores ages, not birth dates. Current age is held in years and months,
+because the FERS minimum retirement age and the Social Security full retirement
+age are both year-of-birth rules and whole years cannot settle which year that
+is; the months imply a birth month but never a day. It never asks for:
 
 - A Social Security number
 - A home address

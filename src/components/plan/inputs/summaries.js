@@ -23,7 +23,8 @@ export function youSummary(scenario) {
   const employee = p.employeeType === 'regular' ? 'Regular' : SPECIAL_PROVISION_LABELS[p.employeeType] ?? p.employeeType;
   const annuity = p.annuityStartAge == null ? 'annuity at separation' : `annuity at ${p.annuityStartAge}`;
   const path = p.retirementPath === RETIREMENT_PATH_AUTO ? 'Auto path' : PATH_LABELS[p.retirementPath] ?? p.retirementPath;
-  return `Age ${p.currentAge} · leaves at ${p.separationAge} · ${annuity} · Social Security at ${p.socialSecurityClaimAge} · ${path} · ${employee}`;
+  const age = p.currentAgeMonths ? `${p.currentAge}y ${p.currentAgeMonths}m` : `${p.currentAge}`;
+  return `Age ${age} · leaves at ${p.separationAge} · ${annuity} · Social Security at ${p.socialSecurityClaimAge} · ${path} · ${employee}`;
 }
 
 export function serviceSummary(scenario) {

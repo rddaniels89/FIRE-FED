@@ -27,7 +27,7 @@ import {
   calculateMra10ReductionPercent,
   convertSickLeaveHoursToServiceYears,
 } from '../fers';
-import { minimumRetirementAge } from '../mra';
+import { birthYearFromAgeAndMonths, minimumRetirementAge, minimumRetirementAgeForCurrentAge } from '../mra';
 import { calculateSrsMonthly, evaluateSrsEligibility } from '../srs';
 import { calculateSpecialProvisionAnnuity } from '../specialProvisions';
 
@@ -107,6 +107,32 @@ describe('OPM FERS eligibility: the minimum retirement age table', () => {
 
   it('matches Chapter 51 Example 3 exactly: born 1965, MRA 56 years 2 months', () => {
     expect(minimumRetirementAge(1965)).toBeCloseTo(56 + 2 / 12, 10);
+  });
+
+  // An age in whole years cannot settle the birth year, and the MRA is a
+  // year-of-birth rule. Two people who are both "60" in September 2026 were
+  // born in different years and have MRAs four months apart.
+  it('separates two 60-year-olds that whole years cannot tell apart', () => {
+    const asOfDate = new Date(2026, 8, 7);
+
+    const birthdayPassed = birthYearFromAgeAndMonths({ currentAge: 60, currentAgeMonths: 4, asOfDate });
+    const birthdayComing = birthYearFromAgeAndMonths({ currentAge: 60, currentAgeMonths: 11, asOfDate });
+    expect(birthdayPassed).toBe(1966);
+    expect(birthdayComing).toBe(1965);
+
+    expect(minimumRetirementAgeForCurrentAge({ currentAge: 60, currentAgeMonths: 4, asOfDate })).toBeCloseTo(56 + 4 / 12, 10);
+    expect(minimumRetirementAgeForCurrentAge({ currentAge: 60, currentAgeMonths: 11, asOfDate })).toBeCloseTo(56 + 2 / 12, 10);
+  });
+
+  // Both SSA and OPM count a 1 January birthday as the previous year. The day
+  // is never collected, so the user declares it.
+  it('honours a 1 January birthday by using the previous year', () => {
+    const asOfDate = new Date(2026, 8, 7);
+    // Born January 1970 would otherwise take the 1970-onward row of 57.
+    expect(minimumRetirementAgeForCurrentAge({ currentAge: 56, currentAgeMonths: 8, asOfDate })).toBe(57);
+    expect(
+      minimumRetirementAgeForCurrentAge({ currentAge: 56, currentAgeMonths: 8, asOfDate, bornOnJanuaryFirst: true })
+    ).toBeCloseTo(56 + 10 / 12, 10);
   });
 });
 

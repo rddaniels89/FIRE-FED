@@ -22,8 +22,11 @@ function LegalPrivacy() {
         </p>
         <ul>
           <li>
-            <strong>Ages, not birth dates.</strong> FireFed stores your current age, separation age, annuity start age
-            and Social Security claiming age. It never asks for or stores a date of birth.
+            <strong>Ages, not birth dates.</strong> FireFed stores your current age in years and months, your
+            separation age, annuity start age and Social Security claiming age. It never asks for or stores a date of
+            birth. The months are there because the FERS minimum retirement age and the Social Security full retirement
+            age are both set by your year of birth, and an age in whole years cannot settle which year that is. Storing
+            the months implies your month of birth, but never the day.
           </li>
           <li>
             <strong>No identifiers.</strong> FireFed never asks for a Social Security number, home address, employee

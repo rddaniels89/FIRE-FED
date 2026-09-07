@@ -46,6 +46,22 @@ describe('plan resolution', () => {
     expect(resolveRetirementPlan(overridden, { asOfYear: 2026 }).mraIsDerived).toBe(false);
   });
 
+  it('uses the months to pick the right minimum retirement age', () => {
+    const asOfDate = new Date(2026, 8, 7);
+    const base60 = applyScenarioUpdates(base(), {
+      profile: { currentAge: 60, separationAge: 60 },
+      fers: { yearsOfService: 12 },
+    });
+
+    // Same stated age, different birth year, MRAs four months apart.
+    const later = resolveRetirementPlan(applyScenarioUpdates(base60, { profile: { currentAgeMonths: 4 } }), { asOfDate });
+    const earlier = resolveRetirementPlan(applyScenarioUpdates(base60, { profile: { currentAgeMonths: 11 } }), { asOfDate });
+    expect(later.mraBirthYear).toBe(1966);
+    expect(earlier.mraBirthYear).toBe(1965);
+    expect(later.mra).toBeCloseTo(56 + 4 / 12, 6);
+    expect(earlier.mra).toBeCloseTo(56 + 2 / 12, 6);
+  });
+
   it('a 45-year-old with 18 years leaving at 57 has MRA+30 and the supplement', () => {
     const plan = resolveRetirementPlan(base());
     expect(plan.service.eligibilityYears).toBe(30);
