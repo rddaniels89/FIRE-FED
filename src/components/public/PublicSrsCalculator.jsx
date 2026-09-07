@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { trackEvent } from '../../lib/telemetry';
 import { DEFAULT_MRA } from '../../lib/calculations/fers';
 import { calculateSrs, getSrsEarningsTestExemptAmount } from '../../lib/calculations/srs';
+import HowCalculated from '../HowCalculated';
 
 const money = (n) => `$${Math.round(Number(n) || 0).toLocaleString()}`;
 const num = (v) => (v === '' ? 0 : Number.parseFloat(v) || 0);
@@ -123,8 +124,10 @@ export default function PublicSrsCalculator() {
               <>
                 <h2 className="text-xl font-semibold navy-text mb-4">Your estimated supplement</h2>
                 <div className="text-4xl font-bold text-green-700 dark:text-green-400">
-                  {money(reduced ? srs.monthlyAfterEarningsTest : srs.monthlyBeforeEarningsTest)}
-                  <span className="text-lg font-medium text-slate-500 dark:text-slate-400">/mo</span>
+                  <HowCalculated ruleId={reduced ? 'srs.earnings_test' : 'srs.amount'}>
+                    {money(reduced ? srs.monthlyAfterEarningsTest : srs.monthlyBeforeEarningsTest)}
+                    <span className="text-lg font-medium text-slate-500 dark:text-slate-400">/mo</span>
+                  </HowCalculated>
                 </div>
 
                 <dl className="mt-6 space-y-2 text-sm">

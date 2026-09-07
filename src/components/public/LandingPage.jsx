@@ -3,16 +3,28 @@ import { trackEvent } from '../../lib/telemetry';
 
 const MODELS = [
   {
-    title: 'Your FERS pension',
-    body: 'High-3, creditable service, and the 1.1% rule at 62. Unused sick leave credited at 2,087 hours a year — for the computation only, never for eligibility. Survivor elections priced against what your survivor actually receives.',
-  },
-  {
-    title: 'Your TSP',
-    body: 'Traditional against Roth with the agency match, 2026 contribution limits, catch-up at 50 and the higher band at 60–63, and the SECURE 2.0 rule that forces catch-up to Roth above the wage threshold.',
+    title: 'Your FERS pension, by path',
+    body: 'MRA+30, 60+20, 62+5, MRA+10 with its 5%-a-year reduction, postponed, deferred, an early-out if offered, and the special provisions. Sick leave credited for the computation only. Survivor elections priced against what your survivor actually receives. A deferred annuity shown frozen in the dollars of the day you left.',
   },
   {
     title: 'The years before 62',
-    body: 'The Special Retirement Supplement, what it is worth, and — just as often — why it is not payable. MRA+10 does not qualify. Deferred and postponed retirement do not qualify. Most tools stay silent on that.',
+    body: 'The Special Retirement Supplement and its earnings test, and why MRA+10, deferred and postponed do not get it. The FEHB five-year rule and what a deferred retirement does to your health insurance. Marketplace cover for the gap, Medicare at 65.',
+  },
+  {
+    title: 'When the TSP opens',
+    body: 'Separate in or after the year you turn 55 and the Traditional TSP is penalty-free; leave at 54 and it is locked until 59½. Roth contributions, seasoned conversions, 72(t) schedules and the conversion ladder, each on its own clock.',
+  },
+  {
+    title: 'One lifetime timeline',
+    body: 'Every year from today to 95 in one table: salary, FERS contributions, pension with the diet COLA, supplement, Social Security at the age you claim it, withdrawals in the right order, federal and state tax, healthcare, spending, and what is left.',
+  },
+  {
+    title: 'A projected sustainable separation age',
+    body: 'The earliest age at which that timeline never runs dry under your assumptions. Drag the separation age and watch every number move. See what one more year buys and what one fewer costs, threshold by threshold.',
+  },
+  {
+    title: 'Durability, not a single answer',
+    body: 'Monte Carlo over the same model, named stress tests — a crash the year you leave, high inflation, living to 100, a Social Security cut — and every figure with a "how was this calculated" that cites the rule and its source.',
   },
 ];
 
@@ -28,9 +40,9 @@ export default function LandingPage() {
             Know what your federal retirement is actually worth.
           </h1>
           <p className="mt-5 text-lg text-slate-600 dark:text-slate-300">
-            Most retirement calculators do not know what a GS-13 is. FireFed models the rules that
-            decide your number — FERS service credit, the TSP match, and the gap between the day you
-            leave and the day Social Security starts.
+            Most retirement calculators do not know what a GS-13 is. FireFed is one model of your whole
+            path — from today, through the day you leave, to the day Social Security starts and beyond —
+            built on the federal rules that decide the number.
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row gap-3">

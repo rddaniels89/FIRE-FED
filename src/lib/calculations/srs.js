@@ -63,6 +63,7 @@ export function evaluateSrsEligibility({
   mra = DEFAULT_MRA,
   isVoluntaryEarlyRetirement = false,
   isDeferredOrPostponed = false,
+  isSpecialProvision = false,
 } = {}) {
   const age = toNumber(retirementAge);
   const years = toNumber(creditableYearsOfService);
@@ -81,6 +82,13 @@ export function evaluateSrsEligibility({
 
   if (age >= SRS_END_AGE) {
     return { ...base, reason: SRS_INELIGIBILITY_REASONS.AGE_62_OR_OVER };
+  }
+
+  // Special provision retirees (law enforcement, firefighters, air traffic
+  // controllers) receive the supplement from the day they retire, and are
+  // exempt from the earnings test until they reach MRA.
+  if (isSpecialProvision) {
+    return { isEligible: true, isPayableNow: true, payableFromAge: age, reason: null };
   }
 
   // VERA is its own qualifying route; payment waits until MRA.
@@ -166,6 +174,7 @@ export function calculateSrs({
   mra = DEFAULT_MRA,
   isVoluntaryEarlyRetirement = false,
   isDeferredOrPostponed = false,
+  isSpecialProvision = false,
   annualEarnedIncome = 0,
   exemptAmount,
   year = CURRENT_PARAMETER_YEAR,
@@ -176,6 +185,7 @@ export function calculateSrs({
     mra,
     isVoluntaryEarlyRetirement,
     isDeferredOrPostponed,
+    isSpecialProvision,
   });
 
   if (!eligibility.isEligible) {

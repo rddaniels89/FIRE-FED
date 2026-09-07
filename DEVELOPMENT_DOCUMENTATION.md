@@ -53,6 +53,72 @@ FireFed Application Structure
 
 ---
 
+
+## The model
+
+FireFed is one model, not several calculators. Read this before touching any
+calculation.
+
+### Scenario schema (v3)
+
+`src/lib/scenarios/schema.js` defines the scenario. The `profile` block is the
+single source of truth for the person: `currentAge`, `separationAge`,
+`annuityStartAge` (null means "the path's default"), `socialSecurityClaimAge`,
+`retirementPath` (`auto` or a path id), `isVeraOffered`, `employeeType`,
+`hireCohort`, `mra`. The other blocks are `tsp`, `fers`, `fire`, `household`,
+`taxes`, `healthcare`, `career`, `strategies`, `summary`.
+
+Legacy fields (`tsp.currentAge`, `fers.currentAge`, `fers.retirementAge`,
+`tsp.retirementAge`, `fire.desiredFireAge`, `fire.spouseIncome`,
+`summary.socialSecurity.claimingAge`) are read-only mirrors written by
+`applyProfileMirrors`. Components must write to `profile` and `household`;
+writes to a mirror are translated by `translateLegacyUpdates` so old code keeps
+working, but new code should not rely on that.
+
+Persistence: `src/lib/scenarios/storage.js` maps a scenario onto the four
+JSONB columns. The newer blocks travel inside `summary_data.extensions`, so no
+database migration was needed.
+
+### The timeline
+
+`src/lib/projection/timeline.js` builds one row per age from today to the plan
+end age. Salary, FERS and TSP contributions, pension (with the diet COLA from
+62 and the deferred nominal freeze), the supplement (with the earnings test),
+Social Security (claiming factors, optional Trustees haircut), spouse income
+and benefits, healthcare (FEHB, marketplace, Medicare, IRMAA), federal and
+state taxes, FICA, spending, and withdrawals in a fixed funding order with the
+10% penalty where the access rules impose it. `resolveRetirementPlan` in
+`plan.js` decides the path and the annuity for a given profile.
+
+Everything else reads the timeline:
+
+| Consumer | Module |
+|---|---|
+| Projected sustainable separation age | `projection/fireDate.js` |
+| One year earlier / later | `projection/deltas.js` |
+| Monte Carlo | `analytics/monteCarlo.js` (runs the timeline per simulation) |
+| Stress tests | `analytics/stressTests.js` |
+| Optimizer | `optimization/optimizer.js` |
+| PDF report | `pdf/report.js` |
+| Compare | `components/ScenarioCompare.jsx` |
+| TSP tax rates | `projection/taxRates.js` |
+
+Add a rule to the module that owns it, cite the primary source in the JSDoc,
+register it in `src/lib/rules/registry.js`, pin it with a test, and let the
+timeline pick it up. Never compute a headline number in a component.
+
+### Annual figures
+
+Indexed and legislated figures live in
+`src/lib/calculations/annualParameters.js` by year; GS tables in `gsPay.js`.
+`docs/ANNUAL-UPDATE.md` is the yearly checklist.
+
+### Free and Pro
+
+`src/lib/entitlements.js` documents the split: a single person, the
+deterministic timeline and the explanations are free; a second person, a
+probabilistic answer, a strategy, or a deliverable is Pro.
+
 ## Development
 
 ### Prerequisites

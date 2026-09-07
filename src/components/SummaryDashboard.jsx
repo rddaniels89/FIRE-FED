@@ -26,6 +26,11 @@ import { trackEvent } from '../lib/telemetry';
 import NumberStepper from './NumberStepper';
 import { FileDown, Lock } from 'lucide-react';
 import { createRetirementReportPdf } from '../lib/pdf/report';
+import { buildTimeline } from '../lib/projection/timeline';
+import { findFireDate } from '../lib/projection/fireDate';
+import { oneYearDeltas } from '../lib/projection/deltas';
+import { runStressTests } from '../lib/analytics/stressTests';
+import { runMonteCarloAnalytics } from '../lib/analytics/monteCarlo';
 
 ChartJS.register(
   CategoryScale,
@@ -424,9 +429,37 @@ function SummaryDashboard() {
         chartImages.netWorth = await capture(netWorthChartRef.current);
       }
 
+      // The report reads from the lifetime timeline. Each analytic is optional:
+      // a failure in one of them drops that section rather than the export.
+      const attempt = (label, fn) => {
+        try {
+          return fn();
+        } catch (error) {
+          console.warn(`PDF export: ${label} skipped`, error);
+          return null;
+        }
+      };
+      const reportTimeline = attempt('timeline', () => buildTimeline(currentScenario));
+      const reportFireDate = attempt('FIRE date', () => findFireDate(currentScenario));
+      const reportDeltas = reportTimeline
+        ? attempt('one-year deltas', () => oneYearDeltas(currentScenario, { baseTimeline: reportTimeline }))
+        : null;
+      const reportStress =
+        reportTimeline && hasEntitlement(entitlements, FEATURES.STRESS_TESTS)
+          ? attempt('stress tests', () => runStressTests(currentScenario, { baseTimeline: reportTimeline }))
+          : null;
+      const reportMonteCarlo = hasEntitlement(entitlements, FEATURES.ADVANCED_ANALYTICS)
+        ? attempt('Monte Carlo', () => runMonteCarloAnalytics({ scenario: currentScenario, settings: { simulations: 400 } }))
+        : null;
+
       const pdf = createRetirementReportPdf({
         jsPDF,
         scenario: currentScenario,
+        timeline: reportTimeline,
+        fireDate: reportFireDate,
+        deltas: reportDeltas,
+        stress: reportStress,
+        monteCarlo: reportMonteCarlo,
         settings,
         chartImages,
         computed: {

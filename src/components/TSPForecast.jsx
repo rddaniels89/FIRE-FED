@@ -18,6 +18,8 @@ import ScenarioManager from './ScenarioManager';
 import { calculateTspTraditionalVsRoth, DEFAULT_FUND_RETURNS } from '../lib/calculations/tsp';
 import TooltipWrapper from './TooltipWrapper';
 import NumberStepper from './NumberStepper';
+import HowCalculated from './HowCalculated';
+import { resolveTspTaxRates } from '../lib/projection/taxRates';
 import { FEATURES, hasEntitlement } from '../lib/entitlements';
 import {
   ANNUAL_CATCH_UP_LIMIT,
@@ -951,6 +953,28 @@ function TSPForecast() {
                     )}
                   </div>
                 </TooltipWrapper>
+                <div className="md:col-span-2">
+                  <button
+                    type="button"
+                    className="btn-secondary text-sm"
+                    onClick={() => {
+                      if (!currentScenario?.profile) return;
+                      try {
+                        const rates = resolveTspTaxRates(currentScenario);
+                        handleInputChange('currentTaxRate', String(rates.currentTaxRate));
+                        handleInputChange('retirementTaxRate', String(rates.retirementTaxRate));
+                      } catch (e) {
+                        console.error('Tax rate lookup failed', e);
+                      }
+                    }}
+                  >
+                    Use my tax brackets
+                  </button>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Fills both rates from the 2026 federal brackets: your marginal rate on today's salary, and the
+                    marginal rate in the first full year of retirement from your lifetime timeline.
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -1259,7 +1283,17 @@ function TSPForecast() {
               <div className="grid grid-cols-2 gap-6">
                 <div className="text-center">
                   <div className="text-3xl font-bold navy-text mb-2">
-                    {formatDollars(inputs.contributionType === 'traditional' ? results.traditional.projectedBalance : results.roth.projectedBalance)}
+                    <HowCalculated
+                      ruleId="tsp.limits"
+                      inputs={{
+                        'Contribution': `${numericInputs.monthlyContributionPercent ?? inputs.monthlyContributionPercent}%`,
+                        'Expected return': `${(results.weightedReturn * 100).toFixed(2)}%`,
+                        'Years': results.years,
+                        'Employer contributions': Boolean(numericInputs.includeEmployerMatch),
+                      }}
+                    >
+                      {formatDollars(inputs.contributionType === 'traditional' ? results.traditional.projectedBalance : results.roth.projectedBalance)}
+                    </HowCalculated>
                   </div>
                   <div className="text-sm text-slate-500 dark:text-slate-400">Projected Balance</div>
                 </div>
@@ -1343,7 +1377,9 @@ function TSPForecast() {
               <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
                 <div className="text-slate-500 dark:text-slate-400">Employer contributions</div>
                 <div className="font-semibold text-slate-700 dark:text-slate-200">
-                  {numericInputs.includeEmployerMatch ? 'Included (simplified)' : 'Not included'}
+                  <HowCalculated ruleId="tsp.employer_match">
+                    {numericInputs.includeEmployerMatch ? 'Included (simplified)' : 'Not included'}
+                  </HowCalculated>
                 </div>
               </div>
             </div>

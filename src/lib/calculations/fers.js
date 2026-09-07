@@ -1,8 +1,117 @@
 import { projectAnnuityWithCola } from './cola';
 import { calculateSpecialProvisionAnnuity } from './specialProvisions';
+import { getAnnualParameters } from './annualParameters';
 
 export const DEFAULT_RETIREMENT_END_AGE = 85;
 export const DEFAULT_MRA = 57;
+
+/**
+ * Employee contribution to the FERS Basic Benefit, by hire date.
+ *
+ * The same annuity costs three different amounts depending on when a person
+ * was hired, and the difference is 3.6% of salary every pay period — enough to
+ * change how much can be saved toward an early exit.
+ *
+ *   FERS        hired before 2013           0.8%
+ *   FERS-RAE    hired in 2013               3.1%   (Middle Class Tax Relief and Job Creation Act of 2012)
+ *   FERS-FRAE   hired 2014 and later        4.4%   (Bipartisan Budget Act of 2013)
+ *
+ * https://www.opm.gov/retirement-center/fers-information/
+ */
+export const FERS_HIRE_COHORTS = Object.freeze({
+  FERS: 'fers',
+  FERS_RAE: 'fers_rae',
+  FERS_FRAE: 'fers_frae',
+});
+
+export const FERS_HIRE_COHORT_LABELS = Object.freeze({
+  [FERS_HIRE_COHORTS.FERS]: 'Hired before 2013 (FERS, 0.8%)',
+  [FERS_HIRE_COHORTS.FERS_RAE]: 'Hired in 2013 (FERS-RAE, 3.1%)',
+  [FERS_HIRE_COHORTS.FERS_FRAE]: 'Hired 2014 or later (FERS-FRAE, 4.4%)',
+});
+
+export const FERS_CONTRIBUTION_RATES = Object.freeze({
+  [FERS_HIRE_COHORTS.FERS]: 0.008,
+  [FERS_HIRE_COHORTS.FERS_RAE]: 0.031,
+  [FERS_HIRE_COHORTS.FERS_FRAE]: 0.044,
+});
+
+export function getFersContributionRate(hireCohort) {
+  return FERS_CONTRIBUTION_RATES[hireCohort] ?? FERS_CONTRIBUTION_RATES[FERS_HIRE_COHORTS.FERS_FRAE];
+}
+
+/**
+ * Refund of FERS contributions on separation.
+ *
+ * An employee who leaves before retirement may take back everything they paid
+ * into the Basic Benefit, with interest. Doing so forfeits the deferred annuity
+ * for that service unless the refund is later redeposited with interest. For a
+ * 4.4% contributor with a short career the refund is real money; for a 0.8%
+ * contributor it almost never beats keeping the annuity.
+ *
+ * Interest: none for service under one year; the market rate set by Treasury
+ * thereafter, compounded annually. 2025: 4.375%; 2026: 4.25% (OPM BAL 26-301).
+ * The rate lives in annualParameters.js. Source: 5 U.S.C. 8422(i); OPM SF 3106.
+ */
+export const FERS_REFUND_INTEREST_RATE_DEFAULT = getAnnualParameters().fers.refundInterestRate;
+
+export function calculateFersRefund({
+  annualSalaries = [],
+  hireCohort = FERS_HIRE_COHORTS.FERS_FRAE,
+  interestRate = FERS_REFUND_INTEREST_RATE_DEFAULT,
+} = {}) {
+  const rate = getFersContributionRate(hireCohort);
+  const r = Math.max(0, Number(interestRate) || 0);
+  let balance = 0;
+  let contributions = 0;
+  for (const salary of annualSalaries) {
+    const c = Math.max(0, Number(salary) || 0) * rate;
+    contributions += c;
+    balance = balance * (1 + r) + c;
+  }
+  return {
+    contributionRate: rate,
+    totalContributions: contributions,
+    interest: balance - contributions,
+    refundAmount: balance,
+  };
+}
+
+/**
+ * A rough salary history for the refund estimate when only the current salary
+ * and years of service are known: walks the current salary back at a growth rate.
+ */
+export function estimateSalaryHistory({ currentSalary, yearsOfService, annualGrowthRate = 0.03 } = {}) {
+  const years = Math.max(0, Math.floor(Number(yearsOfService) || 0));
+  const salary = Math.max(0, Number(currentSalary) || 0);
+  const g = Number(annualGrowthRate) || 0;
+  const out = [];
+  for (let i = years - 1; i >= 0; i--) out.push(salary / Math.pow(1 + g, i));
+  return out;
+}
+
+/**
+ * Lump-sum payment for unused annual leave at separation.
+ *
+ * Paid at the hourly rate in effect on separation, in one payment shortly after
+ * the final salary — bridge cash on day one of retirement. Most employees may
+ * carry over 240 hours (30 days); SES 720; overseas 360. Source: 5 U.S.C. 5551;
+ * https://www.opm.gov/policy-data-oversight/pay-leave/leave-administration/fact-sheets/lump-sum-payments-for-annual-leave/
+ */
+export const ANNUAL_LEAVE_CARRYOVER_CAP_HOURS = 240;
+export const ANNUAL_LEAVE_HOURS_PER_YEAR = 2087;
+
+export function calculateAnnualLeaveLumpSum({ annualSalary, hours = 0 } = {}) {
+  const salary = Math.max(0, Number(annualSalary) || 0);
+  const h = Math.max(0, Number(hours) || 0);
+  const hourlyRate = salary / ANNUAL_LEAVE_HOURS_PER_YEAR;
+  return {
+    hours: h,
+    hourlyRate,
+    grossPayment: hourlyRate * h,
+    exceedsTypicalCap: h > ANNUAL_LEAVE_CARRYOVER_CAP_HOURS,
+  };
+}
 
 /**
  * OPM's leave year: 2,087 hours. Unused sick leave converts at this rate and is
@@ -222,6 +331,10 @@ export function calculateFersResults({
   // numbers that cannot be compared.
   cpiIncrease = 0.025,
   isSpecialProvision = false,
+  // The 1.1% factor requires age 62 with 20 years *at separation*. A deferred
+  // or postponed annuity that begins at 62 does not earn it, so the age the
+  // multiplier keys off can differ from the age the annuity starts.
+  multiplierAge = undefined,
 }) {
   const totalYears = Number(yearsOfService ?? 0) + Number(monthsOfService ?? 0) / 12;
   const ageNow = Number(currentAge ?? 0);
@@ -240,7 +353,7 @@ export function calculateFersResults({
   // threshold sick leave cannot satisfy, consistent with sick leave being barred
   // from establishing eligibility — so the multiplier keys off service alone.
   const multiplier = calculateFersMultiplier({
-    retirementAge: retireAge,
+    retirementAge: multiplierAge === undefined ? retireAge : Number(multiplierAge),
     totalYearsOfService: projectedYears,
   });
 

@@ -1,14 +1,22 @@
+/**
+ * Monte Carlo over the timeline.
+ *
+ * Each simulation is the same year-by-year model with a different sequence of
+ * returns drawn from the allocation's mean and volatility. Because every
+ * simulation is the real timeline rather than a simplified copy of it, the
+ * pension, the supplement, the penalty rules, taxes and healthcare all behave
+ * exactly as they do in the deterministic view. The output is the spread of
+ * balances by age, the probability the money lasts, and where the plan is most
+ * fragile.
+ */
+
 import { mulberry32, normal01 } from './random';
 import { summarizePercentiles } from './stats';
-import {
-  ANNUAL_CATCH_UP_LIMIT,
-  ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
-  CATCH_UP_AGE,
-  getCatchUpLimitForAge,
-} from '../calculations/contributionLimits';
+import { buildTimeline, resolveExpectedReturn } from '../projection/timeline';
+import { resolveRetirementPlan } from '../projection/plan';
 
 const FUND_STDDEV = Object.freeze({
-  // Coarse volatility assumptions (annualized), used to approximate portfolio volatility.
+  // Coarse annualised volatility per fund, used to approximate portfolio volatility.
   G: 0.01,
   F: 0.05,
   C: 0.16,
@@ -21,257 +29,132 @@ function clampNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function toWeightMap(allocationPct) {
+export function toWeightMap(allocationPct) {
   const a = allocationPct || {};
   const entries = ['G', 'F', 'C', 'S', 'I'].map((k) => [k, clampNumber(a[k], 0)]);
   const sum = entries.reduce((acc, [, v]) => acc + v, 0);
-  if (sum <= 0) {
-    return { G: 0.1, F: 0.2, C: 0.4, S: 0.2, I: 0.1 };
-  }
+  if (sum <= 0) return { G: 0.1, F: 0.2, C: 0.4, S: 0.2, I: 0.1 };
   const weights = {};
   for (const [k, v] of entries) weights[k] = v / sum;
   return weights;
 }
 
-function portfolioMeanReturn({ weights, fundReturnsPct }) {
-  const fr = fundReturnsPct || {};
-  return (
-    weights.G * (clampNumber(fr.G, 2) / 100) +
-    weights.F * (clampNumber(fr.F, 3) / 100) +
-    weights.C * (clampNumber(fr.C, 7) / 100) +
-    weights.S * (clampNumber(fr.S, 8) / 100) +
-    weights.I * (clampNumber(fr.I, 6) / 100)
-  );
-}
-
-function portfolioStdDev({ weights }) {
+export function portfolioStdDev({ weights }) {
   // Naive approximation (ignores correlations): sqrt(sum((w*sd)^2))
-  const varApprox =
-    Math.pow(weights.G * FUND_STDDEV.G, 2) +
-    Math.pow(weights.F * FUND_STDDEV.F, 2) +
-    Math.pow(weights.C * FUND_STDDEV.C, 2) +
-    Math.pow(weights.S * FUND_STDDEV.S, 2) +
-    Math.pow(weights.I * FUND_STDDEV.I, 2);
+  const varApprox = ['G', 'F', 'C', 'S', 'I'].reduce((s, k) => s + Math.pow(weights[k] * FUND_STDDEV[k], 2), 0);
   return Math.sqrt(varApprox);
 }
 
-function computeEmployerMatchPct(employeePct) {
-  // TSP: 1% automatic + up to 4% match (3% dollar-for-dollar + next 2% at 50%)
-  const p = Math.max(0, clampNumber(employeePct, 0));
-  const first3 = Math.min(3, p);
-  const next2 = Math.max(0, Math.min(5, p) - 3);
-  return first3 + next2 * 0.5;
-}
+/**
+ * Runs the simulation. `settings.simulations` (default 750), `settings.endAge`
+ * (default the scenario's), `settings.seed` for reproducibility.
+ *
+ * The legacy arguments (pensionMonthly and the Social Security pair) are
+ * accepted and ignored: the timeline derives them from the scenario.
+ */
+export function runMonteCarloAnalytics({ scenario, settings } = {}) {
+  if (!scenario?.profile) throw new Error('A normalized scenario with a profile is required.');
+  const tsp = scenario.tsp ?? {};
+  const plan = resolveRetirementPlan(scenario);
 
-function annualContribution({
-  salary,
-  employeePct,
-  includeEmployerMatch,
-  includeAutomatic1Percent,
-  annualEmployeeDeferralLimit,
-  annualCatchUpLimit,
-  age,
-  catchUpAge,
-}) {
-  const sal = Math.max(0, clampNumber(salary, 0));
-  const pct = Math.max(0, clampNumber(employeePct, 0));
-
-  const rawEmployee = sal * (pct / 100);
-  const limit = Math.max(0, clampNumber(annualEmployeeDeferralLimit, ANNUAL_ELECTIVE_DEFERRAL_LIMIT));
-  const catchUp = getCatchUpLimitForAge({
-    age,
-    catchUpAge: Math.max(0, clampNumber(catchUpAge, CATCH_UP_AGE)),
-    catchUpLimit: Math.max(0, clampNumber(annualCatchUpLimit, ANNUAL_CATCH_UP_LIMIT)),
-  });
-
-  const employee = Math.min(rawEmployee, limit + catchUp);
-
-  const auto1 = includeAutomatic1Percent ? sal * 0.01 : 0;
-  const matchPct = includeEmployerMatch ? computeEmployerMatchPct(pct) : 0;
-  const match = includeEmployerMatch ? sal * (matchPct / 100) : 0;
-
-  return employee + auto1 + match;
-}
-
-function calcPassiveMonthlyIncome({
-  balance,
-  swr,
-  pensionMonthly,
-  pensionStartAge,
-  ssMonthly,
-  ssStartAge,
-  age,
-  sideHustleIncome,
-  spouseIncome,
-}) {
-  const b = Math.max(0, clampNumber(balance, 0));
-  const swrLocal = clampNumber(swr, 0.04);
-  const tspMonthly = (b * swrLocal) / 12;
-  const pension = age >= pensionStartAge ? Math.max(0, clampNumber(pensionMonthly, 0)) : 0;
-  const ss = age >= ssStartAge ? Math.max(0, clampNumber(ssMonthly, 0)) : 0;
-  const side = Math.max(0, clampNumber(sideHustleIncome, 0));
-  const spouse = Math.max(0, clampNumber(spouseIncome, 0));
-  return tspMonthly + pension + ss + side + spouse;
-}
-
-export function runMonteCarloAnalytics({
-  scenario,
-  pensionMonthly,
-  pensionStartAge,
-  socialSecurityMonthly,
-  socialSecurityStartAge,
-  settings,
-}) {
-  const tsp = scenario?.tsp ?? {};
-  const fire = scenario?.fire ?? {};
-  const summary = scenario?.summary ?? {};
-  const assumptions = summary?.assumptions ?? {};
-
-  const currentAge = clampNumber(tsp.currentAge, 0);
-  const retirementAge = clampNumber(tsp.retirementAge, 0);
-  const desiredFireAge = clampNumber(fire.desiredFireAge, retirementAge);
-
-  const sims = Math.max(100, clampNumber(settings?.simulations ?? 750, 750));
-  const endAge = Math.max(desiredFireAge, clampNumber(settings?.endAge ?? 95, 95));
-  const swr = clampNumber(assumptions.safeWithdrawalRate ?? settings?.swr ?? 0.04, 0.04);
-  const inflation = clampNumber(tsp.inflationRate ?? settings?.inflationRate ?? 2.5, 2.5) / 100;
-
-  const fireGoalMonthly = Math.max(
-    0,
-    clampNumber(fire.monthlyFireIncomeGoal, 0) || clampNumber(summary.monthlyExpenses, 0)
-  );
+  const sims = Math.max(100, Math.floor(clampNumber(settings?.simulations ?? 750, 750)));
+  const endAge = Math.max(plan.separationAge + 1, clampNumber(settings?.endAge ?? scenario.summary?.assumptions?.endAge, 95));
+  const currentAge = plan.currentAge;
+  const years = endAge - currentAge + 1;
 
   const weights = toWeightMap(tsp.allocation);
-  const mu = portfolioMeanReturn({ weights, fundReturnsPct: tsp.fundReturns });
-  const sigma = portfolioStdDev({ weights });
+  const mu = resolveExpectedReturn(scenario);
+  const sigma = clampNumber(settings?.stdDev, portfolioStdDev({ weights }));
+  const seed = clampNumber(settings?.seed, 20260101);
 
-  const annualSalary0 = Math.max(0, clampNumber(tsp.annualSalary, 0));
-  const salaryGrowth = clampNumber(tsp.annualSalaryGrowthRate ?? 3, 3) / 100;
-  const employeePct = clampNumber(tsp.monthlyContributionPercent, 0);
-
-  const includeEmployerMatch = Boolean(tsp.includeEmployerMatch ?? true);
-  const includeAutomatic1Percent = Boolean(tsp.includeAutomatic1Percent ?? true);
-  const annualEmployeeDeferralLimit = clampNumber(
-    tsp.annualEmployeeDeferralLimit ?? ANNUAL_ELECTIVE_DEFERRAL_LIMIT,
-    ANNUAL_ELECTIVE_DEFERRAL_LIMIT
-  );
-  const annualCatchUpLimit = clampNumber(tsp.annualCatchUpLimit ?? ANNUAL_CATCH_UP_LIMIT, ANNUAL_CATCH_UP_LIMIT);
-  const catchUpAge = clampNumber(tsp.catchUpAge ?? CATCH_UP_AGE, CATCH_UP_AGE);
-
-  const baseBalance = Math.max(0, clampNumber(tsp.currentBalance, 0));
-  const sideHustleIncome = Math.max(0, clampNumber(fire.sideHustleIncome, 0));
-  const spouseIncome = Math.max(0, clampNumber(fire.spouseIncome, 0));
-
-  const pensionStart = Math.max(0, clampNumber(pensionStartAge, retirementAge));
-  const ssStart = Math.max(0, clampNumber(socialSecurityStartAge, 67));
-
-  const balancesAtRetirement = [];
-  const balancesAtDesired = [];
+  const balancesByAge = Array.from({ length: years }, () => []);
+  const balancesAtSeparation = [];
+  const balancesAtEnd = [];
+  const minBalances = [];
+  const minBalanceAges = [];
   const succeededToEnd = [];
-  const achievedFireByDesired = [];
+  const bridgeFunded = [];
+  const firstShortfallAges = [];
 
-  for (let i = 0; i < sims; i++) {
-    const rng = mulberry32((settings?.seed ?? Date.now()) + i * 7919);
-
-    let balance = baseBalance;
-    let salary = annualSalary0;
-    let failed = false;
-    let balanceAtRetirementThisSim = null;
-    let balanceAtDesiredThisSim = null;
-    const workEndAge = Math.min(retirementAge, desiredFireAge);
-
-    for (let age = currentAge; age <= endAge; age++) {
-      const isWorkingYear = age < workEndAge;
-
-      // Random annual return (clamped to avoid extreme tails).
-      const r = Math.max(-0.65, Math.min(0.65, mu + sigma * normal01(rng)));
-
-      if (isWorkingYear) {
-        const contrib = annualContribution({
-          salary,
-          employeePct,
-          includeEmployerMatch,
-          includeAutomatic1Percent,
-          annualEmployeeDeferralLimit,
-          annualCatchUpLimit,
-          age,
-          catchUpAge,
-        });
-        balance = (balance + contrib) * (1 + r);
-        salary = salary * (1 + salaryGrowth);
-      } else {
-        // Withdrawal model: start at desired FIRE age.
-        if (age >= desiredFireAge) {
-          const yearsSince = age - desiredFireAge;
-          const inflatedNeedAnnual = fireGoalMonthly * 12 * Math.pow(1 + inflation, yearsSince);
-          const pensionAnnual = age >= pensionStart ? Math.max(0, clampNumber(pensionMonthly, 0) * 12) : 0;
-          const ssAnnual = age >= ssStart ? Math.max(0, clampNumber(socialSecurityMonthly, 0) * 12) : 0;
-          const otherAnnual = (sideHustleIncome + spouseIncome) * 12;
-
-          const needFromTsp = Math.max(0, inflatedNeedAnnual - pensionAnnual - ssAnnual - otherAnnual);
-          balance = balance - needFromTsp;
-          if (balance < 0) {
-            failed = true;
-            balance = 0;
-            break;
-          }
-        }
-
-        balance = balance * (1 + r);
-      }
-
-      if (age === retirementAge) balanceAtRetirementThisSim = balance;
-      if (age === desiredFireAge) balanceAtDesiredThisSim = balance;
+  for (let s = 0; s < sims; s++) {
+    const rng = mulberry32(seed + s * 7919);
+    const returnsByYear = new Array(years);
+    for (let i = 0; i < years; i++) {
+      returnsByYear[i] = Math.max(-0.65, Math.min(0.65, mu + sigma * normal01(rng)));
     }
-
-    const passiveAtDesired = calcPassiveMonthlyIncome({
-      balance: balanceAtDesiredThisSim,
-      swr,
-      pensionMonthly,
-      pensionStartAge: pensionStart,
-      ssMonthly: socialSecurityMonthly,
-      ssStartAge: ssStart,
-      age: desiredFireAge,
-      sideHustleIncome,
-      spouseIncome,
-    });
-
-    if (balanceAtRetirementThisSim != null) balancesAtRetirement.push(balanceAtRetirementThisSim);
-    if (balanceAtDesiredThisSim != null) balancesAtDesired.push(balanceAtDesiredThisSim);
-    achievedFireByDesired.push(passiveAtDesired >= fireGoalMonthly);
-    succeededToEnd.push(!failed);
+    const t = buildTimeline(scenario, { plan, endAge, returnsByYear });
+    t.rows.forEach((r, i) => balancesByAge[i].push(r.balances.total));
+    balancesAtSeparation.push(t.summary.balanceAtSeparation);
+    balancesAtEnd.push(t.summary.balanceAtEnd);
+    minBalances.push(t.summary.minBalance);
+    minBalanceAges.push(t.summary.minBalanceAge);
+    succeededToEnd.push(t.summary.isSustainable);
+    bridgeFunded.push(t.summary.bridge.fundedPercent >= 100);
+    if (t.summary.firstShortfallAge !== null) firstShortfallAges.push(t.summary.firstShortfallAge);
   }
 
-  const retirementPct = summarizePercentiles(balancesAtRetirement);
-  const desiredPct = summarizePercentiles(balancesAtDesired);
+  const byAge = balancesByAge.map((values, i) => ({ age: currentAge + i, ...summarizePercentiles(values) }));
 
-  const pFireByDesired =
-    achievedFireByDesired.length > 0
-      ? achievedFireByDesired.filter(Boolean).length / achievedFireByDesired.length
-      : 0;
-  const pSuccessToEnd =
-    succeededToEnd.length > 0 ? succeededToEnd.filter(Boolean).length / succeededToEnd.length : 0;
+  // The most vulnerable period: where the 10th-percentile path is closest to
+  // zero after separation, expressed as the age and the years of spending it
+  // has left.
+  const afterSeparation = byAge.filter((b) => b.age >= plan.separationAge);
+  let vulnerable = afterSeparation[0] ?? null;
+  for (const b of afterSeparation) if (b.p10 < (vulnerable?.p10 ?? Infinity)) vulnerable = b;
+
+  const pSuccess = succeededToEnd.filter(Boolean).length / sims;
+  const pBridge = bridgeFunded.filter(Boolean).length / sims;
+
+  const shortfallHistogram = firstShortfallAges.reduce((acc, age) => {
+    acc[age] = (acc[age] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return {
     inputs: {
       simulations: sims,
       currentAge,
-      retirementAge,
-      desiredFireAge,
+      retirementAge: plan.separationAge,
+      desiredFireAge: plan.separationAge,
       endAge,
-      swr,
-      inflationRate: inflation,
       meanReturn: mu,
       portfolioStdDev: sigma,
-      fireGoalMonthly,
+      seed,
     },
     outcomes: {
-      probabilityFireByDesiredAge: pFireByDesired,
-      probabilityFundsLastToEndAge: pSuccessToEnd,
-      balanceAtRetirement: retirementPct,
-      balanceAtDesiredFireAge: desiredPct,
+      // Kept for the existing analytics panel.
+      probabilityFireByDesiredAge: pBridge,
+      probabilityFundsLastToEndAge: pSuccess,
+      balanceAtRetirement: summarizePercentiles(balancesAtSeparation),
+      balanceAtDesiredFireAge: summarizePercentiles(balancesAtSeparation),
+      // New.
+      balanceAtEnd: summarizePercentiles(balancesAtEnd),
+      minBalance: summarizePercentiles(minBalances),
+      medianMinBalanceAge: summarizePercentiles(minBalanceAges)?.p50 ?? null,
+      mostVulnerableAge: vulnerable?.age ?? null,
+      mostVulnerableP10Balance: vulnerable?.p10 ?? null,
+      firstShortfallAgeHistogram: shortfallHistogram,
+      medianFirstShortfallAge: firstShortfallAges.length > 0 ? summarizePercentiles(firstShortfallAges).p50 : null,
     },
+    byAge,
   };
 }
 
-
+/** Monte Carlo success across a range of separation ages. */
+export function monteCarloBySeparationAge(scenario, { fromAge, toAge, settings, withSeparationAge } = {}) {
+  const start = Math.ceil(clampNumber(fromAge, scenario.profile.currentAge));
+  const end = clampNumber(toAge, Math.min(70, start + 20));
+  const out = [];
+  for (let age = start; age <= end; age++) {
+    const s = withSeparationAge(scenario, age);
+    const r = runMonteCarloAnalytics({ scenario: s, settings: { ...(settings ?? {}), simulations: Math.min(clampNumber(settings?.simulations, 300), 400) } });
+    out.push({
+      separationAge: age,
+      probabilityFundsLastToEndAge: r.outcomes.probabilityFundsLastToEndAge,
+      probabilityBridgeFunded: r.outcomes.probabilityFireByDesiredAge,
+      minBalanceP10: r.outcomes.minBalance?.p10 ?? null,
+      balanceAtEndP50: r.outcomes.balanceAtEnd?.p50 ?? null,
+    });
+  }
+  return out;
+}

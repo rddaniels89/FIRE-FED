@@ -1,17 +1,26 @@
 import { Link } from 'react-router-dom';
 
 const ROWS = [
-  ['Model the scenario you enter, correctly', 'Yes', 'Yes'],
-  ['FERS pension with unused sick leave credit', 'Yes', 'Yes'],
-  ['Survivor annuity election applied', 'Yes', 'Yes'],
-  ['Special Retirement Supplement, when it applies', 'Yes', 'Yes'],
-  ['TSP projection with agency match and 2026 limits', 'Yes', 'Yes'],
+  ['One profile: every calculator reads the same person', 'Yes', 'Yes'],
+  ['Every FERS path: MRA+30, 60+20, 62+5, MRA+10, postponed, deferred, VERA, special provisions', 'Yes', 'Yes'],
+  ['FERS pension with sick leave, survivor election, diet COLA, and the deferred-annuity freeze', 'Yes', 'Yes'],
+  ['Special Retirement Supplement with the earnings test', 'Yes', 'Yes'],
+  ['Lifetime year-by-year timeline: salary, pension, SRS, Social Security, withdrawals, taxes, healthcare', 'Yes', 'Yes'],
+  ['Projected sustainable separation age with a separation-age slider and one-year-earlier/later cards', 'Yes', 'Yes'],
+  ['TSP access rules: age 55 separation rule, 59½, and the 10% penalty where it applies', 'Yes', 'Yes'],
+  ['Social Security claiming ages 62–70 from your SSA estimate', 'Yes', 'Yes'],
+  ['Federal and state income tax, Social Security taxation, FICA', 'Yes', 'Yes'],
+  ['FEHB premiums, the five-year rule, marketplace bridge cover, Medicare at 65', 'Yes', 'Yes'],
+  ['"How was this calculated" with sources on every number', 'Yes', 'Yes'],
   ['Saved scenarios', '3', 'Unlimited'],
-  ['Side-by-side scenario comparison', '—', 'Yes'],
-  ['Monte Carlo analysis', '—', 'Yes'],
-  ['Editable fund return assumptions', '—', 'Yes'],
-  ['Allocation optimization tools', '—', 'Yes'],
-  ['PDF export and scenario import/export', '—', 'Yes'],
+  ['Household: spouse income, Social Security, pension; dual-fed couples', '—', 'Yes'],
+  ['Monte Carlo durability with percentile bands and the most vulnerable age', '—', 'Yes'],
+  ['Named stress tests: bad first decade, crash at separation, inflation, longevity, healthcare, Social Security cut', '—', 'Yes'],
+  ['Bridge strategies: 72(t) schedule and Roth conversion ladder', '—', 'Yes'],
+  ['GS career and High-3 simulator with step increases and promotions', '—', 'Yes'],
+  ['Compare three to five scenarios with a delta view', '—', 'Yes'],
+  ['Medicare IRMAA estimates', '—', 'Yes'],
+  ['Federal Retirement Projection Report (PDF) and scenario import/export', '—', 'Yes'],
 ];
 
 function Cell({ value }) {
