@@ -111,7 +111,10 @@ export default function PublicLayout() {
         )}
       </header>
 
-      <main className="flex-1">
+      {/* `clip` contains anything that would otherwise widen the page — a wide
+          table's minimum width propagates past its own scroll container here —
+          without creating a scroll container of its own. */}
+      <main className="flex-1 overflow-x-clip">
         <Outlet />
       </main>
 
