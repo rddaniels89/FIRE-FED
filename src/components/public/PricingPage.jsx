@@ -90,17 +90,17 @@ export default function PricingPage() {
         <table className="w-full text-sm sm:min-w-[520px]">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-700">
-              <th className="text-left font-semibold text-slate-700 dark:text-slate-200 px-6 py-4">What you get</th>
-              <th className="font-semibold text-slate-700 dark:text-slate-200 px-6 py-4 w-24">Free</th>
-              <th className="font-semibold text-slate-700 dark:text-slate-200 px-6 py-4 w-24">Pro</th>
+              <th className="text-left font-semibold text-slate-700 dark:text-slate-200 px-4 py-4 sm:px-6">What you get</th>
+              <th className="w-14 font-semibold text-slate-700 dark:text-slate-200 px-2 py-4 sm:w-24 sm:px-6">Free</th>
+              <th className="w-14 font-semibold text-slate-700 dark:text-slate-200 px-2 py-4 sm:w-24 sm:px-6">Pro</th>
             </tr>
           </thead>
           <tbody>
             {ROWS.map(([label, free, pro]) => (
               <tr key={label} className="border-b border-slate-100 dark:border-slate-700/60 last:border-0">
-                <td className="px-6 py-3 text-slate-700 dark:text-slate-300">{label}</td>
-                <td className="px-6 py-3 text-center"><Cell value={free} /></td>
-                <td className="px-6 py-3 text-center"><Cell value={pro} /></td>
+                <td className="px-4 py-3 text-slate-700 dark:text-slate-300 sm:px-6">{label}</td>
+                <td className="px-2 py-3 text-center sm:px-6"><Cell value={free} /></td>
+                <td className="px-2 py-3 text-center sm:px-6"><Cell value={pro} /></td>
               </tr>
             ))}
           </tbody>
