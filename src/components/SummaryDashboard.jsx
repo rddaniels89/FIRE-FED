@@ -700,7 +700,7 @@ function SummaryDashboard() {
           </div>
           <div className="card p-6 text-center">
             <div className="text-3xl font-bold gold-accent mb-2">
-              ${(pensionData.annualPension + (tspData.projectedBalance * 0.04)).toLocaleString()}
+              ${Math.round(pensionData.annualPension + (tspData.projectedBalance * 0.04)).toLocaleString()}
             </div>
             <div className="text-sm text-slate-500 dark:text-slate-400">Annual Retirement Income</div>
           </div>

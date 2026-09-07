@@ -11,21 +11,34 @@ export const useTheme = () => {
 };
 
 export const ThemeProvider = ({ children }) => {
-  const [isDarkMode, setIsDarkMode] = useState(true); // Default to dark mode as requested
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
   useEffect(() => {
-    // Check localStorage for saved preference
+    // An explicit choice always wins. With no choice on record, follow the
+    // operating system rather than forcing dark on someone who asked for light,
+    // and do not write anything to storage so the preference keeps tracking.
     const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
+    if (savedTheme === 'dark' || savedTheme === 'light') {
       const isDark = savedTheme === 'dark';
       setIsDarkMode(isDark);
       updateDocumentClass(isDark);
-    } else {
-      // Default to dark mode and save it
-      setIsDarkMode(true);
-      localStorage.setItem('theme', 'dark');
-      updateDocumentClass(true);
+      return undefined;
     }
+
+    const media = window.matchMedia?.('(prefers-color-scheme: light)');
+    const apply = (prefersLight) => {
+      setIsDarkMode(!prefersLight);
+      updateDocumentClass(!prefersLight);
+    };
+    apply(Boolean(media?.matches));
+
+    if (!media?.addEventListener) return undefined;
+    const onChange = (event) => {
+      if (localStorage.getItem('theme')) return;
+      apply(event.matches);
+    };
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
   }, []);
 
   const updateDocumentClass = (isDark) => {

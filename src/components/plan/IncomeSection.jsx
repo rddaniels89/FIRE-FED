@@ -139,7 +139,7 @@ export default function IncomeSection({ timeline, deflate }) {
                 } else if (s.source === 'Special Retirement Supplement') {
                   note = 'Ends at 62; subject to the earnings test.';
                 } else if (s.source === 'Social Security') {
-                  note = `Claimed at ${plan.socialSecurity.claimAge}; FRA ${fmtAge(plan.socialSecurity.fra)}.`;
+                  note = `Claimed at ${plan.socialSecurity.claimAge}; FRA ${fmtAge(plan.socialSecurity.fra?.decimal)}.`;
                 }
                 return (
                   <tr key={s.source} className="border-b border-slate-100 dark:border-slate-800">

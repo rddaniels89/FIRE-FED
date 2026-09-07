@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import PlanEmptyState from './PlanEmptyState';
 import { useScenario } from '../../contexts/ScenarioContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { FEATURES, hasEntitlement } from '../../lib/entitlements';
@@ -30,27 +31,6 @@ function Section({ id, title, lede, children }) {
   );
 }
 
-function EmptyState({ loading }) {
-  return (
-    <div className="animate-fade-in">
-      <h1 className="text-3xl font-bold navy-text mb-3">My Plan</h1>
-      <div className="card p-8 text-center">
-        {loading ? (
-          <p className="text-slate-600 dark:text-slate-400">Loading your scenario…</p>
-        ) : (
-          <>
-            <p className="text-slate-600 dark:text-slate-400 mb-4">
-              No scenario is loaded yet. Create or select one to see your projected timeline.
-            </p>
-            <Link to="/scenarios" className="btn-primary inline-block">
-              Go to scenarios
-            </Link>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /**
  * The plan dashboard: four questions, one model.
@@ -79,8 +59,26 @@ export default function PlanDashboard() {
     return withSeparationAge(currentScenario, previewAge);
   }, [currentScenario, previewAge, committedAge]);
 
-  const timeline = useMemo(() => (viewScenario ? buildTimeline(viewScenario) : null), [viewScenario]);
-  const fireDate = useMemo(() => (currentScenario ? findFireDate(currentScenario) : null), [currentScenario]);
+  // A throw here would reach AppErrorBoundary and blank the whole app, so the
+  // primary screen degrades to an in-page error instead.
+  const { timeline, timelineError } = useMemo(() => {
+    if (!viewScenario) return { timeline: null, timelineError: null };
+    try {
+      return { timeline: buildTimeline(viewScenario), timelineError: null };
+    } catch (e) {
+      console.error('Timeline failed', e);
+      return { timeline: null, timelineError: e?.message || 'Unknown error' };
+    }
+  }, [viewScenario]);
+  const fireDate = useMemo(() => {
+    if (!currentScenario) return null;
+    try {
+      return findFireDate(currentScenario);
+    } catch (e) {
+      console.error('FIRE date failed', e);
+      return null;
+    }
+  }, [currentScenario]);
   const deltas = useMemo(
     () => (viewScenario && timeline ? oneYearDeltas(viewScenario, { baseTimeline: timeline }) : null),
     [viewScenario, timeline]
@@ -114,7 +112,11 @@ export default function PlanDashboard() {
     [updateCurrentScenario]
   );
 
-  if (!currentScenario || !timeline) return <EmptyState loading={Boolean(isLoadingScenarios)} />;
+  if (!currentScenario || !timeline) {
+    return (
+      <PlanEmptyState title="My Plan" loading={Boolean(isLoadingScenarios)} error={currentScenario ? timelineError : null} />
+    );
+  }
 
   const { plan, summary, rows } = timeline;
   const profile = currentScenario.profile;

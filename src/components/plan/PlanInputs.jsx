@@ -14,6 +14,7 @@ import HealthcareSection from './inputs/HealthcareSection';
 import HouseholdSection from './inputs/HouseholdSection';
 import StrategiesSection from './inputs/StrategiesSection';
 import AssumptionsSection from './inputs/AssumptionsSection';
+import PlanEmptyState from './PlanEmptyState';
 
 const SECTIONS = [
   ['you', YouSection],
@@ -43,12 +44,18 @@ function ViewPlanLink({ className = '' }) {
  * read from the same profile, so nothing is entered twice.
  */
 export default function PlanInputs() {
-  const { currentScenario, updateCurrentScenario } = useScenario();
+  const { currentScenario, updateCurrentScenario, isLoadingScenarios } = useScenario();
   const { entitlements } = useAuth();
   const [openSections, setOpenSections] = useState({ you: true });
 
   if (!currentScenario) {
-    return <div className="p-6 text-slate-600 dark:text-slate-400">Loading your plan…</div>;
+    return (
+      <PlanEmptyState
+        title="Plan inputs"
+        loading={Boolean(isLoadingScenarios)}
+        message="No scenario yet. Create one to start entering your inputs."
+      />
+    );
   }
 
   const canUse = (feature) => hasEntitlement(entitlements, feature);

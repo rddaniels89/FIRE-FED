@@ -33,7 +33,7 @@ function compactMoney(value) {
 }
 
 function ScenarioCompare() {
-  const { scenarios, currentScenario, getScenarioDiff } = useScenario();
+  const { scenarios, currentScenario, getScenarioDiff, isLoadingScenarios } = useScenario();
   const { entitlements } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -239,7 +239,9 @@ function ScenarioCompare() {
           <span className="text-sm text-slate-500 dark:text-slate-400">{selectedIds.length} of {MAX_COMPARE} selected</span>
         </div>
         {scenarios.length === 0 ? (
-          <p className="text-sm text-slate-600 dark:text-slate-400">No saved scenarios yet.</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400" role="status">
+            {isLoadingScenarios ? 'Loading your scenarios…' : 'No saved scenarios yet.'}
+          </p>
         ) : (
           <ul className="grid md:grid-cols-2 lg:grid-cols-3 gap-2">
             {scenarios.map((s) => {

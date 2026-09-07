@@ -47,6 +47,7 @@ import { resolveRetirementPlan } from '../../lib/projection/plan';
 import HowCalculated from '../HowCalculated';
 import NumberStepper from '../NumberStepper';
 import { fmtDelta, fmtMoney } from './planFormat';
+import PlanEmptyState from './PlanEmptyState';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
@@ -124,9 +125,10 @@ function ResultCard({ label, value, detail, ruleId, tone = 'default' }) {
 }
 
 export default function CareerSimulator() {
-  const { currentScenario, updateCurrentScenario } = useScenario();
+  const { currentScenario, updateCurrentScenario, isLoadingScenarios } = useScenario();
   const { entitlements } = useAuth();
   const isPro = hasEntitlement(entitlements, FEATURES.CAREER_SIMULATOR);
+  const hasScenario = Boolean(currentScenario?.profile);
 
   const profile = currentScenario?.profile ?? {};
   const currentAge = clampInt(profile.currentAge, 16, 100, 42);
@@ -272,6 +274,16 @@ export default function CareerSimulator() {
   const disabled = !isPro;
   const yearsRemaining = Math.max(0, separationAge - currentAge);
   const years = projection?.years ?? [];
+
+  if (!hasScenario) {
+    return (
+      <PlanEmptyState
+        title="Career and High-3 simulator"
+        loading={Boolean(isLoadingScenarios)}
+        message="No scenario yet. Create one so the simulator can project against your service and separation age."
+      />
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
