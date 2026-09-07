@@ -115,7 +115,9 @@ function FERSPensionCalc() {
     },
     leaveEarly: {
       deferredPension: 0,
-      mra: 57,
+      // Placeholder only: replaced by the computed value on the first run.
+      // Left null rather than 57 so a stale render cannot state a wrong age.
+      mra: null,
       lifetimeDeferred: 0,
       totalLifetimeEarnings: 0,
       breakEvenAge: 0
@@ -402,7 +404,7 @@ function FERSPensionCalc() {
       // Leave Early scenario
       if (age < (numericInputs.currentAge + 20)) {
         leaveEarlyTotal += numericInputs.high3Salary;
-      } else if (age < results.leaveEarly.mra) {
+      } else if (results.leaveEarly.mra != null && age < results.leaveEarly.mra) {
         leaveEarlyTotal += numericInputs.privateJobSalary;
       } else {
         leaveEarlyTotal += results.leaveEarly.deferredPension;

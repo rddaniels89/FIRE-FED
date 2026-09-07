@@ -62,6 +62,27 @@ describe('plan resolution', () => {
     expect(earlier.mra).toBeCloseTo(56 + 2 / 12, 6);
   });
 
+  it('derives a dual-fed spouse’s minimum retirement age from their own birth year', () => {
+    // The spouse block used to carry a flat 57. A spouse born in 1966 has an
+    // MRA of 56 years 4 months, which decides whether their own annuity is
+    // immediate or reduced.
+    const s = applyScenarioUpdates(base(), {
+      household: {
+        spouse: {
+          enabled: true,
+          currentAge: 60,
+          currentAgeMonths: 4,
+          isFederal: true,
+          fers: { yearsOfService: 12, high3Salary: 90000, separationAge: 60, annuityStartAge: null, mra: null },
+        },
+      },
+    });
+    const t = buildTimeline(s);
+    // Separating at 60 with 12 years is MRA+10, so an annuity is payable.
+    const row = t.rows.find((r) => r.spouseAge === 61);
+    expect(row.spousePension).toBeGreaterThan(0);
+  });
+
   it('a 45-year-old with 18 years leaving at 57 has MRA+30 and the supplement', () => {
     const plan = resolveRetirementPlan(base());
     expect(plan.service.eligibilityYears).toBe(30);
