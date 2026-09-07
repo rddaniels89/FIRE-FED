@@ -174,7 +174,9 @@ export function createDefaultSpouse() {
       separationAge: 62,
       annuityStartAge: null,
       hireCohort: FERS_HIRE_COHORTS.FERS_FRAE,
-      mra: DEFAULT_MRA,
+      // null means derive from the spouse's own year of birth, as for the
+      // primary. A dual-fed spouse born before 1970 does not have an MRA of 57.
+      mra: null,
       unusedSickLeaveHours: 0,
     },
     tspBalance: 0,

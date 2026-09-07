@@ -31,6 +31,7 @@ import {
   fullRetirementAge,
 } from '../calculations/socialSecurity';
 import { projectHealthcareCostForYear } from '../calculations/healthcareCosts';
+import { birthYearFromAgeAndMonths, minimumRetirementAge } from '../calculations/mra';
 import {
   EARLY_WITHDRAWAL_PENALTY_RATE,
   PENALTY_FREE_AGE,
@@ -98,7 +99,15 @@ function spousePensionForAge({ spouse, spouseAge, inflation, yearsFromNow }) {
       currentAge: spouse.currentAge,
       retirementAge: start,
       includeFutureService: false,
-      mra: f.mra,
+      mra:
+        f.mra === null || f.mra === undefined || f.mra === ''
+          ? minimumRetirementAge(
+              birthYearFromAgeAndMonths({
+                currentAge: num(spouse.currentAge),
+                currentAgeMonths: num(spouse.currentAgeMonths, 0),
+              })
+            )
+          : num(f.mra),
       unusedSickLeaveHours: num(f.unusedSickLeaveHours),
       cpiIncrease: inflation,
     });
