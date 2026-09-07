@@ -39,7 +39,15 @@ export default defineConfig([
   },
   // Node-only config files (not browser)
   {
-    files: ['vite.config.js', 'playwright.config.js', 'postcss.config.js', 'tailwind.config.js', 'eslint.config.js'],
+    files: [
+      'vite.config.js',
+      'playwright.config.js',
+      'postcss.config.js',
+      'tailwind.config.js',
+      'eslint.config.js',
+      // Reads the workflow and package.json off disk, so it needs node globals.
+      'tests/ciWorkflow.test.js',
+    ],
     languageOptions: {
       globals: globals.node,
     },

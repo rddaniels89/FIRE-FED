@@ -25,6 +25,22 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    # Playwright's own image ships the browsers and their system libraries
+    # already installed, so this job neither downloads browsers nor runs apt.
+    #
+    # The previous approach cached ~/.cache/ms-playwright, which was the wrong
+    # half of the problem: the browser download costs seconds, while
+    # `install --with-deps` runs apt against an Ubuntu mirror and was measured
+    # at 38s, 1m07s and 20m39s on three consecutive runs. A cache hit still ran
+    # apt, so it could not fix the twenty-minute case.
+    #
+    # The tag must match the @playwright/test version in package.json.
+    # tests/ciWorkflow.test.js asserts that, so the two cannot drift silently.
+    container:
+      image: mcr.microsoft.com/playwright:v1.57.0-jammy
+      # Run as the runner's own user so checked-out files and written reports
+      # are not left owned by root.
+      options: --user 1001
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,30 +48,8 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
-
-      # The suite runs five projects across three engines, so a cold
-      # `playwright install` downloads chromium, firefox and webkit every time.
-      # That step alone took 22 minutes on one run. Browser builds are pinned to
-      # the Playwright version, so that version is the whole cache key.
-      - id: playwright-version
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
-
       # Playwright starts its own dev server with placeholder Supabase creds
       # (see playwright.config.js), so no real credentials are needed here.
-      - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps
-
-      # The browsers restore from cache, but their system libraries are apt
-      # packages outside it and still have to be installed.
-      - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps
-
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
