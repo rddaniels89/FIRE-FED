@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { trackEvent } from '../../lib/telemetry';
-import { DEFAULT_MRA } from '../../lib/calculations/fers';
+import { formatMinimumRetirementAge, minimumRetirementAge } from '../../lib/calculations/mra';
 import { calculateSrs, getSrsEarningsTestExemptAmount } from '../../lib/calculations/srs';
 import HowCalculated from '../HowCalculated';
 
@@ -21,12 +21,19 @@ const REASON_COPY = {
 
 export default function PublicSrsCalculator() {
   const [form, setForm] = useState({
+    birthYear: '1970',
     retirementAge: '57',
     yearsOfService: '30',
     socialSecurityAt62Monthly: '2000',
     annualEarnedIncome: '0',
     isVoluntaryEarlyRetirement: false,
+    isDiscontinuedService: false,
   });
+
+  // The MRA decides when an early-out or involuntary retiree starts being paid,
+  // and it runs from 55 to 57 by year of birth. This page has no age-now field
+  // to derive that from, so it asks outright.
+  const mra = minimumRetirementAge(num(form.birthYear));
 
   // Fires once. A pageview says they arrived; this says the tool was actually
   // used, which is the number that matters against signups.
@@ -51,9 +58,10 @@ export default function PublicSrsCalculator() {
         socialSecurityAt62Monthly: num(form.socialSecurityAt62Monthly),
         annualEarnedIncome: num(form.annualEarnedIncome),
         isVoluntaryEarlyRetirement: form.isVoluntaryEarlyRetirement,
-        mra: DEFAULT_MRA,
+        isDiscontinuedService: form.isDiscontinuedService,
+        mra,
       }),
-    [form]
+    [form, mra]
   );
 
   const reduced = srs.isEligible && srs.earningsTest && srs.earningsTest.withheld > 0;
@@ -65,12 +73,23 @@ export default function PublicSrsCalculator() {
       </h1>
       <p className="mt-3 text-slate-600 dark:text-slate-300 max-w-3xl">
         The SRS approximates the Social Security you earned during federal service and pays it between
-        the day you retire and the day you turn 62. For someone leaving at their MRA with 30 years it is
+        the day you retire and the day you turn 62. For someone leaving at their minimum retirement age with 30 years it is
         frequently over $1,000 a month &mdash; and it is left out of most retirement calculators entirely.
       </p>
 
       <div className="grid lg:grid-cols-2 gap-8 mt-10">
         <div className="card p-6 space-y-5">
+          <div>
+            <label className="label" htmlFor="birthYear">Year of birth</label>
+            <input className="input-field w-full" inputMode="numeric" value={form.birthYear} onChange={set('birthYear')} id="birthYear" />
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Sets your minimum retirement age, which is{' '}
+              <strong className="text-slate-700 dark:text-slate-200">{formatMinimumRetirementAge(num(form.birthYear))}</strong>{' '}
+              for {form.birthYear || 'that year'}. It runs from 55 to 57 depending on the year, and it decides when an
+              early out or an involuntary separation starts being paid.
+            </p>
+          </div>
+
           <div>
             <label className="label" htmlFor="retirementAge">Retirement age</label>
             <input className="input-field w-full" inputMode="numeric" value={form.retirementAge} onChange={set('retirementAge')} id="retirementAge" />
@@ -112,7 +131,24 @@ export default function PublicSrsCalculator() {
             <span className="text-sm text-slate-700 dark:text-slate-300">
               This is a VERA (early out)
               <span className="block text-xs text-slate-500 dark:text-slate-400">
-                VERA qualifies, but the supplement is not paid until you reach your MRA.
+                An early out qualifies, but the supplement is not paid until you reach your MRA of{' '}
+                {formatMinimumRetirementAge(num(form.birthYear))}.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.isDiscontinuedService}
+              onChange={set('isDiscontinuedService')}
+              className="mt-1 w-4 h-4"
+            />
+            <span className="text-sm text-slate-700 dark:text-slate-300">
+              This is a discontinued service retirement
+              <span className="block text-xs text-slate-500 dark:text-slate-400">
+                An involuntary separation qualifies on its own, and like an early out it waits until your MRA. OPM&rsquo;s
+                own handbook works this case: a retiree separated at 55 years 4 months is not paid until 56 and 2 months.
               </span>
             </span>
           </label>

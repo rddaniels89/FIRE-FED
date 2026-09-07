@@ -165,6 +165,22 @@ test.describe('Smoke: core flows', () => {
     await expect(page.getByText(/MRA\+10 is a reduced annuity/i)).toBeVisible();
   });
 
+  test('The SRS calculator derives the minimum retirement age from the year of birth', async ({ page }) => {
+    await page.goto('/calculators/special-retirement-supplement');
+
+    // The minimum retirement age is a year-of-birth rule, not a flat 57.
+    await page.getByLabel('Year of birth').fill('1970');
+    await expect(page.getByText(/Sets your minimum retirement age, which is/)).toContainText('57');
+
+    await page.getByLabel('Year of birth').fill('1966');
+    await expect(page.getByText(/Sets your minimum retirement age, which is/)).toContainText('56 years 4 months');
+
+    // An early out is paid from the MRA, so the start age has to follow it.
+    await page.getByLabel(/This is a VERA/).check();
+    await page.getByLabel('Retirement age').fill('52');
+    await expect(page.getByText('Payments begin at')).toBeVisible();
+  });
+
   test('Pricing is readable without an account', async ({ page }) => {
     await page.goto('/pricing');
     await expect(page.getByText('$9.99')).toBeVisible();
