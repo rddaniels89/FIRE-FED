@@ -53,17 +53,17 @@ is Pro.
 
 - [x] 27. Project FEHB premiums in retirement with a premium growth assumption. — Free
 - [x] 28. Add the Medicare transition at 65: Part B premium and the FEHB-plus-Medicare choice. — Free
-- [~] 29. Add IRMAA brackets. — Pro
+- [x] 29. Add IRMAA brackets. — Pro
 - [x] 30. Add a marketplace cost estimate for the deferred path, where FEHB is lost. — Free
 - [x] 31. Add a VA, TRICARE, or CHAMPVA flag that reduces or zeroes the healthcare line. — Free
 
 ## F. Federal FIRE Date
 
 - [x] 32. Compute the earliest separation age at which the timeline never goes negative. — Free
-- [~] 33. Add a separation-age slider that recomputes the whole timeline. — Free
-- [~] 34. Add "leave one year earlier" and "one year later" cards. — Free
-- [~] 35. Use "projected sustainable separation age" wording throughout. — Free
-- [~] 36. Mark what changes at each milestone: separation, 55, MRA, 59½, 62, 65, full retirement age, 70. — Free
+- [x] 33. Add a separation-age slider that recomputes the whole timeline. — Free
+- [x] 34. Add "leave one year earlier" and "one year later" cards. — Free
+- [x] 35. Use "projected sustainable separation age" wording throughout. — Free
+- [x] 36. Mark what changes at each milestone: separation, 55, MRA, 59½, 62, 65, full retirement age, 70. — Free
 
 ## G. Household
 
@@ -84,9 +84,9 @@ is Pro.
 
 ## J. Transparency
 
-- [~] 45. Add "How was this calculated" to every dashboard number. — Free
-- [~] 46. Surface rule provenance in the UI: source, rule year, last-verified date. — Free
-- [~] 47. Add an assumptions page that labels each input as user-entered, calculated, or assumed. — Free
+- [x] 45. Add "How was this calculated" to every dashboard number. — Free
+- [x] 46. Surface rule provenance in the UI: source, rule year, last-verified date. — Free
+- [x] 47. Add an assumptions page that labels each input as user-entered, calculated, or assumed. — Free
 - [-] 48. Get the methodology reviewed by a federal benefits practitioner and publish the findings. — needs a human; review packet prepared
 
 ## K. Rules architecture
@@ -101,11 +101,11 @@ is Pro.
 - [x] 53. Snapshot full timeline projections as regression fixtures. — n/a
 - [x] 54. Test the tax engine against IRS worksheets. — n/a
 - [x] 55. Add household and claiming-age cases. — n/a
-- [~] 56. Add an end-to-end test for the onboarding flow. — n/a
+- [x] 56. Add an end-to-end test for the onboarding flow. — n/a
 
 ## M. Onboarding, dashboard, report
 
-- [~] 57. Goal-first onboarding that asks only the inputs the chosen question needs. — Free
-- [~] 58. Rebuild the dashboard around four questions with the timeline as the central view. — Free (Monte Carlo card Pro)
+- [x] 57. Goal-first onboarding that asks only the inputs the chosen question needs. — Free
+- [x] 58. Rebuild the dashboard around four questions with the timeline as the central view. — Free (Monte Carlo card Pro)
 - [~] 59. Rebuild the PDF from the timeline: bridge, Social Security, healthcare, taxes, stress results, assumptions, sources. — Pro
 - [x] 60. Wire the GS pay module into a career projection: step increases, raises, promotions, and the resulting High-3. — Pro

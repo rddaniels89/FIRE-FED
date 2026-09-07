@@ -18,6 +18,7 @@ import ScenarioManager from './ScenarioManager';
 import { calculateTspTraditionalVsRoth, DEFAULT_FUND_RETURNS } from '../lib/calculations/tsp';
 import TooltipWrapper from './TooltipWrapper';
 import NumberStepper from './NumberStepper';
+import HowCalculated from './HowCalculated';
 import { FEATURES, hasEntitlement } from '../lib/entitlements';
 import {
   ANNUAL_CATCH_UP_LIMIT,
@@ -1259,7 +1260,17 @@ function TSPForecast() {
               <div className="grid grid-cols-2 gap-6">
                 <div className="text-center">
                   <div className="text-3xl font-bold navy-text mb-2">
-                    {formatDollars(inputs.contributionType === 'traditional' ? results.traditional.projectedBalance : results.roth.projectedBalance)}
+                    <HowCalculated
+                      ruleId="tsp.limits"
+                      inputs={{
+                        'Contribution': `${numericInputs.monthlyContributionPercent ?? inputs.monthlyContributionPercent}%`,
+                        'Expected return': `${(results.weightedReturn * 100).toFixed(2)}%`,
+                        'Years': results.years,
+                        'Employer contributions': Boolean(numericInputs.includeEmployerMatch),
+                      }}
+                    >
+                      {formatDollars(inputs.contributionType === 'traditional' ? results.traditional.projectedBalance : results.roth.projectedBalance)}
+                    </HowCalculated>
                   </div>
                   <div className="text-sm text-slate-500 dark:text-slate-400">Projected Balance</div>
                 </div>
@@ -1343,7 +1354,9 @@ function TSPForecast() {
               <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
                 <div className="text-slate-500 dark:text-slate-400">Employer contributions</div>
                 <div className="font-semibold text-slate-700 dark:text-slate-200">
-                  {numericInputs.includeEmployerMatch ? 'Included (simplified)' : 'Not included'}
+                  <HowCalculated ruleId="tsp.employer_match">
+                    {numericInputs.includeEmployerMatch ? 'Included (simplified)' : 'Not included'}
+                  </HowCalculated>
                 </div>
               </div>
             </div>

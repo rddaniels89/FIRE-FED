@@ -72,9 +72,13 @@ export const STRESS_TESTS = Object.freeze([
   },
 ]);
 
-function outcome(timeline) {
+function outcome(timeline, atAge) {
   const s = timeline.summary;
+  const rowAtAge = atAge ? timeline.rows.find((r) => r.age === atAge) : null;
   return {
+    // Balance at the base plan's end age, so a test that extends the plan is
+    // still compared like for like.
+    balanceAtBaseEnd: rowAtAge ? rowAtAge.balances.total : s.balanceAtEnd,
     isSustainable: s.isSustainable,
     firstShortfallAge: s.firstShortfallAge,
     minBalance: s.minBalance,
@@ -90,7 +94,7 @@ function outcome(timeline) {
 export function runStressTests(scenario, options = {}) {
   const endAge = num(options.endAge ?? scenario?.summary?.assumptions?.endAge, 95);
   const base = options.baseTimeline ?? buildTimeline(scenario, { ...options, endAge });
-  const baseOutcome = outcome(base);
+  const baseOutcome = outcome(base, endAge);
 
   const results = STRESS_TESTS.map((test) => {
     const built = test.build(scenario, { endAge });
@@ -100,14 +104,14 @@ export function runStressTests(scenario, options = {}) {
       returnsByYear: built.returnsByYear ?? options.returnsByYear,
       overrides: { ...(options.overrides ?? {}), ...(built.overrides ?? {}) },
     });
-    const o = outcome(timeline);
+    const o = outcome(timeline, endAge);
     return {
       key: test.key,
       label: test.label,
       description: test.description,
       ...o,
       survives: o.isSustainable,
-      balanceAtEndDelta: o.balanceAtEnd - baseOutcome.balanceAtEnd,
+      balanceAtEndDelta: o.balanceAtBaseEnd - baseOutcome.balanceAtBaseEnd,
       minBalanceDelta: o.minBalance - baseOutcome.minBalance,
     };
   });

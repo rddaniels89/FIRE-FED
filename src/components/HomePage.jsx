@@ -1,74 +1,13 @@
 import { Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
-import { Landmark, TrendingUp } from 'lucide-react';
+import { Landmark, Map, SlidersHorizontal, TrendingUp } from 'lucide-react';
 import { useScenario } from '../contexts/ScenarioContext';
 import OnboardingCard from './OnboardingCard';
-import NumberStepper from './NumberStepper';
 import AnimatedFlame from './AnimatedFlame';
 
+const money = (n) => (Number.isFinite(Number(n)) ? `$${Math.round(Number(n)).toLocaleString()}` : '—');
+
 function HomePage() {
-  const { scenarios, currentScenario, updateCurrentScenario } = useScenario();
-  const [showFireInputs, setShowFireInputs] = useState(false);
-  
-  // FIRE form inputs state (using strings for controlled inputs)
-  const [fireInputs, setFireInputs] = useState({
-    desiredFireAge: '',
-    monthlyFireIncomeGoal: '',
-    sideHustleIncome: '',
-    spouseIncome: ''
-  });
-
-  // Initialize FIRE inputs from current scenario
-  useEffect(() => {
-    if (currentScenario?.fire) {
-      setFireInputs({
-        desiredFireAge: currentScenario.fire.desiredFireAge?.toString() || '',
-        monthlyFireIncomeGoal: currentScenario.fire.monthlyFireIncomeGoal?.toString() || '',
-        sideHustleIncome: currentScenario.fire.sideHustleIncome?.toString() || '',
-        spouseIncome: currentScenario.fire.spouseIncome?.toString() || ''
-      });
-    }
-  }, [currentScenario]);
-
-  // Deep-link support: opening the FIRE section from onboarding.
-  useEffect(() => {
-    const shouldOpen = (() => {
-      try {
-        return localStorage.getItem('firefed_open_fire_planning') === 'true';
-      } catch {
-        return false;
-      }
-    })();
-
-    const hasHash = typeof window !== 'undefined' && window.location?.hash === '#fire-planning';
-
-    if (shouldOpen || hasHash) {
-      setShowFireInputs(true);
-      try {
-        localStorage.removeItem('firefed_open_fire_planning');
-      } catch {
-        // ignore
-      }
-      setTimeout(() => {
-        const el = document.getElementById('fire-planning');
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 50);
-    }
-  }, []);
-
-  // Handle FIRE input changes
-  const handleFireInputChange = (field, value) => {
-    setFireInputs(prev => ({ ...prev, [field]: value }));
-    
-    // Update scenario context with parsed numeric values
-    const numericValue = parseFloat(value) || 0;
-    updateCurrentScenario({
-      fire: {
-        ...currentScenario?.fire,
-        [field]: numericValue
-      }
-    });
-  };
+  const { scenarios, currentScenario } = useScenario();
 
   const features = [
     {
@@ -101,9 +40,14 @@ function HomePage() {
     { label: 'MRA', value: '57', description: 'Minimum retirement age' }
   ];
 
+  const profile = currentScenario?.profile;
+  const fire = currentScenario?.fire;
+
   return (
     <div className="animate-fade-in">
-      <div className="text-center mb-12">
+      <OnboardingCard />
+
+      <div className="text-center mb-10">
         <h1 className="text-4xl font-bold navy-text mb-4">
           <span className="inline-flex items-center justify-center gap-3">
             <AnimatedFlame className="h-11 w-11" />
@@ -111,200 +55,52 @@ function HomePage() {
           </span>
         </h1>
         <p className="text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto leading-relaxed">
-          The premier SaaS platform for federal employees pursuing Financial Independence Retire Early (FIRE). 
-          Calculate TSP projections, FERS pension benefits, and analyze your FIRE gap with precision.
+          One profile, one model. Enter your numbers once and every page — pension, TSP, timeline,
+          scenarios — reads from the same plan.
         </p>
       </div>
 
-      <OnboardingCard />
-
-      {/* Current Scenario Status */}
+      {/* My Plan */}
       {currentScenario && (
-        <div className="mb-8 p-4 bg-navy-50 dark:bg-navy-900/20 border border-navy-200 dark:border-navy-700 rounded-lg">
-          <div className="flex items-center justify-between">
+        <div className="mb-8 card p-6" data-testid="my-plan-card">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h3 className="text-lg font-semibold navy-text">Current Scenario</h3>
-              <p className="text-slate-600 dark:text-slate-400">
-                <span className="font-medium">{currentScenario.name}</span> • 
-                {scenarios.length} saved scenario{scenarios.length !== 1 ? 's' : ''}
+              <h2 className="text-xl font-semibold navy-text flex items-center gap-2">
+                <Map className="h-5 w-5" aria-hidden="true" />
+                My Plan
+              </h2>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                <span className="font-medium">{currentScenario.name}</span> · {scenarios.length} saved scenario{scenarios.length !== 1 ? 's' : ''}
               </p>
+              {profile && fire ? (
+                <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
+                  Age {profile.currentAge} · leaving at {profile.separationAge} · goal {money(fire.monthlyFireIncomeGoal)}/month
+                  {Number(fire.sideHustleIncome) > 0 ? ` · side income ${money(fire.sideHustleIncome)}/month` : ''}
+                </p>
+              ) : null}
             </div>
-            <div className="text-right">
-              <div className="text-sm text-slate-500 dark:text-slate-400">
-                Created: {new Date(currentScenario.createdAt).toLocaleDateString()}
-              </div>
+            <div className="flex flex-wrap gap-3">
+              <Link to="/plan" className="btn-primary inline-flex items-center gap-2">
+                <Map className="h-4 w-4" aria-hidden="true" />
+                View my plan
+              </Link>
+              <Link to="/plan/inputs" className="btn-secondary inline-flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                Edit inputs
+              </Link>
             </div>
           </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-4">
+            FIRE age, income goal, side income, and household all live on the inputs page. You never enter the same number twice.
+          </p>
         </div>
       )}
-
-      {/* 🔥 FIRE Planning Inputs - New FireFed Feature */}
-      <div id="fire-planning" className="mb-8 card p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-xl font-semibold navy-text">🔥 FIRE Planning</h3>
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Configure your Financial Independence Retire Early goals
-            </p>
-          </div>
-          <button
-            onClick={() => setShowFireInputs(!showFireInputs)}
-            className="btn-secondary text-sm"
-          >
-            {showFireInputs ? 'Hide' : 'Configure'} FIRE Settings
-          </button>
-        </div>
-
-        {showFireInputs && (
-          <div className="grid md:grid-cols-2 gap-6 mt-6">
-            {/* FIRE Age Input */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Desired FIRE Age
-              </label>
-              <div className="flex items-stretch gap-2">
-                <input
-                  type="number"
-                  min="40"
-                  max="67"
-                  value={fireInputs.desiredFireAge}
-                  onChange={(e) => handleFireInputChange('desiredFireAge', e.target.value)}
-                  className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
-                           bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 
-                           focus:ring-2 focus:ring-navy-500 focus:border-transparent transition-all"
-                  placeholder="55"
-                />
-                <NumberStepper
-                  incrementLabel="Increase desired FIRE age"
-                  decrementLabel="Decrease desired FIRE age"
-                  onIncrement={() => handleFireInputChange('desiredFireAge', String(Math.min(67, (Number(fireInputs.desiredFireAge) || 0) + 1)))}
-                  onDecrement={() => handleFireInputChange('desiredFireAge', String(Math.max(40, (Number(fireInputs.desiredFireAge) || 0) - 1)))}
-                  disabledDecrement={(Number(fireInputs.desiredFireAge) || 0) <= 40}
-                />
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Age when you want to achieve financial independence
-              </p>
-            </div>
-
-            {/* Monthly FIRE Income Goal */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Monthly FIRE Income Goal
-              </label>
-              <div className="flex items-stretch gap-2">
-                <div className="relative flex-1">
-                  <span className="absolute left-3 top-3 text-slate-500 dark:text-slate-400">$</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="100"
-                    value={fireInputs.monthlyFireIncomeGoal}
-                    onChange={(e) => handleFireInputChange('monthlyFireIncomeGoal', e.target.value)}
-                    className="w-full pl-8 p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
-                             bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 
-                             focus:ring-2 focus:ring-navy-500 focus:border-transparent transition-all"
-                    placeholder="6000"
-                  />
-                </div>
-                <NumberStepper
-                  incrementLabel="Increase monthly FIRE income goal"
-                  decrementLabel="Decrease monthly FIRE income goal"
-                  onIncrement={() => handleFireInputChange('monthlyFireIncomeGoal', String((Number(fireInputs.monthlyFireIncomeGoal) || 0) + 100))}
-                  onDecrement={() => handleFireInputChange('monthlyFireIncomeGoal', String(Math.max(0, (Number(fireInputs.monthlyFireIncomeGoal) || 0) - 100)))}
-                  disabledDecrement={(Number(fireInputs.monthlyFireIncomeGoal) || 0) <= 0}
-                />
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Target monthly passive income in retirement
-              </p>
-            </div>
-
-            {/* Side Hustle Income */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Side Hustle Income
-              </label>
-              <div className="flex items-stretch gap-2">
-                <div className="relative flex-1">
-                  <span className="absolute left-3 top-3 text-slate-500 dark:text-slate-400">$</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="50"
-                    value={fireInputs.sideHustleIncome}
-                    onChange={(e) => handleFireInputChange('sideHustleIncome', e.target.value)}
-                    className="w-full pl-8 p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
-                             bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 
-                             focus:ring-2 focus:ring-navy-500 focus:border-transparent transition-all"
-                    placeholder="500"
-                  />
-                </div>
-                <NumberStepper
-                  incrementLabel="Increase side hustle income"
-                  decrementLabel="Decrease side hustle income"
-                  onIncrement={() => handleFireInputChange('sideHustleIncome', String((Number(fireInputs.sideHustleIncome) || 0) + 50))}
-                  onDecrement={() => handleFireInputChange('sideHustleIncome', String(Math.max(0, (Number(fireInputs.sideHustleIncome) || 0) - 50)))}
-                  disabledDecrement={(Number(fireInputs.sideHustleIncome) || 0) <= 0}
-                />
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Monthly income from side businesses or freelancing
-              </p>
-            </div>
-
-            {/* Spouse Income */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Spouse Income
-              </label>
-              <div className="flex items-stretch gap-2">
-                <div className="relative flex-1">
-                  <span className="absolute left-3 top-3 text-slate-500 dark:text-slate-400">$</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="100"
-                    value={fireInputs.spouseIncome}
-                    onChange={(e) => handleFireInputChange('spouseIncome', e.target.value)}
-                    className="w-full pl-8 p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
-                             bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 
-                             focus:ring-2 focus:ring-navy-500 focus:border-transparent transition-all"
-                    placeholder="4000"
-                  />
-                </div>
-                <NumberStepper
-                  incrementLabel="Increase spouse income"
-                  decrementLabel="Decrease spouse income"
-                  onIncrement={() => handleFireInputChange('spouseIncome', String((Number(fireInputs.spouseIncome) || 0) + 100))}
-                  onDecrement={() => handleFireInputChange('spouseIncome', String(Math.max(0, (Number(fireInputs.spouseIncome) || 0) - 100)))}
-                  disabledDecrement={(Number(fireInputs.spouseIncome) || 0) <= 0}
-                />
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Monthly spouse/partner income or retirement benefits
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Quick FIRE Status Preview */}
-        {currentScenario?.fire && (
-          <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-            <div className="text-sm text-slate-600 dark:text-slate-400">
-              <span className="font-medium">FIRE Goal:</span> Age {currentScenario.fire.desiredFireAge} • 
-              <span className="font-medium"> Target:</span> ${currentScenario.fire.monthlyFireIncomeGoal?.toLocaleString()}/month • 
-              <span className="font-medium"> Additional Income:</span> ${(currentScenario.fire.sideHustleIncome + currentScenario.fire.spouseIncome)?.toLocaleString()}/month
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* Feature Cards */}
       <div className="grid md:grid-cols-3 gap-8 mb-12">
         {features.map((feature, index) => (
-          <Link 
-            key={index} 
+          <Link
+            key={index}
             to={feature.path}
             className={`block p-6 rounded-xl border-2 transition-all duration-200 hover:shadow-lg ${feature.color}`}
           >
@@ -338,8 +134,8 @@ function HomePage() {
             <li className="flex items-start space-x-3">
               <span className="text-green-500">✓</span>
               <div>
-                <div className="font-medium text-slate-700 dark:text-slate-300">AI-Style Analysis</div>
-                <div className="text-slate-500 dark:text-slate-400">Get personalized insights based on your savings rate and projections</div>
+                <div className="font-medium text-slate-700 dark:text-slate-300">One profile</div>
+                <div className="text-slate-500 dark:text-slate-400">Every calculator and the plan timeline read the same inputs</div>
               </div>
             </li>
             <li className="flex items-start space-x-3">
@@ -395,23 +191,23 @@ function HomePage() {
       <div className="card p-8 text-center">
         <h3 className="text-2xl font-semibold navy-text mb-4">Ready to Plan Your Federal Retirement?</h3>
         <p className="text-slate-600 dark:text-slate-400 mb-6 max-w-2xl mx-auto">
-          Start by calculating your TSP projections, then explore your FERS pension options. 
-          The summary dashboard will combine everything for a complete picture.
+          Your plan answers "when could I leave, and will it hold" from one set of inputs. The calculators
+          below go deeper on the TSP and the pension.
         </p>
-        <div className="flex justify-center space-x-4">
-          <Link 
-            to="/tsp-forecast" 
-            className="btn-primary"
-          >
+        <div className="flex flex-wrap justify-center gap-4">
+          <Link to="/plan" className="btn-primary">
             <span className="inline-flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Start with TSP
+              <Map className="h-4 w-4" />
+              View my plan
             </span>
           </Link>
-          <Link 
-            to="/fers-pension" 
-            className="btn-secondary"
-          >
+          <Link to="/tsp-forecast" className="btn-secondary">
+            <span className="inline-flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              TSP Forecast
+            </span>
+          </Link>
+          <Link to="/fers-pension" className="btn-secondary">
             <span className="inline-flex items-center gap-2">
               <Landmark className="h-4 w-4" />
               Calculate Pension
@@ -423,7 +219,7 @@ function HomePage() {
       {/* Footer */}
       <div className="mt-12 text-center text-sm text-slate-500 dark:text-slate-400">
         <p>
-          Made with ❤️ for federal employees • 
+          Made with ❤️ for federal employees •
           <a href="https://www.tsp.gov" target="_blank" rel="noopener noreferrer" className="text-navy-600 dark:text-navy-400 hover:text-gold-600 dark:hover:text-gold-400 mx-2">
             TSP.gov
           </a>
@@ -437,4 +233,4 @@ function HomePage() {
   );
 }
 
-export default HomePage; 
+export default HomePage;

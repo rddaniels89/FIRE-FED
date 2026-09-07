@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FEATURES, hasEntitlement } from '../lib/entitlements';
 import { runMonteCarloAnalytics } from '../lib/analytics/monteCarlo';
@@ -21,34 +21,14 @@ function formatMoney(amount) {
   }).format(n);
 }
 
-function computeSocialSecurityFromScenario(scenario) {
-  const ss = scenario?.summary?.socialSecurity ?? {};
-  const mode = ss.mode ?? 'not_configured'; // 'not_configured' | 'estimate' | 'manual'
-  const claimingAge = Number(ss.claimingAge ?? 67);
-  const manualMonthly = Number(ss.monthlyBenefit ?? 0);
-  const pct = Number(ss.percentOfSalary ?? 30);
-  const salary = Number(scenario?.tsp?.annualSalary ?? 0);
-
-  const estimatedMonthly = mode === 'estimate' && salary > 0 ? (salary * (pct / 100)) / 12 : 0;
-  const monthly = mode === 'manual' ? manualMonthly : mode === 'estimate' ? estimatedMonthly : 0;
-
-  return {
-    mode,
-    claimingAge: Number.isFinite(claimingAge) ? claimingAge : 67,
-    monthly: Number.isFinite(monthly) ? monthly : 0,
-  };
-}
-
-export default function AdvancedAnalyticsPanel({
-  scenario,
-  pensionMonthly,
-  pensionStartAge,
-  entitlements,
-}) {
+/**
+ * Monte Carlo over the lifetime timeline. The pension, Social Security and
+ * start ages now come from the scenario itself, so the legacy props
+ * (`pensionMonthly`, `pensionStartAge`) are accepted and ignored.
+ */
+export default function AdvancedAnalyticsPanel({ scenario, entitlements }) {
   const navigate = useNavigate();
   const canAnalytics = hasEntitlement(entitlements, FEATURES.ADVANCED_ANALYTICS);
-
-  const ss = useMemo(() => computeSocialSecurityFromScenario(scenario), [scenario]);
 
   const [settings, setSettings] = useState({
     simulations: 750,
@@ -58,32 +38,30 @@ export default function AdvancedAnalyticsPanel({
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
-  const run = async () => {
+  const run = () => {
     if (!scenario) return;
     setError('');
     setIsRunning(true);
-    try {
-      const res = runMonteCarloAnalytics({
-        scenario,
-        pensionMonthly,
-        pensionStartAge,
-        socialSecurityMonthly: ss.monthly,
-        socialSecurityStartAge: ss.claimingAge,
-        settings,
-      });
-      setResult(res);
-      trackEvent('pro_montecarlo_ran', {
-        simulations: settings.simulations,
-        endAge: settings.endAge,
-      });
-    } catch (e) {
-      console.error(e);
-      setError(e?.message || 'Failed to run simulation.');
-      trackEvent('pro_montecarlo_failed', { message: e?.message || 'unknown' });
-    } finally {
-      setIsRunning(false);
-    }
+    // Defer a tick so the button repaints as "Running…" before the work starts.
+    setTimeout(() => {
+      try {
+        const res = runMonteCarloAnalytics({ scenario, settings });
+        setResult(res);
+        trackEvent('pro_montecarlo_ran', {
+          simulations: settings.simulations,
+          endAge: settings.endAge,
+        });
+      } catch (e) {
+        console.error(e);
+        setError(e?.message || 'Failed to run simulation.');
+        trackEvent('pro_montecarlo_failed', { message: e?.message || 'unknown' });
+      } finally {
+        setIsRunning(false);
+      }
+    }, 0);
   };
+
+  const outcomes = result?.outcomes;
 
   return (
     <div className="card p-6 mb-8">
@@ -153,23 +131,23 @@ export default function AdvancedAnalyticsPanel({
             </div>
           )}
 
-          {result && (
+          {result && outcomes && (
             <div className="mt-6 space-y-4">
               <div className="grid md:grid-cols-3 gap-4">
                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900">
-                  <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">FIRE by desired age</div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Bridge fully funded</div>
                   <div className="text-2xl font-bold navy-text mt-1">
-                    {formatPercent(result.outcomes.probabilityFireByDesiredAge)}
+                    {formatPercent(outcomes.probabilityFireByDesiredAge)}
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Goal: {formatMoney(result.inputs.fireGoalMonthly)}/mo
+                    Separation at {result.inputs.retirementAge}
                   </div>
                 </div>
 
                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900">
                   <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Funds last to end age</div>
                   <div className="text-2xl font-bold navy-text mt-1">
-                    {formatPercent(result.outcomes.probabilityFundsLastToEndAge)}
+                    {formatPercent(outcomes.probabilityFundsLastToEndAge)}
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                     End age: {result.inputs.endAge}
@@ -177,36 +155,54 @@ export default function AdvancedAnalyticsPanel({
                 </div>
 
                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900">
-                  <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Return assumptions</div>
-                  <div className="text-sm text-slate-700 dark:text-slate-200 mt-2">
-                    Mean: <span className="font-medium">{formatPercent(result.inputs.meanReturn)}</span>
-                  </div>
-                  <div className="text-sm text-slate-700 dark:text-slate-200 mt-1">
-                    Volatility: <span className="font-medium">{formatPercent(result.inputs.portfolioStdDev)}</span>
+                  <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Most vulnerable age</div>
+                  <div className="text-2xl font-bold navy-text mt-1">{outcomes.mostVulnerableAge ?? '—'}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Lowest 10th-percentile balance{' '}
+                    {outcomes.mostVulnerableP10Balance != null ? formatMoney(outcomes.mostVulnerableP10Balance) : ''}
                   </div>
                 </div>
               </div>
 
               <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-900">
                 <div className="font-semibold text-slate-900 dark:text-white mb-2">Balance percentiles</div>
-                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                <div className="grid md:grid-cols-3 gap-4 text-sm">
                   <div>
-                    <div className="font-medium text-slate-700 dark:text-slate-200 mb-1">At retirement age ({result.inputs.retirementAge})</div>
+                    <div className="font-medium text-slate-700 dark:text-slate-200 mb-1">
+                      At separation ({result.inputs.retirementAge})
+                    </div>
                     <div className="text-slate-600 dark:text-slate-400">
-                      P10 {formatMoney(result.outcomes.balanceAtRetirement?.p10)} · P50 {formatMoney(result.outcomes.balanceAtRetirement?.p50)} · P90 {formatMoney(result.outcomes.balanceAtRetirement?.p90)}
+                      P10 {formatMoney(outcomes.balanceAtRetirement?.p10)} · P50 {formatMoney(outcomes.balanceAtRetirement?.p50)} · P90{' '}
+                      {formatMoney(outcomes.balanceAtRetirement?.p90)}
                     </div>
                   </div>
                   <div>
-                    <div className="font-medium text-slate-700 dark:text-slate-200 mb-1">At desired FIRE age ({result.inputs.desiredFireAge})</div>
+                    <div className="font-medium text-slate-700 dark:text-slate-200 mb-1">At end age ({result.inputs.endAge})</div>
                     <div className="text-slate-600 dark:text-slate-400">
-                      P10 {formatMoney(result.outcomes.balanceAtDesiredFireAge?.p10)} · P50 {formatMoney(result.outcomes.balanceAtDesiredFireAge?.p50)} · P90 {formatMoney(result.outcomes.balanceAtDesiredFireAge?.p90)}
+                      P10 {formatMoney(outcomes.balanceAtEnd?.p10)} · P50 {formatMoney(outcomes.balanceAtEnd?.p50)} · P90{' '}
+                      {formatMoney(outcomes.balanceAtEnd?.p90)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium text-slate-700 dark:text-slate-200 mb-1">Lowest balance</div>
+                    <div className="text-slate-600 dark:text-slate-400">
+                      P10 {formatMoney(outcomes.minBalance?.p10)} · P50 {formatMoney(outcomes.minBalance?.p50)}
                     </div>
                   </div>
                 </div>
               </div>
 
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900 text-sm">
+                <div className="font-medium text-slate-700 dark:text-slate-200 mb-1">Return assumptions</div>
+                <div className="text-slate-600 dark:text-slate-400">
+                  Mean {formatPercent(result.inputs.meanReturn)} · Volatility {formatPercent(result.inputs.portfolioStdDev)} ·{' '}
+                  {result.inputs.simulations} simulations
+                </div>
+              </div>
+
               <div className="text-xs text-slate-500 dark:text-slate-400">
-                Educational estimates only. This model simplifies taxes, withdrawals, and market behavior.
+                Educational estimates only. Each run is the full lifetime timeline with a different sequence of returns;
+                taxes, penalties and healthcare follow the same rules as the deterministic view.
               </div>
             </div>
           )}
@@ -215,6 +211,3 @@ export default function AdvancedAnalyticsPanel({
     </div>
   );
 }
-
-
-

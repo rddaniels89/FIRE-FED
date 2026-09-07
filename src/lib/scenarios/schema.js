@@ -245,6 +245,9 @@ export function createDefaultSummary() {
       endAge: 95,
       expectedReturnPercent: null, // null → derived from TSP allocation
       spendingInflationPercent: null, // null → tsp.inflationRate
+      // Take-home pay left over after spending and contributions while working
+      // is kept as cash. Off means it is treated as spent.
+      saveWorkingSurplus: true,
     },
   };
 }

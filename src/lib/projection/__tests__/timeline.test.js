@@ -188,6 +188,26 @@ describe('the timeline', () => {
     expect(t.rows.find((r) => r.age === 68).spouseSocialSecurity).toBe(0);
   });
 
+  it('counts spouse income once', () => {
+    const s = applyScenarioUpdates(base(), {
+      household: { spouse: { enabled: true, currentAge: 45, annualIncome: 50000, incomeEndAge: null } },
+    });
+    const t = buildTimeline(s);
+    const r = t.rows.find((x) => x.age === 60);
+    expect(r.spouseIncome).toBeGreaterThan(0);
+    // Total inflow is the sum of the individual lines, so spouse income appears exactly once.
+    const lines = r.salary + r.pension + r.srs + r.socialSecurity + r.spouseIncome + r.spouseSocialSecurity + r.spousePension + r.sideHustle + r.lumpSums;
+    expect(r.totalIncome).toBeCloseTo(lines, 6);
+  });
+
+  it('working-year surplus is saved as cash unless the assumption is off', () => {
+    const on = buildTimeline(base());
+    expect(on.summary.workingSurplusSaved).toBeGreaterThan(0);
+    const off = buildTimeline(applyScenarioUpdates(base(), { summary: { assumptions: { saveWorkingSurplus: false } } }));
+    expect(off.summary.workingSurplusSaved).toBe(0);
+    expect(off.summary.balanceAtSeparation).toBeLessThan(on.summary.balanceAtSeparation);
+  });
+
   it('derives the expected return from the allocation', () => {
     const s = base();
     // 10% G at 2, 20% F at 3, 40% C at 7, 20% S at 8, 10% I at 6 = 0.2+0.6+2.8+1.6+0.6 = 5.8%

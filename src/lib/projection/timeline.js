@@ -148,6 +148,7 @@ export function buildTimeline(scenario, options = {}) {
   const filingStatus = taxes.filingStatus ?? 'single';
   const state = taxes.includeStateTax === false ? null : taxes.state ?? null;
   const spendingMultiplier = num(overrides.spendingMultiplier, 1);
+  const saveWorkingSurplus = assumptions.saveWorkingSurplus !== false;
   const healthcareOverride = overrides.healthcarePremiumGrowthPercent;
   const healthcareConfig =
     healthcareOverride === undefined ? healthcare : { ...healthcare, premiumGrowthPercent: healthcareOverride };
@@ -207,6 +208,7 @@ export function buildTimeline(scenario, options = {}) {
   let cumulativeTaxes = 0;
   let cumulativeSalary = 0;
   let cumulativeShortfall = 0;
+  let workingSurplusSaved = 0;
 
   for (let age = currentAge; age <= endAge; age++) {
     const i = age - currentAge;
@@ -312,6 +314,9 @@ export function buildTimeline(scenario, options = {}) {
     const seppDraw = seppActive ? Math.min(seppAnnual, traditional) : 0;
 
     // ---------- Fund the gap ----------
+    // Income that does not depend on the portfolio. Spouse wages belong here
+    // for the bridge test; they are NOT also in `salary`, so nothing is counted
+    // twice below.
     const guaranteedIncome = pension + srs + socialSecurity + spouseIncome + spouseSocialSecurity + spousePension + sideHustle;
     const wages = salary + spouseIncome;
 
@@ -345,7 +350,7 @@ export function buildTimeline(scenario, options = {}) {
 
       const incomeTax = taxResult.totalTax + fica + penalties;
       const outflows = spending + healthcareCost + incomeTax + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
-      const inflows = wages + guaranteedIncome + lumpSums + seppDraw;
+      const inflows = salary + guaranteedIncome + lumpSums + seppDraw;
       let need = outflows - inflows;
 
       // Reset discretionary withdrawals and re-fund.
@@ -402,7 +407,7 @@ export function buildTimeline(scenario, options = {}) {
     // Excess when income exceeds outflows in retirement is kept as cash.
     const totalTax = (taxResult?.totalTax ?? 0) + fica + penalties;
     const totalOutflow = spending + healthcareCost + totalTax + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
-    const totalInflow = wages + guaranteedIncome + lumpSums;
+    const totalInflow = salary + guaranteedIncome + lumpSums;
     const totalWithdrawals = w.cash + w.taxable + w.rothBasis + w.conversions + w.traditional + w.rothEarnings;
     const surplus = totalInflow + totalWithdrawals - totalOutflow - shortfall;
 
@@ -433,7 +438,12 @@ export function buildTimeline(scenario, options = {}) {
       taxable += taxableSavings; taxableBasis += taxableSavings;
     }
     if (age === separationAge) cash += lumpSums;
-    if (surplus > 0) cash += surplus;
+    // Retirement-year surplus (guaranteed income above spending) is always kept;
+    // working-year surplus only when the assumption says so.
+    if (surplus > 0 && (!isWorking || saveWorkingSurplus)) {
+      cash += surplus;
+      if (isWorking) workingSurplusSaved += surplus;
+    }
 
     const r = returnsByYear ? num(returnsByYear[i], expectedReturn) : expectedReturn;
     const growth = 1 + r;
@@ -498,8 +508,11 @@ export function buildTimeline(scenario, options = {}) {
   return {
     plan,
     rows,
-    inputs: { asOfYear, endAge, inflation, expectedReturn, salaryGrowth, filingStatus, seppEnabled, rothConversionEnabled },
-    summary: summarizeTimeline({ rows, plan, currentAge, separationAge, annuityStartAge, ssClaimAge: ss.claimAge, ssFra, spouseFra, cumulativePenalties, cumulativeTaxes, cumulativeSalary, cumulativeShortfall, firstShortfallAge, spouse }),
+    inputs: { asOfYear, endAge, inflation, expectedReturn, salaryGrowth, filingStatus, seppEnabled, rothConversionEnabled, saveWorkingSurplus },
+    summary: {
+      ...summarizeTimeline({ rows, plan, currentAge, separationAge, annuityStartAge, ssClaimAge: ss.claimAge, ssFra, spouseFra, cumulativePenalties, cumulativeTaxes, cumulativeSalary, cumulativeShortfall, firstShortfallAge, spouse }),
+      workingSurplusSaved,
+    },
   };
 }
 

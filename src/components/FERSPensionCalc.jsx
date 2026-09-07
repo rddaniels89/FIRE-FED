@@ -22,6 +22,7 @@ import { evaluateMilitaryDepositDecision } from '../lib/calculations/militaryDep
 import { evaluateFehbContinuation } from '../lib/calculations/fehb';
 import TooltipWrapper from './TooltipWrapper';
 import NumberStepper from './NumberStepper';
+import HowCalculated from './HowCalculated';
 
 ChartJS.register(
   CategoryScale,
@@ -902,7 +903,9 @@ function FERSPensionCalc() {
               {results.ageReduction.percent > 0 && (
                 <div className="mt-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-800">
                   <div className="font-medium text-amber-900 dark:text-amber-200 text-sm mb-2">
-                    MRA+10 age reduction &mdash; {results.ageReduction.percent.toFixed(1)}%
+                    <HowCalculated ruleId="fers.mra10_reduction" inputs={{ 'Reduction': `${results.ageReduction.percent.toFixed(1)}%` }}>
+                      MRA+10 age reduction &mdash; {results.ageReduction.percent.toFixed(1)}%
+                    </HowCalculated>
                   </div>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
@@ -1152,7 +1155,10 @@ function FERSPensionCalc() {
                   Annual Pension = High-3 × Years of Service × Multiplier
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Your current multiplier: <span className="font-medium">{(results.stayFed.multiplier * 100).toFixed(1)}%</span>
+                  Your current multiplier:{' '}
+                  <HowCalculated ruleId="fers.multiplier">
+                    <span className="font-medium">{(results.stayFed.multiplier * 100).toFixed(1)}%</span>
+                  </HowCalculated>
                 </p>
               </div>
               
@@ -1172,7 +1178,17 @@ function FERSPensionCalc() {
               <div className="grid grid-cols-2 gap-6">
                 <div className="text-center">
                   <div className="text-3xl font-bold navy-text mb-2">
-                    ${Math.round(results.stayFed.annualPension).toLocaleString()}
+                    <HowCalculated
+                      ruleId="fers.annuity"
+                      inputs={{
+                        'High-3': numericInputs.high3Salary,
+                        'Multiplier': `${(results.stayFed.multiplier * 100).toFixed(1)}%`,
+                        'Age reduction': `${results.ageReduction.percent.toFixed(1)}%`,
+                        'Survivor reduction': `${results.survivor.reductionPercent}%`,
+                      }}
+                    >
+                      ${Math.round(results.stayFed.annualPension).toLocaleString()}
+                    </HowCalculated>
                   </div>
                   <div className="text-sm text-slate-500 dark:text-slate-400">Annual Pension</div>
                 </div>
@@ -1249,7 +1265,16 @@ function FERSPensionCalc() {
                     <div>
                       <div className="text-slate-500 dark:text-slate-400">Survivor receives</div>
                       <div className="font-medium text-slate-900 dark:text-white">
-                        ${Math.round(results.survivor.survivorAnnualBenefit).toLocaleString()}/yr
+                        <HowCalculated
+                          ruleId="fers.survivor"
+                          inputs={{
+                            'Election': results.survivor.election,
+                            'Reduction': `${results.survivor.reductionPercent}%`,
+                            'Survivor share': `${results.survivor.survivorPercent}%`,
+                          }}
+                        >
+                          ${Math.round(results.survivor.survivorAnnualBenefit).toLocaleString()}/yr
+                        </HowCalculated>
                       </div>
                     </div>
                   </div>
@@ -1273,7 +1298,12 @@ function FERSPensionCalc() {
                       <div>
                         <div className="text-slate-500 dark:text-slate-400">Monthly supplement</div>
                         <div className="font-medium text-green-700 dark:text-green-400">
-                          ${Math.round(results.srs.monthlyBeforeEarningsTest).toLocaleString()}/mo
+                          <HowCalculated
+                            ruleId="srs.amount"
+                            inputs={{ 'Social Security at 62 (monthly)': numericInputs.socialSecurityAt62Monthly }}
+                          >
+                            ${Math.round(results.srs.monthlyBeforeEarningsTest).toLocaleString()}/mo
+                          </HowCalculated>
                         </div>
                       </div>
                       <div>

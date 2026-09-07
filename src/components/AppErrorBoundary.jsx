@@ -7,6 +7,8 @@ const STORAGE_KEYS_TO_CLEAR = Object.freeze([
   'firefed_onboarding_v1_dismissed',
   'firefed_onboarding_v1_prefs',
   'firefed_onboarding_v1_checklist',
+  'firefed_onboarding_v2_dismissed',
+  'firefed_onboarding_v2_prefs',
 ]);
 
 const buildErrorDetailsText = (error) => {

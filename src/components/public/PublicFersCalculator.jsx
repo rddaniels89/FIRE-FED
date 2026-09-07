@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { trackEvent } from '../../lib/telemetry';
 import { SURVIVOR_ELECTIONS, calculateFersResults } from '../../lib/calculations/fers';
 import { calculateSrs } from '../../lib/calculations/srs';
+import HowCalculated from '../HowCalculated';
 
 const money = (n) => `$${Math.round(Number(n) || 0).toLocaleString()}`;
 const num = (v) => (v === '' ? 0 : Number.parseFloat(v) || 0);
@@ -132,7 +133,11 @@ export default function PublicFersCalculator() {
             <h2 className="text-xl font-semibold navy-text mb-5">Your annuity</h2>
             <div className="grid grid-cols-2 gap-6">
               <div>
-                <div className="text-3xl font-bold text-slate-900 dark:text-white">{money(fers.stayFed.annualPension)}</div>
+                <div className="text-3xl font-bold text-slate-900 dark:text-white">
+                  <HowCalculated ruleId="fers.annuity" inputs={{ 'Multiplier': `${(fers.stayFed.multiplier * 100).toFixed(1)}%` }}>
+                    {money(fers.stayFed.annualPension)}
+                  </HowCalculated>
+                </div>
                 <div className="text-sm text-slate-500 dark:text-slate-400">per year</div>
               </div>
               <div>
