@@ -3,6 +3,8 @@ import { Check, LayoutDashboard, Landmark, Map, SlidersHorizontal, TrendingUp } 
 import { useScenario } from '../contexts/ScenarioContext';
 import OnboardingCard from './OnboardingCard';
 import AnimatedFlame from './AnimatedFlame';
+import { birthYearFromAge } from '../lib/calculations/socialSecurity';
+import { formatMinimumRetirementAge } from '../lib/calculations/mra';
 
 const money = (n) => (Number.isFinite(Number(n)) ? `$${Math.round(Number(n)).toLocaleString()}` : '—');
 
@@ -33,15 +35,24 @@ function HomePage() {
     }
   ];
 
+  const profile = currentScenario?.profile;
+  const fire = currentScenario?.fire;
+
+  // The minimum retirement age is not 57 for everyone: it runs from 55 to 57 by
+  // year of birth. Stating a flat 57 here is the same error the plan resolver
+  // used to make, and it is wrong for anyone born before 1970.
+  const yourMra = profile?.currentAge
+    ? formatMinimumRetirementAge(birthYearFromAge({ currentAge: profile.currentAge }))
+    : null;
+
   const quickStats = [
     { label: 'TSP Funds', value: '5', description: 'G, F, C, S, I Funds' },
     { label: 'FERS Multiplier', value: '1.0-1.1%', description: 'Based on age & service' },
     { label: 'FIRE Rule', value: '25x', description: 'Annual expenses' },
-    { label: 'MRA', value: '57', description: 'Minimum retirement age' }
+    yourMra
+      ? { label: 'Your MRA', value: yourMra, description: 'Minimum retirement age, from your birth year' }
+      : { label: 'MRA', value: '55-57', description: 'Minimum retirement age, by birth year' },
   ];
-
-  const profile = currentScenario?.profile;
-  const fire = currentScenario?.fire;
 
   return (
     <div className="animate-fade-in">
