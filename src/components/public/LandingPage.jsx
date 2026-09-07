@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
 import { trackEvent } from '../../lib/telemetry';
 
 const MODELS = [
@@ -97,14 +98,20 @@ export default function LandingPage() {
               <p className="text-sm text-slate-600 dark:text-slate-300">
                 Your annuity, with sick leave credit and survivor elections included.
               </p>
-              <span className="inline-block mt-4 text-sm font-medium navy-text">Open the calculator →</span>
+              <span className="inline-flex items-center gap-1.5 mt-4 text-sm font-medium navy-text">
+                Open the calculator
+                <ArrowRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              </span>
             </Link>
             <Link to="/calculators/special-retirement-supplement" className="card p-6 block hover:border-navy-400 dark:hover:border-navy-500">
               <h3 className="font-semibold text-lg text-slate-900 dark:text-white mb-1">Special Retirement Supplement</h3>
               <p className="text-sm text-slate-600 dark:text-slate-300">
                 What the SRS pays you between retirement and 62 — and whether you qualify at all.
               </p>
-              <span className="inline-block mt-4 text-sm font-medium navy-text">Open the calculator →</span>
+              <span className="inline-flex items-center gap-1.5 mt-4 text-sm font-medium navy-text">
+                Open the calculator
+                <ArrowRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              </span>
             </Link>
           </div>
         </div>
@@ -123,8 +130,9 @@ export default function LandingPage() {
             Pro is for comparing alternatives, stress-testing assumptions, exporting, and tracking how
             your plan changes over time.
           </p>
-          <Link to="/pricing" className="inline-block mt-6 font-medium navy-text">
-            See what Pro adds →
+          <Link to="/pricing" className="inline-flex items-center gap-1.5 mt-6 font-medium navy-text">
+            See what Pro adds
+            <ArrowRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
           </Link>
         </div>
       </section>

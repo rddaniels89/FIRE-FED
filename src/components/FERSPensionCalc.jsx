@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { CheckCircle2, XCircle } from 'lucide-react';
 import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -36,6 +37,25 @@ ChartJS.register(
   Legend,
   Filler
 );
+
+/**
+ * A yes/no fact about a retirement path. The label already says which way it
+ * went ("Keeps FEHB" / "Loses FEHB"), so the mark is decorative and only
+ * carries the state in colour.
+ */
+function PathFlag({ on, children }) {
+  const Icon = on ? CheckCircle2 : XCircle;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Icon
+        className={`h-3.5 w-3.5 shrink-0 ${on ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}
+        strokeWidth={1.75}
+        aria-hidden="true"
+      />
+      {children}
+    </span>
+  );
+}
 
 function FERSPensionCalc() {
   const { currentScenario, updateCurrentScenario } = useScenario();
@@ -897,9 +917,13 @@ function FERSPensionCalc() {
                             </span>
                           </div>
                           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-slate-600 dark:text-slate-400">
-                            <span>{p.keepsFehb ? '✅ Keeps FEHB' : '❌ Loses FEHB'}</span>
-                            <span>{p.creditsSickLeave ? '✅ Sick leave credited' : '❌ Sick leave lost'}</span>
-                            <span>{p.hasSupplement ? '✅ Supplement' : '❌ No supplement'}</span>
+                            <PathFlag on={p.keepsFehb}>{p.keepsFehb ? 'Keeps FEHB' : 'Loses FEHB'}</PathFlag>
+                            <PathFlag on={p.creditsSickLeave}>
+                              {p.creditsSickLeave ? 'Sick leave credited' : 'Sick leave lost'}
+                            </PathFlag>
+                            <PathFlag on={p.hasSupplement}>
+                              {p.hasSupplement ? 'Supplement' : 'No supplement'}
+                            </PathFlag>
                           </div>
                         </div>
                       ))}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { CheckCircle2, Scale } from 'lucide-react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -251,7 +252,7 @@ function TSPForecast() {
 
   // Handle numeric input changes with validation
   const handleInputChange = useCallback((field, value) => {
-    // Keep input handling максимально permissive to avoid “stuck” controlled inputs.
+    // Keep input handling as permissive as possible to avoid "stuck" controlled inputs.
     // Validation/parsing happens elsewhere (validateInputs + parseNumericInputs).
     const nextValue = String(value ?? '');
     
@@ -590,7 +591,7 @@ function TSPForecast() {
           numericInputs.includeEmployerMatch ? 'Employer contributions are included (assumed pre-tax).' : 'Employer contributions are not included.',
           calcMeta?.limits?.isOverLimit ? 'Your selected contribution % exceeds the annual limit; employee contributions are capped in this model.' : 'Employee contributions are within the annual limit (based on settings).'
         ],
-        icon: '⚖️'
+        Icon: Scale
       };
     } else if (rothAdvantagePercent > 5) {
       return {
@@ -602,7 +603,7 @@ function TSPForecast() {
           numericInputs.includeEmployerMatch ? 'Employer contributions are included (assumed pre-tax, taxed in retirement).' : 'Employer contributions are not included.',
           'Recommendation is based on after-tax retirement value (not take-home pay today).'
         ],
-        icon: '🟢'
+        Icon: CheckCircle2
       };
     } else {
       return {
@@ -614,7 +615,7 @@ function TSPForecast() {
           numericInputs.includeEmployerMatch ? 'Employer contributions are included (assumed pre-tax, taxed in retirement).' : 'Employer contributions are not included.',
           'Recommendation is based on after-tax retirement value (not take-home pay today).'
         ],
-        icon: '🔵'
+        Icon: CheckCircle2
       };
     }
   };
@@ -1411,8 +1412,16 @@ function TSPForecast() {
                     rec.type === 'traditional' ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800' :
                     'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800'
                   }`}>
-                    <div className="flex items-start space-x-3">
-                      <span className="text-2xl">{rec.icon}</span>
+                    <div className="flex items-start gap-3">
+                      <rec.Icon
+                        className={`h-5 w-5 mt-0.5 shrink-0 ${
+                          rec.type === 'roth' ? 'text-green-600 dark:text-green-400' :
+                          rec.type === 'traditional' ? 'text-blue-600 dark:text-blue-400' :
+                          'text-yellow-600 dark:text-yellow-400'
+                        }`}
+                        strokeWidth={1.75}
+                        aria-hidden="true"
+                      />
                       <div>
                         <h4 className={`font-semibold mb-2 ${
                           rec.type === 'roth' ? 'text-green-700 dark:text-green-300' :

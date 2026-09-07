@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Open+Sans:wght@300;400;500;600;700&display=swap');
+/* Inter only. Open Sans was loaded but never used, costing a request and a
+   render delay for nothing. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,7 +8,28 @@
 
 @layer base {
   html {
-    font-family: 'Inter', 'Open Sans', system-ui, sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Inter's contextual alternates give a cleaner 'a' and 'g' at UI sizes. */
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  /* Headings tighten as they grow, the way a typeface is meant to be set.
+     Left at default they look loose and generic at display sizes. */
+  h1 {
+    @apply tracking-tightest;
+  }
+
+  h2,
+  h3 {
+    @apply tracking-tight;
+  }
+
+  /* Figures line up in columns and stop jittering as they change. */
+  table,
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
   
   body {
@@ -20,11 +43,17 @@
   }
 
   .btn-primary {
-    @apply focus-ring bg-navy-600 hover:bg-navy-700 text-white font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-200 hover:shadow-lg;
+    @apply focus-ring inline-flex items-center justify-center gap-2 rounded-lg bg-navy-600 px-6 py-3 font-medium text-white shadow-soft transition-colors duration-150 hover:bg-navy-700 active:bg-navy-800 disabled:opacity-50;
   }
-  
+
+  /* Outlined rather than a solid grey slab, which read as a disabled primary
+     and competed with the real one for attention. */
   .btn-secondary {
-    @apply focus-ring bg-slate-600 hover:bg-slate-700 text-white font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-200 hover:shadow-lg;
+    @apply focus-ring inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-6 py-3 font-medium text-slate-700 shadow-soft transition-colors duration-150 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white;
+  }
+
+  .btn-ghost {
+    @apply focus-ring inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-medium text-slate-600 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white;
   }
 
   /* Small variant. Previously copy-pasted as `btn-primary py-2 px-4 text-sm`
@@ -33,12 +62,36 @@
     @apply py-2.5 px-4 text-sm;
   }
   
+  /* One hairline border and a soft lift. Border plus shadow-md on every
+     surface made the whole page feel heavy and evenly weighted. */
   .card {
-    @apply bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-md hover:shadow-lg transition-all duration-200;
+    @apply rounded-xl border border-slate-200 bg-white shadow-card transition-shadow duration-200 dark:border-slate-700/80 dark:bg-slate-800 dark:shadow-none;
+  }
+
+  /* For the one or two surfaces that should read as raised. */
+  .card-raised {
+    @apply card shadow-lift;
+  }
+
+  /* A headline figure: tabular, tight, and never wrapped mid-number. */
+  .stat-figure {
+    @apply tracking-tightest tabular-nums;
+  }
+
+  /* A panel inside a card. Repeating the card's own border one level down
+     draws a box inside a box and makes a dense page look like a spreadsheet;
+     a tinted surface separates the group just as clearly and sits back. */
+  .stat-tile {
+    @apply rounded-lg bg-slate-100/70 p-4 dark:bg-slate-900/40;
+  }
+
+  /* Small caps label above a figure. */
+  .stat-label {
+    @apply text-[11px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400;
   }
   
   .input-field {
-    @apply bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-navy-500 transition-all duration-200;
+    @apply rounded-lg border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-soft transition-colors duration-150 hover:border-slate-400 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:shadow-none dark:hover:border-slate-500;
   }
   
   .label {

@@ -1,6 +1,8 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useState } from 'react';
+import { Menu, Moon, Sun, X } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
+import AnimatedFlame from '../AnimatedFlame';
 
 const navLinkClass = ({ isActive }) =>
   `px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
@@ -26,7 +28,11 @@ export default function PublicLayout() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link to="/" className="flex items-center gap-2 font-bold text-xl navy-text">
-              <span aria-hidden="true">🔥</span>
+              {/* aria-hidden on the wrapper: the mark carries its own label, and
+                  the word beside it is already the link's name. */}
+              <span aria-hidden="true" className="inline-flex">
+                <AnimatedFlame className="h-6 w-6" />
+              </span>
               <span>FireFed</span>
             </Link>
 
@@ -45,10 +51,15 @@ export default function PublicLayout() {
             <div className="flex items-center gap-2">
               <button
                 onClick={toggleTheme}
-                className="focus-ring p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                className="focus-ring inline-flex items-center justify-center p-2 rounded-lg text-slate-500 hover:text-navy-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-navy-300 dark:hover:bg-slate-700"
                 title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               >
-                {isDarkMode ? '☀️' : '🌙'}
+                {isDarkMode ? (
+                  <Sun className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                ) : (
+                  <Moon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                )}
               </button>
               <Link
                 to="/signin?mode=signin"
@@ -61,11 +72,15 @@ export default function PublicLayout() {
               </Link>
               <button
                 onClick={() => setIsMenuOpen((v) => !v)}
-                className="md:hidden focus-ring p-2 rounded-lg text-slate-600 dark:text-slate-300"
+                className="md:hidden focus-ring inline-flex items-center justify-center p-2 rounded-lg text-slate-500 hover:text-navy-700 dark:text-slate-400 dark:hover:text-navy-300"
                 aria-expanded={isMenuOpen}
               >
                 <span className="sr-only">Toggle navigation</span>
-                {isMenuOpen ? '✕' : '☰'}
+                {isMenuOpen ? (
+                  <X className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                ) : (
+                  <Menu className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                )}
               </button>
             </div>
           </div>
@@ -96,7 +111,10 @@ export default function PublicLayout() {
         )}
       </header>
 
-      <main className="flex-1">
+      {/* `clip` contains anything that would otherwise widen the page — a wide
+          table's minimum width propagates past its own scroll container here —
+          without creating a scroll container of its own. */}
+      <main className="flex-1 overflow-x-clip">
         <Outlet />
       </main>
 

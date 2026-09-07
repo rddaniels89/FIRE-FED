@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { Check } from 'lucide-react'
 import { supabase, isSupabaseAvailable } from '../supabaseClient'
+import AnimatedFlame from './AnimatedFlame'
 import { useAuth } from '../contexts/AuthContext'
 import { trackEvent } from '../lib/telemetry'
 
@@ -95,7 +97,11 @@ const Auth = ({ onAuthSuccess }) => {
       <div className="max-w-md w-full mx-auto space-y-8">
         <div className="text-center">
           <Link to="/" className="inline-flex items-center gap-2 font-bold text-2xl navy-text">
-            <span aria-hidden="true">🔥</span>
+            {/* aria-hidden on the wrapper: the mark carries its own label, and
+                the word beside it is already the link's name. */}
+            <span aria-hidden="true" className="inline-flex">
+              <AnimatedFlame className="h-7 w-7" />
+            </span>
             <span>FireFed</span>
           </Link>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
@@ -108,9 +114,16 @@ const Auth = ({ onAuthSuccess }) => {
 
           {isSignUp && (
             <ul className="mt-5 text-sm text-slate-600 dark:text-slate-300 space-y-1.5 text-left inline-block">
-              <li>✅ Save and revisit up to three retirement scenarios</li>
-              <li>✅ FERS pension, TSP projection, and the gap to age 62</li>
-              <li>✅ Free forever &mdash; Pro is $9.99/month if you want more</li>
+              {[
+                'Save and revisit up to three retirement scenarios',
+                'FERS pension, TSP projection, and the gap to age 62',
+                'Free forever — Pro is $9.99/month if you want more',
+              ].map((benefit) => (
+                <li key={benefit} className="flex items-start gap-2">
+                  <Check className="h-4 w-4 mt-0.5 shrink-0 text-green-600 dark:text-green-400" strokeWidth={1.75} aria-hidden="true" />
+                  <span>{benefit}</span>
+                </li>
+              ))}
             </ul>
           )}
 

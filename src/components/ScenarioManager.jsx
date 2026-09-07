@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ChevronDown, Copy, Lock, Pencil, Save, Trash2 } from 'lucide-react';
 import { useScenario } from '../contexts/ScenarioContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -114,11 +115,11 @@ function ScenarioManager() {
             className="btn-primary flex items-center gap-2 min-w-[200px] justify-between"
           >
             <span className="truncate">{currentScenario?.name || 'Select Scenario'}</span>
-            <span className="text-sm">▼</span>
+            <ChevronDown className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
           </button>
-          
+
           {isDropdownOpen && (
-            <div className="absolute top-full left-0 mt-1 w-80 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+            <div className="absolute top-full left-0 mt-1 w-80 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lift z-50 max-h-96 overflow-y-auto">
               <div className="p-2">
                 <div className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 px-2">
                   Saved Scenarios ({scenarios.length})
@@ -157,31 +158,34 @@ function ScenarioManager() {
                           openRenameModal(scenario.id, scenario.name);
                           setIsDropdownOpen(false);
                         }}
-                        className="p-1 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-500 hover:text-navy-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-navy-300 dark:hover:bg-slate-600"
                         title="Rename"
+                        aria-label={`Rename ${scenario.name}`}
                       >
-                        ✏️
+                        <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDuplicate(scenario.id);
                         }}
-                        className="p-1 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-500 hover:text-navy-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-navy-300 dark:hover:bg-slate-600"
                         title="Duplicate"
+                        aria-label={`Duplicate ${scenario.name}`}
                       >
-                        📋
+                        <Copy className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDelete(scenario.id);
                         }}
-                        className="p-1 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-900/30"
                         title="Delete"
+                        aria-label={`Delete ${scenario.name}`}
                         disabled={scenarios.length <= 1}
                       >
-                        🗑️
+                        <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                       </button>
                     </div>
                   </div>
@@ -195,23 +199,34 @@ function ScenarioManager() {
         {isAuthenticated ? (
           <button
             onClick={openSaveModal}
-            className="btn-secondary"
+            className="btn-secondary inline-flex items-center gap-2"
             title="Save current inputs as a new scenario"
             disabled={isScenarioLimitReached}
           >
-            {isScenarioLimitReached ? `🔒 Save Limit (${scenarioLimit})` : '💾 Save New'}
+            {isScenarioLimitReached ? (
+              <>
+                <Lock className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                Save Limit ({scenarioLimit})
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                Save New
+              </>
+            )}
           </button>
         ) : (
           <div className="relative group">
             <button
               disabled
-              className="btn-secondary opacity-50 cursor-not-allowed"
+              className="btn-secondary inline-flex items-center gap-2 opacity-50 cursor-not-allowed"
               title="Please log in to save scenarios"
             >
-              🔒 Save New
+              <Lock className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+              Save New
             </button>
             <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap z-50">
-              🔒 Please log in to save or export your FIRE scenario.
+              Please log in to save or export your FIRE scenario.
             </div>
           </div>
         )}
@@ -228,7 +243,7 @@ function ScenarioManager() {
       {/* Modal for Save/Rename */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-lg w-96">
+          <div className="card shadow-lift p-6 w-96">
             <h3 className="text-lg font-semibold navy-text mb-4">
               {modalType === 'save' ? 'Save New Scenario' : 'Rename Scenario'}
             </h3>
@@ -268,7 +283,7 @@ function ScenarioManager() {
       {/* Load Preview Modal */}
       {isLoadPreviewOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-lg w-[520px] max-w-[95vw]">
+          <div className="card shadow-lift p-6 w-[520px] max-w-[95vw]">
             {(() => {
               const target = scenarios.find(s => s.id === pendingLoadScenarioId);
               const diffs = getScenarioDiff(currentScenario, target);

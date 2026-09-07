@@ -210,7 +210,7 @@ const ProFeatures = () => {
         </div>
 
         {/* What you get */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-8 shadow-sm border border-slate-200 dark:border-slate-700 mb-10">
+        <div className="card p-8 mb-10">
           <div className="grid md:grid-cols-2 gap-8">
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">Available now with Pro</h2>
@@ -252,7 +252,7 @@ const ProFeatures = () => {
         </div>
 
         {/* Upgrade Section */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-8 shadow-sm border border-slate-200 dark:border-slate-700">
+        <div className="card p-8">
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">

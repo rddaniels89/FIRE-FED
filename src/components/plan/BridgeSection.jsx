@@ -5,7 +5,7 @@ import { fmtMoney, fmtPercent, fmtYears, sumRows } from './planFormat';
 
 function Stat({ label, children, sub }) {
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 bg-white dark:bg-slate-900">
+    <div className="stat-tile p-3">
       <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
       <div className="text-lg font-semibold text-slate-900 dark:text-white mt-0.5 tabular-nums">{children}</div>
       {sub && <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{sub}</div>}
@@ -18,7 +18,7 @@ function StrategyToggle({ id, label, description, enabled, canUse, onToggle }) {
   const descriptionId = `${id}-description`;
   return (
     <label
-      className={`flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 ${canUse ? '' : 'opacity-60'}`}
+      className={`stat-tile flex items-start gap-3 p-3 ${canUse ? '' : 'opacity-60'}`}
     >
       {/* The wrapping <label> covers the description too, so an aria-label was
           used to trim the name — which suppressed the description entirely.
@@ -111,7 +111,7 @@ export default function BridgeSection({ timeline, scenario, canUseStrategies, on
       </div>
 
       <div className="grid md:grid-cols-2 gap-4 text-sm">
-        <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 space-y-2">
+        <div className="stat-tile space-y-2">
           <div className="font-medium text-slate-800 dark:text-slate-200">
             <HowCalculated ruleId="tsp.access">TSP access</HowCalculated>
           </div>
@@ -123,7 +123,7 @@ export default function BridgeSection({ timeline, scenario, canUseStrategies, on
         </div>
 
         <div className="space-y-3">
-          <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+          <div className="stat-tile">
             <div className="font-medium text-slate-800 dark:text-slate-200">
               <HowCalculated ruleId="fehb.five_year">FEHB</HowCalculated>
             </div>
@@ -138,7 +138,7 @@ export default function BridgeSection({ timeline, scenario, canUseStrategies, on
             )}
           </div>
 
-          <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+          <div className="stat-tile">
             <div className="font-medium text-slate-800 dark:text-slate-200">
               <HowCalculated ruleId="leave.lump_sum">Annual leave lump sum</HowCalculated>
             </div>
@@ -167,7 +167,7 @@ export default function BridgeSection({ timeline, scenario, canUseStrategies, on
       )}
 
       {plan.refund && (
-        <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 text-sm">
+        <div className="stat-tile text-sm">
           <div className="font-medium text-slate-800 dark:text-slate-200">Refund of FERS contributions</div>
           <p className="mt-1 text-slate-600 dark:text-slate-400">
             Taking the refund returns about {fmtMoney(plan.refund.refundAmount)} ({fmtMoney(plan.refund.totalContributions)}{' '}

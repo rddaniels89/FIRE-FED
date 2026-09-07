@@ -3,6 +3,21 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { ScenarioProvider } from './contexts/ScenarioContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import {
+  Home as HomeIcon,
+  Route as RouteIcon,
+  TrendingUp,
+  Landmark,
+  LayoutDashboard,
+  Layers,
+  Sparkles,
+  Menu as MenuIcon,
+  X as XIcon,
+  Sun,
+  Moon,
+  LogOut,
+} from 'lucide-react';
+import AnimatedFlame from './components/AnimatedFlame';
 import Footer from './components/Footer';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import CloudSyncBanner from './components/CloudSyncBanner';
@@ -60,25 +75,27 @@ function Navigation() {
   const { isDarkMode, toggleTheme } = useTheme();
   const { user, isAuthenticated, logout } = useAuth();
 
+  // Drawn icons rather than emoji: emoji render differently on every platform,
+  // carry their own colours, and read as consumer rather than considered.
   const navItems = [
-    { path: '/', label: 'Home', icon: '🏠' },
-    { path: '/plan', label: 'My Plan', icon: '🗺️' },
-    { path: '/tsp-forecast', label: 'TSP Forecast', icon: '📈' },
-    { path: '/fers-pension', label: 'FERS Pension', icon: '💰' },
-    { path: '/summary', label: 'Summary', icon: '📊' },
-    { path: '/scenarios', label: 'Scenarios', icon: '💼' },
-    { path: '/pro-features', label: 'Pro', icon: '🚀' },
+    { path: '/', label: 'Home', Icon: HomeIcon },
+    { path: '/plan', label: 'My Plan', Icon: RouteIcon },
+    { path: '/tsp-forecast', label: 'TSP Forecast', Icon: TrendingUp },
+    { path: '/fers-pension', label: 'FERS Pension', Icon: Landmark },
+    { path: '/summary', label: 'Summary', Icon: LayoutDashboard },
+    { path: '/scenarios', label: 'Scenarios', Icon: Layers },
+    { path: '/pro-features', label: 'Pro', Icon: Sparkles },
   ];
 
   return (
-    <nav className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm">
+    <nav className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
-            <Link to="/" className="flex items-center space-x-3">
-              <span className="text-2xl" aria-hidden="true">🏛️</span>
-              <span className="text-xl font-bold navy-text dark:text-navy-300">
-                <span aria-hidden="true">🔥 </span>FireFed
+            <Link to="/" className="focus-ring flex items-center gap-2.5 rounded-lg">
+              <AnimatedFlame className="h-7 w-7" />
+              <span className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
+                Fire<span className="text-navy-600 dark:text-navy-300">Fed</span>
               </span>
             </Link>
           </div>
@@ -91,13 +108,13 @@ function Navigation() {
                     key={item.path}
                     to={item.path}
                     aria-current={location.pathname === item.path ? 'page' : undefined}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200 ${
+                    className={`focus-ring inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ${
                       location.pathname === item.path
-                        ? 'bg-navy-600 text-white shadow-md'
-                        : 'text-slate-600 dark:text-slate-300 hover:text-navy-700 dark:hover:text-navy-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                        ? 'bg-navy-50 text-navy-700 dark:bg-navy-600/20 dark:text-navy-200'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
                     }`}
                   >
-                    <span className="mr-2 hidden xl:inline" aria-hidden="true">{item.icon}</span>
+                    <item.Icon className="hidden h-4 w-4 xl:block" aria-hidden="true" strokeWidth={1.75} />
                     {item.label}
                   </Link>
                 ))}
@@ -110,7 +127,7 @@ function Navigation() {
                   className="hidden xl:inline text-sm text-slate-600 dark:text-slate-300 truncate max-w-[12rem]"
                   title={user?.email || user?.user_metadata?.email}
                 >
-                  👋 {user?.email || user?.user_metadata?.email}
+                  {user?.email || user?.user_metadata?.email}
                 </span>
                 <button
                   onClick={logout}
@@ -128,7 +145,11 @@ function Navigation() {
               aria-pressed={isDarkMode}
               title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
-              <span aria-hidden="true">{isDarkMode ? '☀️' : '🌙'}</span>
+              {isDarkMode ? (
+                <Sun className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
+              ) : (
+                <Moon className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
+              )}
             </button>
           </div>
 
@@ -140,7 +161,11 @@ function Navigation() {
               aria-pressed={isDarkMode}
               title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
-              <span aria-hidden="true">{isDarkMode ? '☀️' : '🌙'}</span>
+              {isDarkMode ? (
+                <Sun className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
+              ) : (
+                <Moon className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
+              )}
             </button>
 
             <button
@@ -150,7 +175,11 @@ function Navigation() {
               className="inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-600 dark:text-slate-300 hover:text-navy-700 dark:hover:text-navy-400 hover:bg-slate-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-navy-500 transition-all duration-200"
             >
               <span className="sr-only">{isMenuOpen ? 'Close main menu' : 'Open main menu'}</span>
-              <span className="text-xl" aria-hidden="true">{isMenuOpen ? '✕' : '☰'}</span>
+              {isMenuOpen ? (
+                <XIcon className="h-5 w-5" aria-hidden="true" strokeWidth={1.75} />
+              ) : (
+                <MenuIcon className="h-5 w-5" aria-hidden="true" strokeWidth={1.75} />
+              )}
             </button>
           </div>
         </div>
@@ -167,27 +196,28 @@ function Navigation() {
                     to={item.path}
                     onClick={() => setIsMenuOpen(false)}
                     aria-current={location.pathname === item.path ? 'page' : undefined}
-                    className={`block px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors duration-150 ${
                       location.pathname === item.path
-                        ? 'bg-navy-600 text-white'
-                        : 'text-slate-600 dark:text-slate-300 hover:text-navy-700 dark:hover:text-navy-400 hover:bg-white dark:hover:bg-slate-700'
+                        ? 'bg-navy-50 text-navy-700 dark:bg-navy-600/20 dark:text-navy-200'
+                        : 'text-slate-600 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white'
                     }`}
                   >
-                    <span className="mr-2" aria-hidden="true">{item.icon}</span>
+                    <item.Icon className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
                     {item.label}
                   </Link>
                 ))}
                 <div className="border-t border-slate-200 dark:border-slate-600 pt-2 mt-2">
-                  <div className="px-3 py-2 text-sm text-slate-600 dark:text-slate-300">
-                    👋 Welcome, {user?.email || user?.user_metadata?.email}
+                  <div className="truncate px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
+                    {user?.email || user?.user_metadata?.email}
                   </div>
                   <button
                     onClick={() => {
                       logout();
                       setIsMenuOpen(false);
                     }}
-                    className="block w-full text-left px-3 py-2 text-base font-medium text-slate-600 dark:text-slate-300 hover:text-navy-700 dark:hover:text-navy-400 hover:bg-white dark:hover:bg-slate-700 rounded-md transition-all duration-200"
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-base font-medium text-slate-600 transition-colors duration-150 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
                   >
+                    <LogOut className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={1.75} />
                     Logout
                   </button>
                 </div>

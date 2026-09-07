@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { Check, Minus } from 'lucide-react';
 
 const ROWS = [
   ['One profile: every calculator reads the same person', 'Yes', 'Yes'],
@@ -23,9 +24,25 @@ const ROWS = [
   ['Federal Retirement Projection Report (PDF) and scenario import/export', '—', 'Yes'],
 ];
 
+// The mark is decorative; the sr-only word is what a screen reader hears, since
+// a lone glyph in a table cell says nothing about whether the row is included.
 function Cell({ value }) {
-  if (value === 'Yes') return <span className="text-green-600 dark:text-green-400 font-medium">✓</span>;
-  if (value === '—') return <span className="text-slate-400 dark:text-slate-500">—</span>;
+  if (value === 'Yes') {
+    return (
+      <span className="inline-flex items-center justify-center text-green-600 dark:text-green-400">
+        <Check className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+        <span className="sr-only">Included</span>
+      </span>
+    );
+  }
+  if (value === '—') {
+    return (
+      <span className="inline-flex items-center justify-center text-slate-400 dark:text-slate-500">
+        <Minus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+        <span className="sr-only">Not included</span>
+      </span>
+    );
+  }
   return <span className="font-medium text-slate-900 dark:text-white">{value}</span>;
 }
 
@@ -66,20 +83,24 @@ export default function PricingPage() {
       </div>
 
       <div className="card mt-10 overflow-x-auto">
-        <table className="w-full text-sm min-w-[520px]">
+        {/* The minimum only applies from `sm` up. Forced at every width it widens
+            the document past a phone viewport, and no ancestor overflow rule
+            contains it — the intrinsic minimum propagates regardless. Below
+            `sm` the three columns lay out naturally instead. */}
+        <table className="w-full text-sm sm:min-w-[520px]">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-700">
-              <th className="text-left font-semibold text-slate-700 dark:text-slate-200 px-6 py-4">What you get</th>
-              <th className="font-semibold text-slate-700 dark:text-slate-200 px-6 py-4 w-24">Free</th>
-              <th className="font-semibold text-slate-700 dark:text-slate-200 px-6 py-4 w-24">Pro</th>
+              <th className="text-left font-semibold text-slate-700 dark:text-slate-200 px-4 py-4 sm:px-6">What you get</th>
+              <th className="w-14 font-semibold text-slate-700 dark:text-slate-200 px-2 py-4 sm:w-24 sm:px-6">Free</th>
+              <th className="w-14 font-semibold text-slate-700 dark:text-slate-200 px-2 py-4 sm:w-24 sm:px-6">Pro</th>
             </tr>
           </thead>
           <tbody>
             {ROWS.map(([label, free, pro]) => (
               <tr key={label} className="border-b border-slate-100 dark:border-slate-700/60 last:border-0">
-                <td className="px-6 py-3 text-slate-700 dark:text-slate-300">{label}</td>
-                <td className="px-6 py-3 text-center"><Cell value={free} /></td>
-                <td className="px-6 py-3 text-center"><Cell value={pro} /></td>
+                <td className="px-4 py-3 text-slate-700 dark:text-slate-300 sm:px-6">{label}</td>
+                <td className="px-2 py-3 text-center sm:px-6"><Cell value={free} /></td>
+                <td className="px-2 py-3 text-center sm:px-6"><Cell value={pro} /></td>
               </tr>
             ))}
           </tbody>

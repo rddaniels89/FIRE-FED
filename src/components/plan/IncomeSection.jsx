@@ -180,13 +180,13 @@ export default function IncomeSection({ timeline, deflate }) {
       )}
 
       <div className="grid sm:grid-cols-3 gap-3 text-sm">
-        <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+        <div className="stat-tile p-3">
           <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Multiplier</div>
           <div className="font-semibold text-slate-900 dark:text-white mt-0.5">
             <HowCalculated ruleId="fers.multiplier">{fmtPercent(plan.annuity.multiplier, 1)}</HowCalculated>
           </div>
         </div>
-        <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+        <div className="stat-tile p-3">
           <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Age reduction</div>
           <div className="font-semibold text-slate-900 dark:text-white mt-0.5">
             <HowCalculated ruleId="fers.mra10_reduction">
@@ -194,7 +194,7 @@ export default function IncomeSection({ timeline, deflate }) {
             </HowCalculated>
           </div>
         </div>
-        <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+        <div className="stat-tile p-3">
           <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">FERS COLA</div>
           <div className="font-semibold text-slate-900 dark:text-white mt-0.5">
             <HowCalculated ruleId="cola.diet">from age {plan.annuity.colaStartAge}</HowCalculated>
