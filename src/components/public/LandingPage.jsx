@@ -130,10 +130,16 @@ export default function LandingPage() {
             Pro is for comparing alternatives, stress-testing assumptions, exporting, and tracking how
             your plan changes over time.
           </p>
-          <Link to="/pricing" className="inline-flex items-center gap-1.5 mt-6 font-medium navy-text">
-            See what Pro adds
-            <ArrowRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-          </Link>
+          <div className="flex flex-wrap gap-x-8 gap-y-2 mt-6">
+            <Link to="/pricing" className="inline-flex items-center gap-1.5 font-medium navy-text">
+              See what Pro adds
+              <ArrowRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            </Link>
+            <Link to="/methodology" className="inline-flex items-center gap-1.5 font-medium navy-text">
+              How we compute this
+              <ArrowRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            </Link>
+          </div>
         </div>
       </section>
     </>

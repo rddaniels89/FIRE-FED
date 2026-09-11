@@ -43,6 +43,9 @@ export default function PublicLayout() {
               <NavLink to="/calculators/special-retirement-supplement" className={navLinkClass}>
                 SRS Calculator
               </NavLink>
+              <NavLink to="/methodology" className={navLinkClass}>
+                Methodology
+              </NavLink>
               <NavLink to="/pricing" className={navLinkClass}>
                 Pricing
               </NavLink>
@@ -94,6 +97,9 @@ export default function PublicLayout() {
             <NavLink to="/calculators/special-retirement-supplement" className={navLinkClass} onClick={() => setIsMenuOpen(false)}>
               SRS Calculator
             </NavLink>
+            <NavLink to="/methodology" className={navLinkClass} onClick={() => setIsMenuOpen(false)}>
+              Methodology
+            </NavLink>
             <NavLink to="/pricing" className={navLinkClass} onClick={() => setIsMenuOpen(false)}>
               Pricing
             </NavLink>
@@ -128,6 +134,7 @@ export default function PublicLayout() {
             <Link to="/legal/terms" className="text-slate-500 dark:text-slate-400 hover:text-navy-700 dark:hover:text-navy-300">Terms</Link>
             <Link to="/legal/privacy" className="text-slate-500 dark:text-slate-400 hover:text-navy-700 dark:hover:text-navy-300">Privacy</Link>
             <Link to="/legal/disclaimer" className="text-slate-500 dark:text-slate-400 hover:text-navy-700 dark:hover:text-navy-300">Disclaimer</Link>
+            <Link to="/methodology" className="text-slate-500 dark:text-slate-400 hover:text-navy-700 dark:hover:text-navy-300">How we compute this</Link>
             <a href="https://www.opm.gov/retirement-center/" className="text-slate-500 dark:text-slate-400 hover:text-navy-700 dark:hover:text-navy-300" target="_blank" rel="noreferrer">OPM.gov</a>
             <a href="https://www.tsp.gov" className="text-slate-500 dark:text-slate-400 hover:text-navy-700 dark:hover:text-navy-300" target="_blank" rel="noreferrer">TSP.gov</a>
           </div>

@@ -38,6 +38,7 @@ const LegalDisclaimer = lazy(() => import('./components/LegalDisclaimer'));
 const PublicLayout = lazy(() => import('./components/public/PublicLayout'));
 const LandingPage = lazy(() => import('./components/public/LandingPage'));
 const PricingPage = lazy(() => import('./components/public/PricingPage'));
+const MethodologyPage = lazy(() => import('./components/public/MethodologyPage'));
 const PublicFersCalculator = lazy(() => import('./components/public/PublicFersCalculator'));
 const PublicSrsCalculator = lazy(() => import('./components/public/PublicSrsCalculator'));
 const PlanDashboard = lazy(() => import('./components/plan/PlanDashboard'));
@@ -281,6 +282,7 @@ function AuthenticatedApp() {
             <Route path="/legal/terms" element={<LegalTerms />} />
             <Route path="/legal/privacy" element={<LegalPrivacy />} />
             <Route path="/legal/disclaimer" element={<LegalDisclaimer />} />
+            <Route path="/methodology" element={<MethodologyPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
@@ -322,6 +324,7 @@ function AppContent() {
             <Route element={<PublicLayout />}>
               <Route path="/" element={<LandingPage />} />
               <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/methodology" element={<MethodologyPage />} />
               <Route path="/calculators/fers-pension" element={<PublicFersCalculator />} />
               <Route
                 path="/calculators/special-retirement-supplement"
