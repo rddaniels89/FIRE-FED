@@ -483,7 +483,7 @@ const RULE_LIST = [
       'For each age from today to the plan end age: inflows (salary, annuity, supplement, Social Security, side income, spouse) − outflows (spending, healthcare, taxes, penalties, contributions) = need; fund the need from savings in withdrawal order. Sustainable if no year records a shortfall and the ending balance is ≥ 0',
     plainEnglish:
       'A plan is sustainable when every year through the end age can be paid for from income and savings without running out. It is a projection under stated assumptions, not a guarantee.',
-    source: { name: 'FireFed timeline model (src/lib/projection/timeline.js)', url: 'https://github.com/rddaniels89/fed-fire' },
+    source: { name: 'FireFed timeline model (src/lib/projection/timeline.js)', url: 'https://github.com/rddaniels89/FIRE-FED' },
     verifiedAgainst: 'src/lib/projection/__tests__/timeline.test.js',
     inputs: ['every scenario field', 'assumptions.endAge', 'expectedReturn', 'inflationRate'],
     caveats: ['Deterministic: one expected return every year. The Monte Carlo view shows the spread.', 'Taxes are solved by fixed-point iteration each year, because withdrawals change taxes and taxes change the withdrawal.'],
@@ -496,7 +496,7 @@ const RULE_LIST = [
       'Bridge years = years from separation until guaranteed income ≥ spending + healthcare. Bridge need = withdrawals in those years + any shortfall. Funded % = withdrawals ÷ need',
     plainEnglish:
       'The bridge is the stretch between leaving federal service and the first year that pension, supplement and Social Security cover your spending. It is what savings have to carry.',
-    source: { name: 'FireFed timeline model (src/lib/projection/timeline.js)', url: 'https://github.com/rddaniels89/fed-fire' },
+    source: { name: 'FireFed timeline model (src/lib/projection/timeline.js)', url: 'https://github.com/rddaniels89/FIRE-FED' },
     verifiedAgainst: 'src/lib/projection/__tests__/timeline.test.js',
     inputs: ['separationAge', 'annuityStartAge', 'socialSecurityClaimAge', 'monthlyFireIncomeGoal', 'healthcare'],
     caveats: ['The supplement is bridge income by construction: it exists only between retirement and 62.'],
@@ -521,7 +521,7 @@ const RULE_LIST = [
     formula: 'The earliest whole-year separation age from today to 75 for which the timeline is sustainable, with the annuity start reset to the path default',
     plainEnglish:
       'FireFed tries each separation age in turn and reports the first one at which the plan never runs dry. It is a projection under your assumptions, not a recommendation.',
-    source: { name: 'FireFed FIRE date search (src/lib/projection/fireDate.js)', url: 'https://github.com/rddaniels89/fed-fire' },
+    source: { name: 'FireFed FIRE date search (src/lib/projection/fireDate.js)', url: 'https://github.com/rddaniels89/FIRE-FED' },
     verifiedAgainst: 'src/lib/projection/__tests__/fireDateAndDeltas.test.js',
     inputs: ['every scenario field'],
     caveats: ['Whole years only.', 'A chosen annuity start age later than the candidate separation is kept; otherwise the path default applies.'],
@@ -534,7 +534,7 @@ const RULE_LIST = [
       'Each simulation runs the full timeline with a yearly return drawn from Normal(expected return, portfolio σ), clamped to ±65%. Portfolio σ = √Σ(weight × fund σ)², fund σ: G 1%, F 5%, C 16%, S 18%, I 17%. Success = share of simulations with no shortfall through the end age',
     plainEnglish:
       'The same year-by-year model is run hundreds of times with different return sequences. The pension, supplement, taxes and penalties behave exactly as in the deterministic view; only the returns vary.',
-    source: { name: 'FireFed Monte Carlo (src/lib/analytics/monteCarlo.js)', url: 'https://github.com/rddaniels89/fed-fire' },
+    source: { name: 'FireFed Monte Carlo (src/lib/analytics/monteCarlo.js)', url: 'https://github.com/rddaniels89/FIRE-FED' },
     verifiedAgainst: 'src/lib/analytics tests; seeded for reproducibility',
     inputs: ['allocation', 'expectedReturnPercent', 'simulations', 'seed'],
     caveats: ['Fund volatilities are coarse and correlations are ignored, which understates portfolio risk somewhat.', 'Returns are drawn independently each year; no mean reversion or sequence modelling.'],

@@ -196,6 +196,17 @@ test.describe('Smoke: core flows', () => {
     await expect(page.getByText('Payments begin at')).toBeVisible();
   });
 
+  test('The methodology page is readable without an account and lists the rules', async ({ page }) => {
+    await page.goto('/methodology');
+    await expect(page.getByRole('heading', { level: 1, name: 'How we compute this' })).toBeVisible();
+    // A published OPM figure, reproduced.
+    await expect(page.getByText('$750.00')).toBeVisible();
+    // The rule table is generated from the registry, so at least one source link must be present.
+    await expect(page.getByRole('link', { name: /OPM — FERS computation/ }).first()).toBeVisible();
+    // Reachable from the public shell at every width (the header nav collapses on phones).
+    await expect(page.getByRole('contentinfo').getByRole('link', { name: 'How we compute this' })).toBeVisible();
+  });
+
   test('Pricing is readable without an account', async ({ page }) => {
     await page.goto('/pricing');
     await expect(page.getByText('$9.99')).toBeVisible();
