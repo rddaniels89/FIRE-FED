@@ -126,6 +126,21 @@ test.describe('Smoke: core flows', () => {
     await expect(page.getByRole('link', { name: /Scenarios/ })).toHaveCount(0);
   });
 
+  // Consent must be opt-in: present, unchecked, and never a condition of signup.
+  test('Signup offers marketing consent as an unchecked, optional checkbox', async ({ page }) => {
+    await page.goto('/signin');
+    const box = page.getByRole('checkbox', {
+      name: 'Send me FireFed federal retirement updates, product education, and planning emails.',
+    });
+    await expect(box).toBeVisible();
+    await expect(box).not.toBeChecked();
+    await expect(box).not.toHaveAttribute('required', /.*/);
+
+    // Not part of signing in.
+    await page.goto('/signin?mode=signin');
+    await expect(box).toHaveCount(0);
+  });
+
   test('The auth screen defaults to sign-up and can be switched to sign-in', async ({ page }) => {
     await page.goto('/signin');
     await expect(page.getByRole('heading', { name: /Create your free account/i })).toBeVisible();

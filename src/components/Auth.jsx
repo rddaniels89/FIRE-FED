@@ -5,6 +5,7 @@ import { supabase, isSupabaseAvailable } from '../supabaseClient'
 import AnimatedFlame from './AnimatedFlame'
 import { useAuth } from '../contexts/AuthContext'
 import { trackEvent } from '../lib/telemetry'
+import { NEWSLETTER_CONSENT_LABEL, buildNewsletterConsentMetadata } from '../lib/auth/newsletterConsent'
 
 const allowGuestPreview = import.meta.env.VITE_ALLOW_GUEST_PREVIEW === 'true'
 
@@ -19,6 +20,8 @@ const Auth = ({ onAuthSuccess }) => {
   const [searchParams] = useSearchParams()
   const [isSignUp, setIsSignUp] = useState(searchParams.get('mode') !== 'signin')
   const [message, setMessage] = useState('')
+  // Marketing consent is opt-in: unchecked until the user ticks it.
+  const [newsletterOptIn, setNewsletterOptIn] = useState(false)
 
   const handleAuth = async (e) => {
     e.preventDefault()
@@ -39,6 +42,8 @@ const Auth = ({ onAuthSuccess }) => {
         result = await supabase.auth.signUp({
           email,
           password,
+          // Lands in auth.users.raw_user_meta_data -> user.user_metadata.
+          options: { data: buildNewsletterConsentMetadata({ optedIn: newsletterOptIn }) },
         })
         if (result.error) throw result.error
         if (result.data?.user && !result.data.user.email_confirmed_at) {
@@ -172,6 +177,20 @@ const Auth = ({ onAuthSuccess }) => {
               />
             </div>
           </div>
+
+          {isSignUp && (
+            <label htmlFor="newsletterOptIn" className="flex items-start gap-3 cursor-pointer">
+              <input
+                id="newsletterOptIn"
+                name="newsletterOptIn"
+                type="checkbox"
+                checked={newsletterOptIn}
+                onChange={(e) => setNewsletterOptIn(e.target.checked)}
+                className="mt-1 h-4 w-4 shrink-0"
+              />
+              <span className="text-sm text-slate-600 dark:text-slate-300">{NEWSLETTER_CONSENT_LABEL}</span>
+            </label>
+          )}
 
           {message && (
             <div className={`text-sm text-center ${message.includes('error') || message.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
