@@ -3,6 +3,7 @@ import { supabase, isSupabaseAvailable } from '../supabaseClient';
 import { getEntitlements, hasEntitlement } from '../lib/entitlements';
 import { isActiveSubscriptionStatus, isLocalOnlyUser, isProFromTrustedMetadata } from '../lib/auth/session';
 import { resolveWithTimeout } from '../lib/auth/withTimeout';
+import { syncNewsletterSubscription } from '../lib/auth/newsletterSync';
 import { identifyUser, resetIdentity, trackEvent } from '../lib/telemetry';
 
 /**
@@ -149,6 +150,13 @@ export const AuthProvider = ({ children }) => {
             setUser(session.user);
             setIsAuthenticated(true);
             identifyUser(session.user.id);
+            // Deliberately not awaited: the newsletter sync must never hold up
+            // sign-in, and it decides for itself whether there is anything to
+            // do (consent given, email confirmed, not already synced).
+            void syncNewsletterSubscription({
+              session,
+              persist: (data) => supabase.auth.updateUser({ data }),
+            });
             await refreshSubscription(session.user.id);
           } else {
             setUser(null);
