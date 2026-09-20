@@ -11,11 +11,15 @@
  *
  * Interest. None accrues until the interest-accrual date (IAD), two years
  * after the first FERS-covered appointment, or after reemployment in a USERRA
- * case. From the IAD, interest accrues on the unpaid balance at each calendar
- * year's variable rate and is posted, compounded, on each anniversary of the
- * IAD. A deposit paid in full before the first posting therefore carries no
- * interest at all. Within an accrual year that spans two calendar years, each
- * year's rate applies to its own days.
+ * case. On each anniversary of the IAD the agency assesses a year's interest
+ * on whatever balance is then unpaid, compounded (BAL 24-301: "assess
+ * interest on the unpaid balance ... on an employee's interest accrual date,
+ * and interest is compounded annually"). The rate for that year is OPM's
+ * composite: the prior calendar year's rate for the months before 1 January
+ * and the new year's rate after, on a 30-day-month count, which is exactly
+ * the table OPM attaches to each BAL. A remittance received before the
+ * anniversary reduces the balance the interest is assessed on, so a deposit
+ * paid in full before its first anniversary carries no interest at all.
  *
  * Payments. Applied on their dates to the oldest unpaid period first. A period
  * earns FERS credit only when its own principal and posted interest are fully
@@ -27,9 +31,9 @@
  * agency status of paid in full credits every creditable period whatever the
  * arithmetic says.
  *
- * Sources: 5 U.S.C. 8422(e); CSRS/FERS Handbook chapters 22 and 23; OPM
- * creditable-service page. The posting and proration conventions are marked
- * for verification against an agency computation in docs/MILITARY-VERIFICATION.md.
+ * Sources: 5 U.S.C. 8422(e); CSRS/FERS Handbook chapters 22 and 23; OPM BALs
+ * 17-306 through 26-301 and their composite-rate attachments. What remains
+ * to be checked against an agency computation is in docs/MILITARY-VERIFICATION.md.
  */
 
 import { getFersContributionRate } from '../calculations/fers';
@@ -39,7 +43,7 @@ import {
   fersMilitaryDepositRate,
 } from './depositRates';
 import { ISSUE_CODES, raiseIssue } from './status';
-import { daysBetween, normalizeMilitaryServicePeriods, parseIsoDate, toIsoDate } from './servicePeriods';
+import { normalizeMilitaryServicePeriods, parseIsoDate, toIsoDate } from './servicePeriods';
 
 export const DEPOSIT_MODES = Object.freeze({ ESTIMATE: 'estimate', OFFICIAL_BALANCE: 'official_balance' });
 export const DEPOSIT_METHODS = Object.freeze({ STANDARD: 'standard', USERRA_LOWER_OF: 'userra_lower_of' });
@@ -113,9 +117,24 @@ function addYears(date, years) {
 }
 
 /**
+ * Days from `a` to `b` on OPM's 30-day-month, 360-day-year count, which is the
+ * convention the composite-rate tables attached to each BAL are built on: a
+ * full month counts 30 whatever the calendar says, the day of the month moves
+ * the composite by 1/360 of the rate difference, and the 31st of any month is
+ * the 30th (the tables' 31 January 2020 and 31 December 2022 values only
+ * reconcile that way, so this is the "30E/360" form rather than the US one).
+ */
+export function days360(a, b) {
+  const d1 = Math.min(30, a.getUTCDate());
+  const d2 = Math.min(30, b.getUTCDate());
+  return (b.getUTCFullYear() - a.getUTCFullYear()) * 360 + (b.getUTCMonth() - a.getUTCMonth()) * 30 + (d2 - d1);
+}
+
+/**
  * Interest on `balance` over the half-open interval [from, to), at each
- * calendar year's variable rate for its own days. Returns the interest and
- * the rate rows used, so a missing or unverified rate can be reported.
+ * calendar year's variable rate for its own 30/360 days. Over a whole accrual
+ * year this reproduces OPM's published composite rate for that IAD. Returns
+ * the interest and the rate rows used, so a missing rate can be reported.
  */
 function accrueInterest(balance, from, to) {
   let interest = 0;
@@ -126,12 +145,11 @@ function accrueInterest(balance, from, to) {
     const year = cursor.getUTCFullYear();
     const nextYear = new Date(Date.UTC(year + 1, 0, 1));
     const end = nextYear.getTime() < to.getTime() ? nextYear : to;
-    const days = daysBetween(cursor, end);
-    const daysInYear = daysBetween(new Date(Date.UTC(year, 0, 1)), nextYear);
+    const days = Math.max(0, days360(cursor, end));
     const row = fersDepositInterestRate(year);
     if (!row) missing = true;
     else {
-      interest += balance * row.rate * (days / daysInYear);
+      interest += balance * row.rate * (days / 360);
       used.push(row);
     }
     cursor = end;

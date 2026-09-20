@@ -4,6 +4,7 @@ import {
   DEPOSIT_MODES,
   compareDepositInCalculator,
   computeMilitaryDepositPrincipal,
+  days360,
   estimateMilitaryDeposit,
   projectMilitaryDepositBalance,
 } from '../deposit';
@@ -21,9 +22,9 @@ import { createDefaultMilitary } from '../../scenarios/schema';
 import { calculateFersResults } from '../../calculations/fers';
 
 /**
- * Deposit cases from spec §14.1 (1–10, 16–17). The goldens are hand-computed
- * from the stated rules; docs/MILITARY-VERIFICATION.md lists the Handbook
- * examples still to be reproduced.
+ * Deposit cases from spec §14.1 (1–10, 16–17), plus goldens that reproduce
+ * OPM's published composite-rate tables. docs/MILITARY-VERIFICATION.md lists
+ * the Handbook worked examples still to be reproduced.
  */
 
 const official = (overrides = {}) =>
@@ -56,16 +57,19 @@ describe('rate tables', () => {
     expect(fersMilitaryDepositRate('default')).toBe(0.03);
   });
 
-  it('carries a rate for every year from 1985 to the current year, with the current two verified', () => {
+  it('carries a verified rate with a named source for every year from 1985 to the current year', () => {
     for (let y = FIRST_DEPOSIT_INTEREST_RATE_YEAR; y <= LAST_DEPOSIT_INTEREST_RATE_YEAR; y += 1) {
       const row = FERS_DEPOSIT_INTEREST_RATES[y];
       expect(row, `rate for ${y}`).toBeDefined();
       expect(row.rate).toBeGreaterThan(0);
       expect(row.rate).toBeLessThan(0.2);
+      expect(row.verified, `${y} verified`).toBe(true);
+      expect(row.source, `${y} source`).toMatch(/BAL|reference materials|composite/);
     }
-    expect(FERS_DEPOSIT_INTEREST_RATES[2026].verified).toBe(true);
-    expect(FERS_DEPOSIT_INTEREST_RATES[2025].verified).toBe(true);
-    expect(FERS_DEPOSIT_INTEREST_RATES[2024].verified).toBe(false);
+    // The three figures corrected on verification, pinned to their letters.
+    expect(FERS_DEPOSIT_INTEREST_RATES[2018].rate).toBe(0.02125);
+    expect(FERS_DEPOSIT_INTEREST_RATES[2023].rate).toBe(0.01875);
+    expect(FERS_DEPOSIT_INTEREST_RATES[2024].rate).toBe(0.0375);
   });
 
   it('agrees with the annual-parameters figure for the current year', () => {
@@ -78,6 +82,15 @@ describe('rate tables', () => {
     expect(future.assumed).toBe(true);
     expect(future.verified).toBe(false);
     expect(fersDepositInterestRate(1970)).toBeNull();
+  });
+
+  it('counts days the way OPM does: 30-day months', () => {
+    const d = (iso) => new Date(`${iso}T00:00:00Z`);
+    expect(days360(d('2024-03-01'), d('2025-01-01'))).toBe(300);
+    expect(days360(d('2024-01-01'), d('2024-02-01'))).toBe(30);
+    expect(days360(d('2024-02-01'), d('2024-03-01'))).toBe(30);
+    expect(days360(d('2024-01-31'), d('2024-02-28'))).toBe(28);
+    expect(days360(d('2023-12-01'), d('2024-12-01'))).toBe(360);
   });
 });
 
@@ -154,10 +167,10 @@ describe('interest and payments (cases 4–10, 17)', () => {
     expect(r.ledger).toEqual([]);
   });
 
-  it('case 6: the first posting is on the first anniversary of the IAD, prorated across the two calendar years', () => {
+  it('case 6: the first posting is on the first anniversary of the IAD, at the composite of the two calendar years', () => {
     const r = project({ asOfDate: '2025-03-01' });
-    // 1 Mar 2024 → 1 Jan 2025 at the 2024 rate (306 days of 366), then 59 days of 2025 (of 365).
-    const expected = 1000 * (0.0475 * (306 / 366) + 0.04375 * (59 / 365));
+    // 1 Mar 2024 → 1 Jan 2025 is ten 30-day months at the 2024 rate, then two months of 2025.
+    const expected = 1000 * (0.0375 * (300 / 360) + 0.04375 * (60 / 360));
     expect(r.totalInterest).toBeCloseTo(expected, 2);
     expect(r.ledger).toHaveLength(1);
     expect(r.ledger[0]).toMatchObject({ date: '2025-03-01', type: 'interest' });
@@ -167,11 +180,11 @@ describe('interest and payments (cases 4–10, 17)', () => {
   it('case 7: compounds annually across different rates', () => {
     const one = project({ asOfDate: '2025-03-01' });
     const two = project({ asOfDate: '2026-03-01' });
-    const secondYear = one.balance * (0.04375 * (306 / 365) + 0.0425 * (59 / 365));
+    const secondYear = one.balance * (0.04375 * (300 / 360) + 0.0425 * (60 / 360));
     expect(two.totalInterest).toBeCloseTo(one.totalInterest + secondYear, 1);
     expect(two.ledger).toHaveLength(2);
     expect(two.ratesUsed.map((r) => r.year)).toEqual([2024, 2025, 2026]);
-    expect(two.ratesUnverified).toBe(true); // 2024 is transcribed, not verified
+    expect(two.ratesUnverified).toBe(false);
   });
 
   it('a payoff within the first accrual year carries no interest at all', () => {
@@ -184,9 +197,9 @@ describe('interest and payments (cases 4–10, 17)', () => {
 
   it('a partial payment reduces the balance the next posting is computed on', () => {
     const partial = project({ payments: [{ date: '2024-09-01', amount: 500 }], asOfDate: '2025-03-01' });
-    // Interest: 1 Mar → 1 Sep on 1000, then 1 Sep → 1 Mar on 500.
-    const first = 1000 * 0.0475 * (184 / 366);
-    const second = 500 * (0.0475 * (122 / 366) + 0.04375 * (59 / 365));
+    // Interest: 1 Mar → 1 Sep on 1000 (six months), then 1 Sep → 1 Mar on 500 (four months of 2024, two of 2025).
+    const first = 1000 * 0.0375 * (180 / 360);
+    const second = 500 * (0.0375 * (120 / 360) + 0.04375 * (60 / 360));
     expect(partial.totalInterest).toBeCloseTo(first + second, 2);
     expect(partial.byPeriod.p1.paidInFullDate).toBeNull();
     expect(partial.balance).toBeCloseTo(500 + first + second, 2);
@@ -219,6 +232,43 @@ describe('interest and payments (cases 4–10, 17)', () => {
   });
 });
 
+describe('golden: reproduces OPM\'s published composite-rate tables', () => {
+  /** The composite for an IAD is the interest on $1 over the accrual year ending that day. */
+  const composite = (iadIso) => {
+    const [y, m, d] = iadIso.split('-').map(Number);
+    const start = `${y - 1}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const r = projectMilitaryDepositBalance({ principalByPeriod: { p: { principal: 100000 } }, periodOrder: ['p'], interestAccrualDate: start, asOfDate: iadIso });
+    return r.totalInterest / 100000;
+  };
+
+  it('BAL 24-301 attachment: interest accrual dates in 2024', () => {
+    expect(composite('2024-01-01')).toBeCloseTo(0.01875, 5);
+    expect(composite('2024-02-01')).toBeCloseTo(0.02031, 4);
+    expect(composite('2024-02-02')).toBeCloseTo(0.02036, 4);
+    expect(composite('2024-03-01')).toBeCloseTo(0.02188, 4);
+    expect(composite('2024-07-01')).toBeCloseTo(0.02813, 4);
+    expect(composite('2024-12-01')).toBeCloseTo(0.03594, 4);
+  });
+
+  it('2020 attachment: interest accrual dates in 2020', () => {
+    expect(composite('2020-01-01')).toBeCloseTo(0.0275, 5);
+    expect(composite('2020-12-01')).toBeCloseTo(0.02292, 4);
+    expect(composite('2020-01-31')).toBeCloseTo(0.0271, 4);
+  });
+
+  it('2022 attachment: a flat year when both rates are equal', () => {
+    expect(composite('2022-01-01')).toBeCloseTo(0.01375, 5);
+    expect(composite('2022-06-15')).toBeCloseTo(0.01375, 5);
+    expect(composite('2022-12-31')).toBeCloseTo(0.01375, 5);
+  });
+
+  it('BAL 25-301 Table 1: interest accrual dates in 2025', () => {
+    expect(composite('2025-01-01')).toBeCloseTo(0.0375, 5);
+    expect(composite('2025-07-01')).toBeCloseTo(0.04063, 4);
+    expect(composite('2025-12-01')).toBeCloseTo(0.04323, 4);
+  });
+});
+
 describe('estimateMilitaryDeposit: modes, credit, and issues', () => {
   const AS_OF = '2026-09-01';
 
@@ -231,7 +281,16 @@ describe('estimateMilitaryDeposit: modes, credit, and issues', () => {
     expect(r.balance).toBeCloseTo(r.principal + r.interest, 2);
     expect(r.creditedPeriodIds).toEqual([]);
     expect(codes(r)).toContain(ISSUE_CODES.MIL_DEPOSIT_PARTIAL);
-    expect(codes(r)).toContain(ISSUE_CODES.MIL_DEPOSIT_INTEREST_UNVERIFIED); // 2022–2024 rates are transcribed
+    // Every rate in the window is verified, so no interest warning is raised.
+    expect(codes(r)).not.toContain(ISSUE_CODES.MIL_DEPOSIT_INTEREST_UNVERIFIED);
+  });
+
+  it('warns when the interest-accrual date is unknown', () => {
+    const r = estimateMilitaryDeposit({ military: military({}), hireCohort: 'fers_frae', asOfDate: AS_OF });
+    expect(r.interestAccrualDate).toBeNull();
+    expect(r.interest).toBe(0);
+    const issue = r.issues.find((i) => i.code === ISSUE_CODES.MIL_DEPOSIT_INTEREST_UNVERIFIED);
+    expect(issue.detail.reason).toBe('interest_accrual_date_unknown');
   });
 
   it('case 4: an official balance overrides the estimate and is projected from its through-date', () => {

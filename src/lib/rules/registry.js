@@ -650,17 +650,17 @@ const RULE_LIST = [
     id: 'military.deposit_interest',
     category: 'military',
     title: 'Military service deposit: interest',
-    formula: 'Interest-accrual date (IAD) = 2 years after the first FERS-covered appointment (or USERRA reemployment). From the IAD, interest accrues on the unpaid balance at each calendar year\'s variable rate for its own days and is posted, compounded, on each IAD anniversary. Payments are applied on their dates to the oldest unpaid period first. A deposit paid in full before the first posting carries no interest.',
+    formula: 'Interest-accrual date (IAD) = 2 years after the first FERS-covered appointment (or USERRA reemployment). On each IAD anniversary the unpaid balance is charged a year\'s interest at OPM\'s composite rate (the prior calendar year\'s rate for the months before 1 January and the new year\'s rate after, on a 30-day-month count), compounded. Payments received before the anniversary reduce the balance charged. A deposit paid in full before its first anniversary carries no interest.',
     plainEnglish:
-      'You get two interest-free years from when you first became covered by FERS. After that the unpaid balance earns interest at the rate Treasury sets each year, added once a year. Pay it off within the first year after the grace period and you pay no interest at all. Each period of service counts only once its own share is fully paid.',
-    source: { name: 'OPM — creditable service and annual interest rates', url: OPM_CREDITABLE_SERVICE },
+      'You get two interest-free years from when you first became covered by FERS. After that the unpaid balance is charged interest once a year, on the anniversary, at a blend of the two calendar-year rates Treasury set for that year. Pay it off before the first anniversary and you pay no interest at all. Each period of service counts only once its own share is fully paid.',
+    source: { name: 'OPM — Benefits Administration Letters, calendar-year interest rate (e.g. BAL 24-301)', url: 'https://www.opm.gov/retirement-center/publications-forms/benefits-administration-letters/' },
     statute: '5 U.S.C. 8422(e)(3), 8334(e)',
-    verifiedAgainst: 'OPM BAL 26-301 for the 2026 rate and BAL 25-301 for 2025; earlier rates transcribed from OPM\'s published series and flagged unverified in src/lib/military/depositRates.js; posting and proration conventions listed in docs/MILITARY-VERIFICATION.md',
+    verifiedAgainst: 'Every rate 1985–2026 checked 2026-09-20: OPM reference-materials table (1985–2017), BALs 17-306, 18-306, 19-308, 20-307, 23-301, 24-301, 25-301, 26-301, and the 2020, 2022 and 2024 composite-rate attachments, which the engine reproduces (src/lib/military/__tests__/deposit.test.js)',
     inputs: ['military.deposit.firstFersCoverageDate', 'military.deposit.interestAccrualDate', 'military.deposit.payments', 'military.deposit.plannedPaymentDate'],
     caveats: [
-      'Interest within an accrual year that spans two calendar years is prorated by days at each year\'s rate; an agency worksheet may apply a single rate. The difference is small and the official balance controls.',
-      'Interest rates before 2025 are transcribed and not yet verified; any figure that depends on them is labelled an estimate.',
+      'When several periods are owed, payments are applied to the oldest first; an agency may record a different allocation, and its record controls.',
       'An official balance entered with its through-date replaces the computed balance from that date forward.',
+      'A remittance counts on the day the agency receives it, not the postmark (BAL 24-301).',
     ],
   }),
   rule({

@@ -97,8 +97,10 @@ Goal: replace the `high-3 × years × 1%` shortcut and the recommendation flag.
 - [x] `src/lib/military/depositRates.js`: deposit rate by year and the variable
       interest rate back to 1985 (kept beside the engine rather than in the
       per-year `annualParameters` blocks; a test pins the current year to
-      `fers.refundInterestRate`). `[-]` rates before 2025 are transcribed and need
-      human verification against OPM; see `docs/MILITARY-VERIFICATION.md`.
+      `fers.refundInterestRate`). Every year 1985–2026 verified against OPM's
+      reference table and BALs on 2026-09-20; three transcription errors corrected
+      (see `docs/MILITARY-VERIFICATION.md`). Interest uses OPM's composite rate on
+      a 30/360 count, reproduced from the BAL attachments in tests.
 - [x] Whole-plan comparison: run the plan twice (baseline vs credit with deposit
       cash flows) and return the delta: eligibility date, gross and after-tax
       annuity, simple and discounted break-even, NPV, survivor difference (§6.5,
@@ -319,7 +321,6 @@ primary source (§21):
 
 | Data | Pass | Source |
 |---|---|---|
-| FERS deposit interest rates by year, 1985 onward | 3 | OPM service-credit page and BALs |
 | VA compensation and DIC tables, 2026 | 4 | va.gov rates pages |
 | State military-retired-pay tax treatment, all states | 4 | each state revenue department |
 | Military basic pay tables, 2024–2026 | 7 | DFAS pay tables |
