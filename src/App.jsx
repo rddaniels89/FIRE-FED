@@ -44,6 +44,7 @@ const PublicSrsCalculator = lazy(() => import('./components/public/PublicSrsCalc
 const PlanDashboard = lazy(() => import('./components/plan/PlanDashboard'));
 const PlanInputs = lazy(() => import('./components/plan/PlanInputs'));
 const CareerSimulator = lazy(() => import('./components/plan/CareerSimulator'));
+const MilitaryPlanPage = lazy(() => import('./components/plan/MilitaryPlanPage'));
 const AssumptionsPage = lazy(() => import('./components/AssumptionsPage'));
 
 /** Routing is client-side, so pageviews have to be reported explicitly. */
@@ -272,6 +273,7 @@ function AuthenticatedApp() {
             <Route path="/plan" element={<PlanDashboard />} />
             <Route path="/plan/inputs" element={<PlanInputs />} />
             <Route path="/plan/career" element={<CareerSimulator />} />
+            <Route path="/plan/military" element={<MilitaryPlanPage />} />
             <Route path="/assumptions" element={<AssumptionsPage />} />
             <Route path="/tsp-forecast" element={<TSPForecast />} />
             <Route path="/fers-pension" element={<FERSPensionCalc />} />

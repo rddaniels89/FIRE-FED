@@ -425,6 +425,8 @@ export function resolveRetirementPlan(scenario, options = {}) {
       hasRecordedService: militaryCredit.hasRecordedService,
       creditedPeriodIds: militaryCredit.creditedPeriodIds,
       recordedYears: militaryCredit.normalized.totals.creditableYears + militaryCredit.normalized.totals.undatedApproximateYears,
+      /** Each recorded period with its classification, for the screens. */
+      normalizedPeriods: militaryCredit.normalized.periods,
       separationDate,
       deposit: {
         mode: militaryCredit.deposit.mode,

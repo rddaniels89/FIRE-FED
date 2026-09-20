@@ -751,6 +751,47 @@ export function createRetirementReportPdf({
     );
   }
 
+  // ---------------- Military service and income (when recorded) ----------------
+  const mil = plan.military;
+  const milStreams = mil?.incomeStreams ?? [];
+  if (mil && (mil.hasRecordedService || milStreams.length > 0 || mil.retiredPay?.receives === 'yes')) {
+    doc.section(null, 'Military service and income');
+    doc.keyValues([
+      { label: 'Service FireFed modeled', value: mil.creditYears > 0 ? `${years(mil.creditYears)}${mil.status === 'estimate_only' ? ' (estimate)' : ''}` : `None credited${mil.reason ? ` (${String(mil.reason).replace(/_/g, ' ')})` : ''}` },
+      { label: 'Service recorded', value: years(mil.recordedYears) },
+      { label: mil.deposit?.mode === 'official_balance' ? 'Official deposit balance' : 'Estimated deposit balance', value: `${money(mil.deposit?.balance)} as of ${text(mil.deposit?.projectionDate)}` },
+      mil.deposit?.principal != null ? { label: 'Estimated principal / interest', value: `${money(mil.deposit.principal)} / ${money(mil.deposit.interest)}` } : null,
+      { label: 'Military retired pay', value: mil.retiredPay?.receives === 'yes' ? `${text(mil.retiredPay.type).replace(/_/g, ' ')}; path: ${text(mil.retiredPay.path).replace(/_/g, ' ')}` : mil.retiredPay?.receives === 'unknown' ? 'Not sure' : 'None' },
+    ].filter(Boolean));
+    if (milStreams.length > 0) {
+      doc.table(
+        [
+          { label: 'Stream', width: 50, align: 'left' },
+          { label: 'Whose', width: 18, align: 'left' },
+          { label: 'Per year' },
+          { label: 'Federal tax', width: 34, align: 'left' },
+          { label: 'Included', width: 20, align: 'left' },
+        ],
+        milStreams.map((s) => [
+          text(s.label),
+          s.ownerId === 'spouse' ? 'Spouse' : 'Me',
+          s.resolved?.annualGross > 0 ? money(s.resolved.annualGross) : '—',
+          text(s.resolved?.federalTaxClass).replace(/_/g, ' '),
+          s.resolved?.included ? (s.resolved.estimate ? 'Yes (estimate)' : 'Yes') : 'No',
+        ])
+      );
+    }
+    const blocking = (mil.issues ?? []).filter((i) => i.severity === 'block');
+    if (blocking.length > 0) {
+      doc.paragraph('Items that stop a calculation until an official answer is recorded:', { size: 8.5 });
+      doc.bullets(blocking.slice(0, 6).map((i) => `${i.code}: ${i.message}`));
+    }
+    doc.paragraph(
+      'Educational planning estimate, not legal, tax, investment, benefits, or claims advice. FireFed is not affiliated with or endorsed by any government agency. Official records and agency determinations control.',
+      { size: 8, color: [100, 116, 139] }
+    );
+  }
+
   // ---------------- 14. Assumptions ----------------
   doc.section(14, 'Assumptions');
   const tsp = scenario?.tsp ?? {};

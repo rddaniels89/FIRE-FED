@@ -31,6 +31,8 @@ const FEATURE_NOTES = Object.freeze({
   [FEATURES.HOUSEHOLD]: 'A second person, federal or not',
   [FEATURES.CAREER_SIMULATOR]: 'GS grade, step and locality over time',
   [FEATURES.IRMAA]: 'The Medicare surcharge your income triggers',
+  [FEATURES.MILITARY_SCENARIOS]: 'Keep, waive, or exception: the whole plan three ways',
+  [FEATURES.MILITARY_ANALYSIS]: 'What the military deposit is worth, year by year',
 });
 
 const PRO_FEATURE_KEYS = Object.values(FEATURES);

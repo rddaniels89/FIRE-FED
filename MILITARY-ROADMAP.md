@@ -173,22 +173,26 @@ scenario is labelled hypothetical everywhere including the PDF.
 
 Goal: passes 1–5 become usable from the plan without reading code.
 
-- [ ] Household setup question and branching intake (§5.1, §5.2); final screen
-      carries the non-affiliation notice.
-- [ ] Service-period editor with overlap resolution and USERRA prompt (§5.3).
-- [ ] Deposit workflow, official-balance and estimate modes, SF 3108 next steps
+- [x] Household setup question and branching intake (§5.1, §5.2) as the first
+      panel of the Military section on /plan/inputs, with the non-affiliation
+      notice. The goal-first onboarding stepper is unchanged; the section is the
+      entry point.
+- [x] Service-period editor with overlap resolution and USERRA prompt (§5.3).
+- [x] Deposit workflow, official-balance and estimate modes, SF 3108 next steps
       (§5.4).
-- [ ] Income cards, one per stream type, never a combined field (§5.5).
-- [ ] Result views: military snapshot, service-credit comparison, military income
+- [x] Income cards, one per stream type, never a combined field (§5.5).
+- [x] Result views: military snapshot, service-credit comparison, military income
       timeline, assumptions and sources (§5.8); result labels (§5.9); copy blocks
       (§12).
-- [ ] Entitlements: `MILITARY_SCENARIOS`, `MILITARY_ANALYSIS` keys and labels per
-      §13; warnings never gated.
-- [ ] PDF sections for military inputs, comparison, streams, and sources.
-- [ ] Telemetry: coarse events only (`military_module_started`,
-      `service_period_saved`, `official_amount_used`, `unsupported_case_shown`);
-      confirm Sentry scrubbing and no session replay on these routes (§11.3).
-- [ ] Browser tests: keyboard-only onboarding, period add/edit/split/delete,
+- [x] Entitlements: `MILITARY_SCENARIOS` (keep/waive/exception and deposit-timing
+      scenarios) and `MILITARY_ANALYSIS` (NPV, discounted break-even, year-by-year);
+      the deposit comparison itself, every warning, and every block are free.
+- [x] PDF sections for military inputs, comparison, streams, and sources.
+- [x] Telemetry: coarse events only (`military_module_started`,
+      `service_period_saved`, `official_amount_used`, `unsupported_case_shown`),
+      no properties. Sentry is initialised without a replay integration and
+      PostHog without session recording, so nothing on these routes is recorded.
+- [x] Browser tests: keyboard-only onboarding, period add/edit/split/delete,
       overlap resolution, estimate-to-official switch, VA entry with no medical
       field present, delete all military data (§14.4).
 

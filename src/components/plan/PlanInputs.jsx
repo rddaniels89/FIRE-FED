@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { hasEntitlement } from '../../lib/entitlements';
 import YouSection from './inputs/YouSection';
 import ServiceSection from './inputs/ServiceSection';
+import MilitarySection from './inputs/MilitarySection';
 import SavingsSection from './inputs/SavingsSection';
 import SpendingSection from './inputs/SpendingSection';
 import SocialSecuritySection from './inputs/SocialSecuritySection';
@@ -19,6 +20,7 @@ import PlanEmptyState from './PlanEmptyState';
 const SECTIONS = [
   ['you', YouSection],
   ['service', ServiceSection],
+  ['military', MilitarySection],
   ['savings', SavingsSection],
   ['spending', SpendingSection],
   ['social-security', SocialSecuritySection],

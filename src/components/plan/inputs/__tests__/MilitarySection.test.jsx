@@ -1,0 +1,170 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import MilitarySection from '../MilitarySection';
+import { applyScenarioUpdates, createDefaultScenario, normalizeScenario } from '../../../../lib/scenarios/schema';
+
+vi.mock('../../../../lib/telemetry', () => ({ trackEvent: vi.fn() }));
+
+const PERIOD = {
+  id: 'ad',
+  dutyStatus: 'active_duty',
+  startDate: '1998-06-15',
+  endDate: '2002-06-14',
+  characterStatus: 'confirmed_honorable_conditions',
+  documentationStatus: 'dd214',
+  inputProvenance: 'user_entered_official',
+  earningsByYear: { 1998: 10000, 1999: 19000, 2000: 20000, 2001: 21000, 2002: 9000 },
+};
+
+const base = () => normalizeScenario({ ...createDefaultScenario('m'), profile: { currentAge: 50, separationAge: 57 }, fers: { yearsOfService: 19, high3Salary: 100000 } });
+const withMilitary = (military) => applyScenarioUpdates(base(), { military });
+
+function renderSection(scenario, { write = vi.fn(), canUse = () => false } = {}) {
+  render(
+    <MemoryRouter>
+      <MilitarySection scenario={scenario} write={write} open onToggle={() => {}} canUse={canUse} />
+    </MemoryRouter>
+  );
+  return write;
+}
+
+describe('MilitarySection', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('asks the connection question first and hides everything else until it is answered', () => {
+    renderSection(base());
+    expect(screen.getByRole('radio', { name: 'No' })).toBeChecked();
+    expect(screen.queryByText('Service periods')).not.toBeInTheDocument();
+    expect(screen.getByText(/does not ask for a DoD ID, VA file number, unit, duty location, or any medical information/)).toBeInTheDocument();
+  });
+
+  it('writes the connection and reveals the intake, with the non-affiliation notice', () => {
+    const write = renderSection(base());
+    fireEvent.click(screen.getByRole('radio', { name: 'Yes, me' }));
+    expect(write).toHaveBeenCalledWith({ military: { connection: 'self' } });
+    const s = withMilitary({ connection: 'self' });
+    renderSection(s);
+    expect(screen.getAllByText(/not affiliated with or endorsed by those agencies/).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText('Your current relationship to the uniformed services')).toBeInTheDocument();
+  });
+
+  it('adds a service period with active duty preselected and no dates', () => {
+    const write = renderSection(withMilitary({ connection: 'self' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add service period' }));
+    expect(write).toHaveBeenCalledTimes(1);
+    const patch = write.mock.calls[0][0];
+    expect(patch.military.servicePeriods).toHaveLength(1);
+    expect(patch.military.servicePeriods[0]).toMatchObject({ dutyStatus: 'active_duty', startDate: null, endDate: null, characterStatus: 'unknown' });
+  });
+
+  it('shows a period with its status badge, its basic-pay-by-year inputs, and its issues', () => {
+    renderSection(withMilitary({ connection: 'self', servicePeriods: [PERIOD] }));
+    const card = screen.getByTestId('service-period-0');
+    expect(within(card).getByText('Calculated')).toBeInTheDocument();
+    expect(within(card).getByLabelText('Basic pay 1999')).toHaveValue('19000');
+    expect(within(card).getByLabelText('Start date')).toHaveValue('1998-06-15');
+    // Unpaid: the deposit note appears on the period.
+    expect(within(card).getByText(/not recorded as paid in full/)).toBeInTheDocument();
+  });
+
+  it('an unknown character of service shows the determination badge and the block', () => {
+    renderSection(withMilitary({ connection: 'self', servicePeriods: [{ ...PERIOD, characterStatus: 'unknown' }] }));
+    const card = screen.getByTestId('service-period-0');
+    expect(within(card).getByText('Official determination required')).toBeInTheDocument();
+    expect(card.querySelector('[data-issue-code="MIL_CHARACTER_UNKNOWN"]')).not.toBeNull();
+  });
+
+  it('writes a period field change with the whole array', () => {
+    const write = renderSection(withMilitary({ connection: 'self', servicePeriods: [PERIOD] }));
+    fireEvent.change(screen.getByLabelText('Duty status'), { target: { value: 'inactive_duty_training' } });
+    const patch = write.mock.calls[0][0];
+    expect(patch.military.servicePeriods[0].dutyStatus).toBe('inactive_duty_training');
+    expect(patch.military.servicePeriods[0].id).toBe('ad');
+  });
+
+  it('shows the deposit summary and the SF 3108 next steps', () => {
+    renderSection(withMilitary({ connection: 'self', servicePeriods: [PERIOD], deposit: { firstFersCoverageDate: '2010-03-01' } }));
+    const summary = screen.getByTestId('deposit-summary');
+    expect(within(summary).getByText('Estimated principal')).toBeInTheDocument();
+    expect(within(summary).getByText(/submit SF 3108/)).toBeInTheDocument();
+    expect(within(summary).getByText(/not an official service-credit determination/)).toBeInTheDocument();
+  });
+
+  it('switches to official-balance mode fields', () => {
+    const write = renderSection(withMilitary({ connection: 'self' }));
+    fireEvent.click(screen.getByRole('radio', { name: /official balance from my agency/ }));
+    expect(write).toHaveBeenCalledWith({ military: { deposit: { mode: 'official_balance' } } });
+    renderSection(withMilitary({ connection: 'self', deposit: { mode: 'official_balance' } }));
+    expect(screen.getByLabelText('Official balance from your agency')).toBeInTheDocument();
+    expect(screen.getByLabelText('Balance good through')).toBeInTheDocument();
+  });
+
+  it('retired pay: shows the type and waiver fields, never a waiver for chapter 61', () => {
+    renderSection(withMilitary({ connection: 'self', retiredPay: { receives: 'yes', type: 'regular_longevity' } }));
+    expect(screen.getByLabelText('Waiver of retired pay')).toBeInTheDocument();
+    expect(screen.getByText(/FireFed never prepares or submits a waiver/)).toBeInTheDocument();
+    cleanupRender();
+    // The gate speaks only when there is service to credit.
+    renderSection(withMilitary({ connection: 'self', servicePeriods: [PERIOD], retiredPay: { receives: 'yes', type: 'disability_chapter61' } }));
+    expect(screen.queryByLabelText('Waiver of retired pay')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Combat or instrumentality-of-war finding')).toBeInTheDocument();
+    expect(document.querySelector('[data-issue-code="MIL_CH61_OFFICIAL_INPUT_REQUIRED"]')).not.toBeNull();
+  });
+
+  it('adds an income stream of the chosen type', () => {
+    const write = renderSection(withMilitary({ connection: 'self' }));
+    fireEvent.change(screen.getByLabelText('Add income'), { target: { value: 'va_disability' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    const patch = write.mock.calls[0][0];
+    expect(patch.military.incomeStreams).toHaveLength(1);
+    expect(patch.military.incomeStreams[0]).toMatchObject({ type: 'va_disability', grossAmount: null, amountStatus: 'official' });
+  });
+
+  it('a VA stream asks for an amount or a rating and dependents, and nothing medical', () => {
+    renderSection(withMilitary({ connection: 'self', incomeStreams: [{ id: 'va', type: 'va_disability', grossAmount: null }] }));
+    const card = screen.getByTestId('income-stream-0');
+    expect(within(card).getByLabelText('Combined rating')).toBeInTheDocument();
+    expect(within(card).getByLabelText('Children under 18')).toBeInTheDocument();
+    expect(within(card).getByText(/does not estimate conditions, advise on claims, or predict future ratings/)).toBeInTheDocument();
+    expect(within(card).queryByLabelText(/diagnos|condition|claim number|file number/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the estimate note once a rating is chosen, and the staleness note on an old official amount', () => {
+    renderSection(withMilitary({ connection: 'self', incomeStreams: [{ id: 'va', type: 'va_disability', grossAmount: null, amountStatus: 'estimated', vaEstimate: { rating: 70, spouse: true } }] }));
+    expect(document.querySelector('[data-issue-code="MIL_VA_TABLE_ESTIMATE"]')).not.toBeNull();
+    cleanupRender();
+    renderSection(withMilitary({ connection: 'self', incomeStreams: [{ id: 'rp', type: 'longevity_retired_pay', grossAmount: 2500, amountStatus: 'official', officialAmountAsOfDate: '2023-01-01' }] }));
+    expect(document.querySelector('[data-issue-code="MIL_OFFICIAL_AMOUNT_STALE"]')).not.toBeNull();
+  });
+
+  it('gates the survivor scenario behind Pro', () => {
+    renderSection(withMilitary({ connection: 'self' }));
+    expect(screen.getByText(/Model a death and the survivor streams with Pro/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Your age at death (optional)')).toBeDisabled();
+    cleanupRender();
+    renderSection(withMilitary({ connection: 'self' }), { canUse: () => true });
+    expect(screen.getByLabelText('Your age at death (optional)')).not.toBeDisabled();
+  });
+
+  it('deletes all military data only after a second click, and resets the block', () => {
+    const write = renderSection(withMilitary({ connection: 'self', servicePeriods: [PERIOD] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete all military data' }));
+    expect(write).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, delete all military data' }));
+    expect(write).toHaveBeenCalledTimes(1);
+    const patch = write.mock.calls[0][0];
+    expect(patch.military.connection).toBe('none');
+    expect(patch.military.servicePeriods).toEqual([]);
+    expect(patch.military.incomeStreams).toEqual([]);
+  });
+
+  it('links to the military results page', () => {
+    renderSection(withMilitary({ connection: 'self' }));
+    expect(screen.getByRole('link', { name: 'See the military results' })).toHaveAttribute('href', '/plan/military');
+  });
+});
+
+function cleanupRender() {
+  document.body.innerHTML = '';
+}

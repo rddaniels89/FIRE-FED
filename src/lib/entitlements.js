@@ -24,6 +24,10 @@ export const FEATURES = Object.freeze({
   HOUSEHOLD: 'household',
   CAREER_SIMULATOR: 'career_simulator',
   IRMAA: 'irmaa',
+  /** Retired-pay waiver scenarios and alternative deposit payment scenarios. */
+  MILITARY_SCENARIOS: 'military_scenarios',
+  /** Discounted break-even, NPV, sensitivity, and year-by-year deltas for the deposit. */
+  MILITARY_ANALYSIS: 'military_analysis',
 });
 
 export const FEATURE_LABELS = Object.freeze({
@@ -37,6 +41,8 @@ export const FEATURE_LABELS = Object.freeze({
   [FEATURES.HOUSEHOLD]: 'Household and dual-fed modeling',
   [FEATURES.CAREER_SIMULATOR]: 'GS career and High-3 simulator',
   [FEATURES.IRMAA]: 'Medicare IRMAA estimates',
+  [FEATURES.MILITARY_SCENARIOS]: 'Military retired-pay waiver and deposit-timing scenarios',
+  [FEATURES.MILITARY_ANALYSIS]: 'Deposit present value, discounted break-even, and sensitivity',
 });
 
 export const DEFAULT_FREE_SCENARIO_LIMIT = 3;

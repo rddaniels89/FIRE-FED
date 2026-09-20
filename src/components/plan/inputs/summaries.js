@@ -115,3 +115,17 @@ export function assumptionsSummary(scenario) {
   const ret = a.expectedReturnPercent == null ? 'return from TSP allocation' : `${pct(a.expectedReturnPercent)} return`;
   return `Inflation ${pct(scenario.tsp.inflationRate)} · plan to age ${a.endAge} · ${ret} · ${pct(fractionToPercent(a.safeWithdrawalRate))} withdrawal rate`;
 }
+
+export function militarySummary(scenario) {
+  const m = scenario.military ?? {};
+  if (!m.connection || m.connection === 'none') return 'No military connection recorded';
+  const periods = (m.servicePeriods ?? []).length;
+  const streams = (m.incomeStreams ?? []).length;
+  const parts = [
+    `${periods} service period${periods === 1 ? '' : 's'}`,
+    `deposit ${String(m.deposit?.status ?? 'not_requested').replace(/_/g, ' ')}`,
+    m.retiredPay?.receives === 'yes' ? 'receives retired pay' : 'no retired pay',
+    `${streams} income stream${streams === 1 ? '' : 's'}`,
+  ];
+  return parts.join(' · ');
+}
