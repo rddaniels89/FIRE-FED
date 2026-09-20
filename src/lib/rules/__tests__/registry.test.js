@@ -38,6 +38,9 @@ const REQUIRED_IDS = [
   'career.wgi',
   'career.promotion',
   'mc.method',
+  'military.creditability',
+  'military.service_duration',
+  'military.deposit_required',
 ];
 
 describe('rules registry', () => {

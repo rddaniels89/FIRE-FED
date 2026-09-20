@@ -34,6 +34,7 @@ export const RULE_CATEGORIES = Object.freeze({
   fehb: 'FEHB',
   timeline: 'Timeline and projection',
   career: 'Career and pay',
+  military: 'Military service',
 });
 
 const RULE_YEAR = 2026;
@@ -45,6 +46,9 @@ const OPM_FERS_TYPES = 'https://www.opm.gov/retirement-center/fers-information/t
 const OPM_FEHB_PLAN_INFO = 'https://www.opm.gov/healthcare-insurance/healthcare/plan-information/';
 const TSP_TAX_RULES = 'https://www.tsp.gov/publications/tspbk26.pdf';
 const IRS_REV_PROC = 'https://www.irs.gov/pub/irs-drop/rp-25-32.pdf';
+const OPM_CREDITABLE_SERVICE = 'https://www.opm.gov/retirement-center/fers-information/creditable-service/';
+const OPM_HANDBOOK_CH22 = 'https://www.opm.gov/retirement-center/publications-forms/csrsfers-handbook/c022.pdf';
+const OPM_HANDBOOK_CH50 = 'https://www.opm.gov/retirement-center/publications-forms/csrsfers-handbook/c050.pdf';
 
 function rule(def) {
   const { source, inputs, caveats, ...rest } = def;
@@ -566,6 +570,59 @@ const RULE_LIST = [
     verifiedAgainst: 'eCFR 531.214; OPM 2026 salary tables (all 8,700 locality cells reproduced)',
     inputs: ['career.promotions', 'career.localityCode', 'career.annualRaisePercent'],
     caveats: ['The steps 9–10 refinement (adding two within-grade amounts beyond step 10) is not modelled.', 'Locality percentages are held fixed; the January raise applies to base pay only.'],
+  }),
+
+  // -------------------------------------------------------------- Military
+  rule({
+    id: 'military.creditability',
+    category: 'military',
+    title: 'Which military service FERS can credit',
+    formula:
+      'Creditable: active duty, active duty for training, and academy cadet or midshipman time, under honorable conditions. Not creditable: inactive-duty training (drill), state active duty. Full-time National Guard duty under 32 U.S.C. 316, 502, 503, 504 or 505 is creditable only when it interrupted federal civilian service followed by USERRA reemployment. Service after 1956 needs a deposit; service before 1957 does not.',
+    plainEnglish:
+      'Active-duty time served under honorable conditions can count toward your FERS retirement once the deposit is paid. Weekend drills and state duty never count. Full-time Guard duty counts only in the narrow case where you left a federal job for it and came back under reemployment rights. FireFed classifies each period from the facts you enter; your agency and OPM make the determination.',
+    source: { name: 'OPM — creditable service (FERS)', url: OPM_CREDITABLE_SERVICE },
+    statute: '5 U.S.C. 8411(c); CSRS/FERS Handbook ch. 22',
+    verifiedAgainst: 'OPM creditable service page and Handbook chapter 22 sections 22A1.1-2 and 22A4; src/lib/military/servicePeriods.js classifyServicePeriodForFers',
+    inputs: ['military.servicePeriods[].dutyStatus', 'military.servicePeriods[].characterStatus', 'military.servicePeriods[].authoritySection', 'military.servicePeriods[].interruptedFederalService'],
+    caveats: [
+      'Character of service, order authority, and the USERRA interruption are taken from the user; none is inferred from dates or branch.',
+      'ROTC field-training periods after 1964 can be creditable in narrow cases; that rule is not implemented and the period is held for an official determination.',
+      'Whether military retired pay must be waived to credit the service is a separate rule handled with the retired-pay streams.',
+    ],
+  }),
+  rule({
+    id: 'military.service_duration',
+    category: 'military',
+    title: 'How military service is totalled',
+    formula:
+      'Each period = (end date + 1 day) − start date in years, months and days with 30-day months; periods are summed and 30 days carry into a month, 12 months into a year. Periods are split at 1 January for year-specific deposit rates and earnings.',
+    plainEnglish:
+      'OPM adds up service the way it appears on your SF 50: whole years, months and days, treating every month as 30 days. FireFed does the same so the total matches what your agency shows, and separately keeps the exact calendar days in each year for the deposit.',
+    source: { name: 'OPM — CSRS/FERS Handbook ch. 50, computation of service', url: OPM_HANDBOOK_CH50 },
+    statute: 'CSRS/FERS Handbook ch. 50 section 50A2.1-1',
+    verifiedAgainst: 'Handbook chapter 50 30-day-month convention; src/lib/military/servicePeriods.js opmDuration and sumOpmDurations',
+    inputs: ['military.servicePeriods[].startDate', 'military.servicePeriods[].endDate'],
+    caveats: [
+      'Two periods that overlap are excluded from every total until the overlap is resolved or one is marked a sub-period of the other.',
+      'A legacy year count entered before dates were collected is displayed but not credited.',
+    ],
+  }),
+  rule({
+    id: 'military.deposit_required',
+    category: 'military',
+    title: 'Post-1956 military service needs a deposit',
+    formula: 'Service on or after 1 January 1957 is credited only when the military service deposit for that period is paid in full before separation from federal civilian service. Service before 1957 is credited without a deposit.',
+    plainEnglish:
+      'Almost all military service today is after 1956, so it counts toward FERS only if you pay the deposit for it, and you have to finish paying before you leave federal service. Each period is all or nothing: a partly paid period earns no credit.',
+    source: { name: 'OPM — CSRS/FERS Handbook ch. 22, military service', url: OPM_HANDBOOK_CH22 },
+    statute: '5 U.S.C. 8411(c)(1)(B), 8422(e)',
+    verifiedAgainst: 'Handbook chapter 22 section 22A4.1-1; OPM creditable service page',
+    inputs: ['military.servicePeriods[].startDate', 'military.deposit.status'],
+    caveats: [
+      'The deposit rate by service year and the interest computation are the deposit rule, added with the deposit engine.',
+      'Whether a specific period is fully paid is the agency\'s record; FireFed models what the user enters.',
+    ],
   }),
 ];
 

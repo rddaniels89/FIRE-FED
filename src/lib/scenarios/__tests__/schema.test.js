@@ -9,6 +9,7 @@ import {
   translateLegacyUpdates,
 } from '../schema';
 import { fromScenarioRow, toScenarioRow } from '../storage';
+import { normalizeMilitaryServicePeriods } from '../../military/servicePeriods';
 
 describe('scenario schema v3: one profile', () => {
   it('creates a default scenario whose mirrors agree with the profile', () => {
@@ -180,5 +181,141 @@ describe('storage row mapping', () => {
     expect(back.profile.currentAge).toBe(40);
     expect(back.profile.separationAge).toBe(55);
     expect(back.profile.annuityStartAge).toBe(60);
+  });
+});
+
+describe('scenario schema v4: military block', () => {
+  it('creates a default scenario with an empty military block and the rules version', () => {
+    const s = normalizeScenario(createDefaultScenario('m'));
+    expect(SCENARIO_SCHEMA_VERSION).toBe(4);
+    expect(s.military.connection).toBe('none');
+    expect(s.military.servicePeriods).toEqual([]);
+    expect(s.military.deposit.status).toBe('not_requested');
+    expect(s.military.rulesVersion).toMatch(/^\d{4}\.\d+$/);
+    // The legacy fields are mirrors of an empty block.
+    expect(s.fers.militaryServiceYears).toBe(0);
+    expect(s.fers.militaryDepositPaid).toBe(false);
+  });
+
+  it('migrates a v3 year count into one undated legacy period that is shown but not credited', () => {
+    const s = normalizeScenario({
+      schemaVersion: 3,
+      profile: { currentAge: 40, separationAge: 57 },
+      fers: { yearsOfService: 10, militaryServiceYears: 4, militaryDepositPaid: true },
+    });
+    expect(s.military.connection).toBe('self');
+    expect(s.military.servicePeriods).toHaveLength(1);
+    expect(s.military.servicePeriods[0].id).toBe('legacy_military_years');
+    expect(s.military.servicePeriods[0].approximateYears).toBe(4);
+    expect(s.military.servicePeriods[0].startDate).toBeNull();
+    expect(s.military.deposit.status).toBe('paid_in_full');
+    // Mirrors reflect the block.
+    expect(s.fers.militaryServiceYears).toBe(4);
+    expect(s.fers.militaryDepositPaid).toBe(true);
+  });
+
+  it('leaves a v3 scenario with no military service with an empty block', () => {
+    const s = normalizeScenario({ schemaVersion: 3, fers: { yearsOfService: 10, militaryServiceYears: 0 } });
+    expect(s.military.connection).toBe('none');
+    expect(s.military.servicePeriods).toEqual([]);
+    expect(s.military.deposit.status).toBe('not_requested');
+  });
+
+  it('re-migration is a no-op once the block exists (rows do not persist their version)', () => {
+    const first = normalizeScenario({ schemaVersion: 3, fers: { militaryServiceYears: 4 } });
+    const again = normalizeScenario({ ...first, schemaVersion: undefined });
+    expect(again.military.servicePeriods).toHaveLength(1);
+    expect(again.military).toEqual(first.military);
+  });
+
+  it('derives the legacy year mirror from dated periods, rounded to the month', () => {
+    const s = normalizeScenario({
+      ...createDefaultScenario(),
+      military: {
+        servicePeriods: [
+          {
+            id: 'a',
+            dutyStatus: 'active_duty',
+            startDate: '1998-06-15',
+            endDate: '2001-12-14',
+            characterStatus: 'confirmed_honorable_conditions',
+            documentationStatus: 'dd214',
+            inputProvenance: 'user_entered_official',
+          },
+        ],
+      },
+    });
+    expect(s.fers.militaryServiceYears).toBeCloseTo(3.5, 10);
+  });
+
+  it('translates a legacy militaryServiceYears write onto the legacy period, and drops it once dated periods exist', () => {
+    const current = normalizeScenario(createDefaultScenario());
+    const next = applyScenarioUpdates(current, { fers: { militaryServiceYears: 3, militaryDepositPaid: true } });
+    expect(next.military.servicePeriods[0].approximateYears).toBe(3);
+    expect(next.military.connection).toBe('self');
+    expect(next.military.deposit.status).toBe('paid_in_full');
+    expect(next.fers.militaryServiceYears).toBe(3);
+
+    const cleared = applyScenarioUpdates(next, { fers: { militaryServiceYears: 0 } });
+    expect(cleared.military.servicePeriods).toEqual([]);
+    expect(cleared.fers.militaryServiceYears).toBe(0);
+
+    const dated = applyScenarioUpdates(current, {
+      military: {
+        servicePeriods: [
+          { id: 'a', dutyStatus: 'active_duty', startDate: '2000-01-01', endDate: '2001-12-31', characterStatus: 'confirmed_honorable_conditions' },
+        ],
+      },
+    });
+    const ignored = applyScenarioUpdates(dated, { fers: { militaryServiceYears: 9 } });
+    expect(ignored.military.servicePeriods).toHaveLength(1);
+    expect(ignored.military.servicePeriods[0].id).toBe('a');
+    expect(ignored.fers.militaryServiceYears).toBe(2);
+  });
+
+  it('round-trips the military block through summary_data.extensions', () => {
+    const s = normalizeScenario({ schemaVersion: 3, fers: { militaryServiceYears: 2 } });
+    const row = toScenarioRow(s);
+    expect(row.summary_data.extensions.military.servicePeriods).toHaveLength(1);
+    expect(row.fers_data.militaryServiceYears).toBe(2);
+    const back = normalizeScenario(fromScenarioRow({ ...row, id: 'r1', created_at: 'now' }));
+    expect(back.military.servicePeriods[0].approximateYears).toBe(2);
+    expect(back.fers.militaryServiceYears).toBe(2);
+  });
+
+  it('reads a v3 row whose fers_data carries the year count but has no military extension', () => {
+    const back = normalizeScenario(
+      fromScenarioRow({
+        id: '1',
+        scenario_name: 'v3',
+        tsp_data: { currentAge: 40, retirementAge: 60 },
+        fers_data: { currentAge: 40, retirementAge: 60, yearsOfService: 10, militaryServiceYears: 5, militaryDepositPaid: false },
+        fire_goal: { desiredFireAge: 55 },
+        summary_data: { monthlyExpenses: 3000, extensions: { profile: { currentAge: 40 } } },
+      })
+    );
+    expect(back.military.servicePeriods[0].approximateYears).toBe(5);
+    expect(back.military.deposit.status).toBe('unknown');
+  });
+});
+
+describe('pass 1 exit criterion', () => {
+  it('round-trips three service periods through storage and classifies them the same on both sides', () => {
+    const periods = [
+      { id: 'ad', dutyStatus: 'active_duty', startDate: '1998-06-15', endDate: '2002-06-14', characterStatus: 'confirmed_honorable_conditions', documentationStatus: 'dd214', inputProvenance: 'user_entered_official' },
+      { id: 'drill', dutyStatus: 'inactive_duty_training', startDate: '2003-01-01', endDate: '2006-12-31', characterStatus: 'confirmed_honorable_conditions' },
+      { id: 't32', dutyStatus: 'title32_full_time', component: 'national_guard', startDate: '2007-01-01', endDate: '2007-12-31', characterStatus: 'confirmed_honorable_conditions' },
+    ];
+    const s = normalizeScenario({ ...createDefaultScenario('rt'), military: { connection: 'self', servicePeriods: periods } });
+    const before = normalizeMilitaryServicePeriods(s.military.servicePeriods);
+
+    const row = toScenarioRow(s);
+    const back = normalizeScenario(fromScenarioRow({ ...row, id: 'r', created_at: 'now' }));
+    const after = normalizeMilitaryServicePeriods(back.military.servicePeriods);
+
+    expect(back.military.servicePeriods).toEqual(s.military.servicePeriods);
+    expect(after.periods.map((p) => p.classification.status)).toEqual(['supported', 'not_supported', 'official_determination_required']);
+    expect(JSON.stringify(after)).toBe(JSON.stringify(before));
+    expect(back.fers.militaryServiceYears).toBe(4);
   });
 });
