@@ -13,6 +13,8 @@ more than an estimate.
 | Payment order across periods | `src/lib/military/deposit.js` `projectMilitaryDepositBalance` | payments are applied to the oldest unpaid period first unless the agency records a different allocation | Handbook ch. 23; agency practice |
 | Title 32 creditability without a USERRA interruption | `src/lib/military/servicePeriods.js` | held for determination; confirm no other creditable case exists | Handbook ch. 22 §22A4 |
 | Chapter 22 and 23 worked examples | `src/lib/military/__tests__/deposit.test.js` | reproduce the Handbook's deposit examples to the cent and add them as golden cases; the current goldens reproduce OPM's composite-rate tables, not the Handbook examples | CSRS/FERS Handbook ch. 22 and 23 |
+| State treatment of military retired pay, all 42 taxing jurisdictions | `src/lib/taxes/stateMilitaryRetiredPay.js` | each state's treatment, exclusion amount, age condition and effective window against the state's current-year instructions; set `verified` to the source and `reviewedOn` to the date. Until then the plan taxes the pay in full and flags it | each state department of revenue |
+| SBP/RCSBP annuity state treatment | same | whether each state's military exclusion extends to survivor annuities | each state department of revenue |
 
 ## Verified
 
@@ -33,6 +35,10 @@ more than an estimate.
 | Two-year interest-free period; first interest at the third anniversary of coverage | 5 U.S.C. 8422(e)(3); USGS military-deposit page restating OPM | build | 2026-09-20 |
 | Deposit rates 3% / 3.25% (1999) / 3.40% (2000) | Handbook ch. 23 §23A2.1-1; OPM military-deposits webcast | build | 2026-09-20 |
 | Service buckets: military counts toward eligibility and computation, never the five civilian years, High-3, supplement numerator, or covered special-provision service | OPM types-of-retirement page; Handbook ch. 51 | build; pinned by `militaryBuckets.test.js` and `militaryCredit.test.js` | 2026-09-19 |
+| VA disability compensation rates, 10%–100%, all dependent columns and add-ons, effective 2025-12-01 | va.gov veteran rates page, retrieved 2026-09-20 | build; pinned by `incomeStreams.test.js` | 2026-09-20 |
+| DIC surviving-spouse basic rate and add-ons, effective 2025-12-01 | va.gov DIC survivor rates page, retrieved 2026-09-20 | build | 2026-09-20 |
+| Federal tax character by stream: retired pay and CRDP taxable; VA compensation, DIC, CRSC, BAH/BAS not taxable; SBP taxable; disability retired pay per official classification | IRS Publications 525 and 3; IRC 104(a)(4), 122; 38 U.S.C. 5301 | build; pinned by `incomeStreams.test.js` | 2026-09-20 |
+| SBP not offset by DIC since 1 January 2023 | Pub. L. 116-92 §622 (FY2020 NDAA), phase-in complete 2023 | build; pinned by `incomeStreams.test.js` case 32 | 2026-09-20 |
 
 ## Corrections made during verification
 

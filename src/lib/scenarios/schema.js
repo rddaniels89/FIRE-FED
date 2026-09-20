@@ -206,7 +206,17 @@ export function createDefaultSpouse() {
 }
 
 export function createDefaultHousehold() {
-  return { spouse: createDefaultSpouse() };
+  return {
+    spouse: createDefaultSpouse(),
+    /**
+     * Optional ages at death for a survivor scenario. null means no death is
+     * modelled. Today only the military and VA income streams honour these
+     * (a stream stops on its owner's death; SBP and DIC start on the named
+     * death); the full household death scenario arrives with the survivor
+     * work.
+     */
+    deathAges: { primary: null, spouse: null },
+  };
 }
 
 export function createDefaultTaxes() {

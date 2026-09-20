@@ -235,6 +235,48 @@ export const ISSUE_CATALOG = Object.freeze({
     remediation: 'Nothing to do now. Their credit will be modeled when household military service is supported.',
     source: OPM_CREDITABLE_SERVICE,
   }),
+  MIL_STREAM_AMOUNT_MISSING: Object.freeze({
+    severity: ISSUE_SEVERITY.BLOCK,
+    message: 'This income stream has no amount, so it is left out of the plan.',
+    remediation: 'Enter the monthly or annual gross amount from your award letter, Retiree Account Statement, or leave and earnings statement.',
+    source: OPM_CREDITABLE_SERVICE,
+  }),
+  MIL_CRDP_CRSC_MANUAL: Object.freeze({
+    severity: ISSUE_SEVERITY.WARNING,
+    message: 'Concurrent receipt (CRDP or CRSC) is projected only from an official amount. FireFed does not calculate eligibility, the VA offset, the phase-in, or which election is better.',
+    remediation: 'Enter the CRDP or CRSC amount from your DFAS Retiree Account Statement with its date. Until then the stream is excluded from the plan.',
+    source: 'https://www.dfas.mil/retiredmilitary/disability/comparison/',
+  }),
+  MIL_OFFICIAL_AMOUNT_STALE: Object.freeze({
+    severity: ISSUE_SEVERITY.WARNING,
+    message: 'The official amount for this stream is more than eighteen months old. A cost-of-living adjustment has probably changed it.',
+    remediation: 'Confirm the current amount on your latest award letter or Retiree Account Statement and update the date.',
+    source: 'https://www.va.gov/disability/compensation-rates/veteran-rates/',
+  }),
+  MIL_STATE_TAX_UNVERIFIED: Object.freeze({
+    severity: ISSUE_SEVERITY.WARNING,
+    message: 'State projection does not include a verified military-retirement exclusion. Military retired pay is taxed at the state rate until the rule for this state has been checked against its revenue department.',
+    remediation: 'Nothing to do in the plan. Check your state\'s instructions for its military retirement subtraction; the plan may be overstating state tax.',
+    source: 'https://taxfoundation.org/data/all/state/states-that-tax-military-retirement-pay/',
+  }),
+  MIL_DISABILITY_RETIRED_PAY_TAX_UNKNOWN: Object.freeze({
+    severity: ISSUE_SEVERITY.WARNING,
+    message: 'Disability retired pay can be taxable or excludable depending on an official classification FireFed does not make. It is projected as taxable until you record the classification.',
+    remediation: 'Check the taxable amount shown on your Form 1099-R or Retiree Account Statement and set the tax treatment on this stream to match.',
+    source: 'https://www.irs.gov/publications/p525',
+  }),
+  MIL_SBP_STATE_TREATMENT_UNKNOWN: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'A Survivor Benefit Plan annuity is projected as a taxable pension. Whether your state extends its military-retirement exclusion to survivor annuities is not yet modeled.',
+    remediation: 'Nothing to do. Check your state\'s instructions if the state tax on this stream matters to the plan.',
+    source: 'https://www.dfas.mil/retiredmilitary/survivors/',
+  }),
+  MIL_VA_TABLE_ESTIMATE: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'This VA compensation amount is read from the current rate table for the rating and dependents entered. It is an estimate, not your award.',
+    remediation: 'Replace it with the monthly amount and date from your VA award letter when you have it.',
+    source: 'https://www.va.gov/disability/compensation-rates/veteran-rates/',
+  }),
   MIL_RETIRED_PAY_TYPE_UNKNOWN: Object.freeze({
     severity: ISSUE_SEVERITY.BLOCK,
     message: 'You receive military retired pay of an unknown type. Whether it must be waived to credit the service is an agency determination.',

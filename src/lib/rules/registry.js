@@ -680,6 +680,57 @@ const RULE_LIST = [
     ],
   }),
   rule({
+    id: 'military.income_tax_character',
+    category: 'military',
+    title: 'Tax character of military and VA income',
+    formula:
+      'Taxable wages: basic pay, drill pay, reservist differential. Taxable pension: longevity and Reserve retired pay, CRDP, SBP/RCSBP annuities. Not taxable: VA disability compensation, DIC, CRSC, BAH/BAS. Disability retired pay: as the official 1099-R classifies it, projected taxable until recorded. Each stream is its own line; none is folded into another.',
+    plainEnglish:
+      'Retired pay is taxed like any pension. VA compensation, CRSC and DIC are never taxed and never counted toward the tax on your Social Security. Disability retired pay can go either way, so FireFed treats it as taxable until you tell it what your 1099-R says. CRDP and CRSC are taken only from an official statement; FireFed does not work out who qualifies or which is better.',
+    source: { name: 'IRS Publication 525 — taxable and nontaxable income (military and VA)', url: 'https://www.irs.gov/publications/p525' },
+    statute: 'IRC 104(a)(4), 122; 38 U.S.C. 5301; 10 U.S.C. 1413a, 1414',
+    verifiedAgainst: 'IRS Publication 525 and Publication 3; DFAS concurrent-receipt pages; src/lib/military/incomeStreams.js STREAM_TYPE_RULES',
+    inputs: ['military.incomeStreams[].type', 'military.incomeStreams[].grossAmount', 'military.incomeStreams[].amountStatus', 'military.incomeStreams[].colaPolicy'],
+    caveats: [
+      'Retired-pay and VA cost-of-living adjustments both follow the scenario\'s inflation assumption for future years; both are CPI-W adjustments in law.',
+      'Wage-class streams (drill pay) are added to taxable income without FICA modelling.',
+      'An official amount older than eighteen months is flagged; it has almost certainly been adjusted since.',
+    ],
+  }),
+  rule({
+    id: 'military.va_estimate',
+    category: 'military',
+    title: 'VA compensation from the rate table',
+    formula: 'Monthly = base rate for the rating and dependent set (veteran alone; with spouse; with one or two parents; with one child) + per-child add-ons for further children under 18 and children over 18 in school + the spouse aid-and-attendance add-on. Rates effective 1 December 2025.',
+    plainEnglish:
+      'If you know your rating and dependents but not your monthly amount, FireFed reads the current VA table so you have a planning figure. It is labelled an estimate until you enter the amount from your award letter. FireFed never estimates a rating.',
+    source: { name: 'VA — veteran disability compensation rates', url: 'https://www.va.gov/disability/compensation-rates/veteran-rates/' },
+    statute: '38 U.S.C. 1114, 1115',
+    verifiedAgainst: 'va.gov rate tables retrieved 2026-09-20 (effective 2025-12-01); src/lib/military/vaCompensationRates.js',
+    inputs: ['military.incomeStreams[].vaEstimate.rating', 'military.incomeStreams[].vaEstimate.spouse', 'military.incomeStreams[].vaEstimate.childrenUnder18', 'military.incomeStreams[].vaEstimate.parents'],
+    caveats: [
+      'Special monthly compensation, individual unemployability, and the veteran\'s own aid-and-attendance or housebound amounts are not modelled; enter the official amount.',
+      'Ratings of 10% and 20% carry no dependent additions.',
+    ],
+  }),
+  rule({
+    id: 'tax.state_military_retired_pay',
+    category: 'military',
+    title: 'State tax on military retired pay',
+    formula: 'State taxable military retired pay = pay − the state\'s exclusion (full, a dollar cap, or none), applied only when the state\'s rule has been verified against its revenue department for the tax year and any age condition is met. Unverified: taxed in full at the state rate and flagged.',
+    plainEnglish:
+      'Most states exempt military retired pay in full and a dozen exclude part of it, but the rules change often. FireFed applies a state\'s exclusion only once it has been checked against that state\'s instructions; until then the plan taxes the pay and tells you it may be overstating state tax.',
+    source: { name: 'Tax Foundation — states that tax military retirement pay', url: 'https://taxfoundation.org/data/all/state/states-that-tax-military-retirement-pay/' },
+    statute: 'Each state\'s revenue code',
+    verifiedAgainst: 'No state verified yet; the transcribed table and its status are in src/lib/taxes/stateMilitaryRetiredPay.js and docs/MILITARY-VERIFICATION.md',
+    inputs: ['taxes.state.code', 'military.incomeStreams'],
+    caveats: [
+      'Nine states have no income tax; those apply without verification.',
+      'Income-limited exclusions (California, Vermont) are applied at the cap once verified; the income test itself is not modelled.',
+      'Survivor annuities (SBP/RCSBP) are taxed as ordinary pensions at state level; whether a state extends its military exclusion to them is not yet modelled.',
+    ],
+  }),
+  rule({
     id: 'military.deposit_required',
     category: 'military',
     title: 'Post-1956 military service needs a deposit',

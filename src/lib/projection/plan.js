@@ -38,6 +38,8 @@ import { RETIREMENT_PATH_AUTO } from '../scenarios/schema';
 import { resolveMilitaryFersCredit } from '../military/fersCredit';
 import { ISSUE_CODES, raiseIssue } from '../military/status';
 import { SERVICE_OWNERS } from '../military/servicePeriods';
+import { STATE_TREATMENTS, resolveMilitaryIncomeStreams } from '../military/incomeStreams';
+import { stateMilitaryRetiredPayExclusion } from '../taxes/stateMilitaryRetiredPay';
 
 const num = (v, fallback = 0) => {
   const n = Number(v);
@@ -364,6 +366,22 @@ export function resolveRetirementPlan(scenario, options = {}) {
     hours: num(fers.annualLeaveHoursAtSeparation, 0),
   });
 
+  // Military and VA income streams: validated once here so the timeline
+  // projects them and the screens explain them from the same resolution.
+  const incomeStreams = resolveMilitaryIncomeStreams(scenario.military, { asOfDate });
+  militaryIssues.push(...incomeStreams.issues);
+  const hasMilitaryRetiredPay = incomeStreams.streams.some(
+    (s) => s.resolved.included && s.resolved.stateTreatment === STATE_TREATMENTS.MILITARY_RETIRED_PAY
+  );
+  const stateCode = scenario.taxes?.includeStateTax === false ? null : scenario.taxes?.state?.code ?? null;
+  let stateMilitaryRule = null;
+  if (hasMilitaryRetiredPay && stateCode && stateCode !== 'NONE') {
+    stateMilitaryRule = stateMilitaryRetiredPayExclusion({ code: stateCode, militaryRetiredPay: 1, taxYear: asOfYear, age: separationAge });
+    if (!stateMilitaryRule.applied && stateMilitaryRule.reason !== 'no_rule') {
+      militaryIssues.push(raiseIssue(ISSUE_CODES.MIL_STATE_TAX_UNVERIFIED, { detail: { state: stateCode, reason: stateMilitaryRule.reason, treatment: stateMilitaryRule.treatment } }));
+    }
+  }
+
   return {
     path,
     pathLabel: pathEval?.label ?? (special?.isEligible ? 'Special provision, immediate' : 'No annuity'),
@@ -426,6 +444,10 @@ export function resolveRetirementPlan(scenario, options = {}) {
         ledger: militaryCredit.deposit.ledger,
         ratesUsed: militaryCredit.deposit.ratesUsed,
       },
+      incomeStreams: incomeStreams.streams,
+      stateMilitaryRetiredPay: stateMilitaryRule
+        ? { state: stateCode, applied: stateMilitaryRule.applied, verified: stateMilitaryRule.verified, treatment: stateMilitaryRule.treatment, reason: stateMilitaryRule.reason }
+        : null,
       issues: militaryIssues,
     },
     high3: high3,

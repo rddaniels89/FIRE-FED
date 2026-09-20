@@ -44,6 +44,7 @@ import {
 import { calculateHouseholdTaxes, estimateFicaTax, roomInBracket } from '../taxes';
 import { calculateFersResults, getFersContributionRate } from '../calculations/fers';
 import { CURRENT_PARAMETER_YEAR } from '../calculations/annualParameters';
+import { projectMilitaryIncomeForYear } from '../military/incomeStreams';
 
 const num = (v, fallback = 0) => {
   const n = Number(v);
@@ -157,6 +158,13 @@ export function buildTimeline(scenario, options = {}) {
   // in a given year. Funded like any other outflow: cash first, then the
   // portfolio in the usual order.
   const oneTimeOutflowsByAge = options.oneTimeOutflowsByAge ?? {};
+  // Military and VA income streams, validated by the plan. Deaths are modelled
+  // only when the household says so; the streams are the only lines that
+  // honour them today.
+  const militaryStreams = { streams: plan.military?.incomeStreams ?? [] };
+  const deathAges = scenario.household?.deathAges ?? null;
+  const streamProfile = { currentAge: num(profile.currentAge), currentAgeMonths: num(profile.currentAgeMonths, 0) };
+  const streamAsOfDate = new Date(asOfYear, options.asOfMonth ?? new Date().getMonth(), 1);
 
   const filingStatus = taxes.filingStatus ?? 'single';
   const state = taxes.includeStateTax === false ? null : taxes.state ?? null;
@@ -295,6 +303,19 @@ export function buildTimeline(scenario, options = {}) {
 
     const lumpSums = age === separationAge ? nonNeg(plan.annualLeave.grossPayment) + nonNeg(plan.refund?.refundAmount) : 0;
 
+    // Military and VA streams: typed lines with their own tax character.
+    const militaryIncome = projectMilitaryIncomeForYear({
+      resolved: militaryStreams,
+      yearsFromNow: i,
+      asOfYear,
+      year,
+      ages: { primary: age, spouse: spouseAge },
+      inflation,
+      deathAges,
+      profile: streamProfile,
+      asOfDate: streamAsOfDate,
+    });
+
     // ---------- Outflows ----------
     const oneTimeOutflow = nonNeg(oneTimeOutflowsByAge[age]);
     const spendingBase = isWorking ? nonNeg(summary.monthlyExpenses) : nonNeg(fire.monthlyFireIncomeGoal);
@@ -331,7 +352,7 @@ export function buildTimeline(scenario, options = {}) {
     // Income that does not depend on the portfolio. Spouse wages belong here
     // for the bridge test; they are NOT also in `salary`, so nothing is counted
     // twice below.
-    const guaranteedIncome = pension + srs + socialSecurity + spouseIncome + spouseSocialSecurity + spousePension + sideHustle;
+    const guaranteedIncome = pension + srs + socialSecurity + spouseIncome + spouseSocialSecurity + spousePension + sideHustle + militaryIncome.total;
     const wages = salary + spouseIncome;
 
     const w = { cash: 0, taxable: 0, taxableGains: 0, rothBasis: 0, conversions: 0, traditional: seppDraw, rothEarnings: 0 };
@@ -357,7 +378,11 @@ export function buildTimeline(scenario, options = {}) {
           rothWithdrawals: w.rothBasis + w.conversions + (w.rothEarnings - nonQualifiedRoth),
           longTermCapitalGains: w.taxableGains,
           socialSecurity: socialSecurity + spouseSocialSecurity,
-          otherTaxable: sideHustle + nonQualifiedRoth + (age === separationAge ? nonNeg(plan.annualLeave.grossPayment) + nonNeg(plan.refund?.refundAmount) : 0),
+          otherTaxable:
+            sideHustle + nonQualifiedRoth + militaryIncome.taxableWages + (age === separationAge ? nonNeg(plan.annualLeave.grossPayment) + nonNeg(plan.refund?.refundAmount) : 0),
+          otherPension: militaryIncome.taxablePension,
+          militaryRetiredPay: militaryIncome.militaryRetiredPay,
+          taxExemptIncome: militaryIncome.taxExempt,
         },
         state,
       });
@@ -494,6 +519,7 @@ export function buildTimeline(scenario, options = {}) {
       spouseSocialSecurity,
       spousePension,
       sideHustle,
+      militaryIncome,
       lumpSums,
       oneTimeOutflow,
       withdrawals: { ...w, total: totalWithdrawals, sepp: seppDraw },
@@ -514,6 +540,7 @@ export function buildTimeline(scenario, options = {}) {
         spending: spending / deflator,
         totalIncome: totalInflow / deflator,
         pension: pension / deflator,
+        militaryIncome: militaryIncome.total / deflator,
         socialSecurity: socialSecurity / deflator,
         totalBalance: totalBalance / deflator,
       },
@@ -556,6 +583,14 @@ function summarizeTimeline({ rows, plan, currentAge, separationAge, annuityStart
   if (firstAge('socialSecurity')) incomeStarts.push({ source: 'Social Security', age: firstAge('socialSecurity') });
   if (firstAge('spouseSocialSecurity')) incomeStarts.push({ source: 'Spouse Social Security', age: firstAge('spouseSocialSecurity') });
   if (firstAge('spousePension')) incomeStarts.push({ source: 'Spouse pension', age: firstAge('spousePension') });
+  // One entry per military or VA stream, at the first age it pays.
+  const streamStarts = new Map();
+  for (const r of rows) {
+    for (const s of r.militaryIncome?.byStream ?? []) {
+      if (!streamStarts.has(s.id)) streamStarts.set(s.id, { source: s.label, age: r.age, streamId: s.id, streamType: s.type, federalTaxClass: s.federalTaxClass });
+    }
+  }
+  incomeStarts.push(...streamStarts.values());
 
   const milestones = buildMilestones({ plan, currentAge, separationAge, annuityStartAge, ssClaimAge, ssFra, spouseFra, spouse });
 

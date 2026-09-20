@@ -124,22 +124,25 @@ language remains. Chapter 22/23 reconciliation is a listed human step.
 Goal: VA compensation, retired pay, CRDP, CRSC, DIC, SBP, drill pay, allowances,
 and reservist differential enter the timeline as typed streams.
 
-- [ ] `src/lib/military/incomeStreams.js`: stream types (§7.6), federal tax class
+- [x] `src/lib/military/incomeStreams.js`: stream types (§7.6), federal tax class
       per type (§4.10), COLA policies (military retired-pay, VA/SSA, none, user
       rate, manual schedule), projection from official amount and date (§6.8),
       owner, start/end, amount status, staleness check.
-- [ ] Timeline: one income line per stream feeding the existing characterisation
-      (ROADMAP #18); state layer gains a versioned military-retired-pay treatment
-      per state, reusing the notes already in `stateIncomeTax.js`; unreviewed
-      states flag the projection incomplete.
-- [ ] VA table-assisted estimate: 2026 compensation table by rating and dependent
-      category in `annualParameters.js`, labelled estimate. `[-]` table needs human
-      verification against va.gov.
-- [ ] Death handling: a stream stops on the owner's death; SBP and DIC start as
-      survivor streams with no offset between them (§4.9).
-- [ ] Codes: `MIL_CRDP_CRSC_MANUAL`, `MIL_STATE_TAX_UNVERIFIED`,
+- [x] Timeline: one income line per stream feeding the existing characterisation
+      (ROADMAP #18); `src/lib/taxes/stateMilitaryRetiredPay.js` carries a per-state
+      military-retired-pay rule with effective windows. `[-]` all 42 taxing states
+      are transcribed and unverified; an unverified state taxes the pay in full and
+      raises `MIL_STATE_TAX_UNVERIFIED` until a human checks it.
+- [x] VA table-assisted estimate: rates effective 2025-12-01 by rating and dependent
+      set, plus DIC, in `src/lib/military/vaCompensationRates.js`, labelled estimate.
+      Transcribed from va.gov on 2026-09-20 (primary source; see verification record).
+- [x] Death handling: a stream stops on the owner's death; SBP and DIC start as
+      survivor streams with no offset between them (§4.9). Driven by an optional
+      `household.deathAges`; only the military streams honour it until the full
+      survivor scenario in Pass 10.
+- [x] Codes: `MIL_CRDP_CRSC_MANUAL`, `MIL_STATE_TAX_UNVERIFIED`,
       `MIL_OFFICIAL_AMOUNT_STALE`.
-- [ ] Tests: §14.1 cases 28–32, 48–49; property "tax-exempt income never enters
+- [x] Tests: §14.1 cases 28–32, 48–49; property "tax-exempt income never enters
       federal taxable income"; integration "VA compensation reduces withdrawals but
       not taxable income".
 

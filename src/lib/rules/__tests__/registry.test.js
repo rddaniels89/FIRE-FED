@@ -45,6 +45,9 @@ const REQUIRED_IDS = [
   'military.deposit_rate',
   'military.deposit_interest',
   'military.deposit_comparison',
+  'military.income_tax_character',
+  'military.va_estimate',
+  'tax.state_military_retired_pay',
 ];
 
 describe('rules registry', () => {
