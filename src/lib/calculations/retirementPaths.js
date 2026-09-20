@@ -77,6 +77,19 @@ export function qualifiesForDeferred({ yearsOfService }) {
 }
 
 /**
+ * Every door needs five years of civilian service behind it. Credited military
+ * service counts toward the age-and-service tests above but not toward this.
+ * 5 U.S.C. 8410.
+ */
+export const MINIMUM_CIVILIAN_YEARS = 5;
+
+export function meetsCivilianMinimum({ civilianYearsOfService, yearsOfService }) {
+  const civilian =
+    civilianYearsOfService === undefined || civilianYearsOfService === null ? yearsOfService : civilianYearsOfService;
+  return num(civilian) >= MINIMUM_CIVILIAN_YEARS;
+}
+
+/**
  * The earliest age a deferred annuity can begin, unreduced where possible.
  *
  * 62 with 5 years, 60 with 20, or MRA with 30. With 10 to 29 years the annuity
@@ -96,11 +109,16 @@ export function earliestUnreducedDeferredAge({ yearsOfService, mra = DEFAULT_MRA
  *
  * `annuityStartAge` only matters for the postponed and deferred paths, where the
  * retiree chooses when payments begin and that choice sets the reduction.
+ *
+ * `yearsOfService` is creditable service including any credited military
+ * service; `civilianYearsOfService`, when given, is the civilian part and must
+ * reach five years for any path to open.
  */
 export function evaluateRetirementPath({
   path,
   separationAge,
   yearsOfService,
+  civilianYearsOfService,
   annuityStartAge,
   mra = DEFAULT_MRA,
   isVeraOffered = false,
@@ -121,6 +139,13 @@ export function evaluateRetirementPath({
     hasSupplement: false,
     notes: [],
   };
+
+  if (!meetsCivilianMinimum({ civilianYearsOfService, yearsOfService })) {
+    return {
+      ...base,
+      reason: 'Needs at least 5 years of civilian service; military service cannot supply them.',
+    };
+  }
 
   switch (path) {
     case RETIREMENT_PATHS.IMMEDIATE_UNREDUCED: {
@@ -265,6 +290,7 @@ export function defaultAnnuityStartAge({ path, separationAge, yearsOfService, mr
 export function evaluateAllRetirementPaths({
   separationAge,
   yearsOfService,
+  civilianYearsOfService,
   annuityStartAge,
   mra = DEFAULT_MRA,
   isVeraOffered = false,
@@ -275,6 +301,7 @@ export function evaluateAllRetirementPaths({
         path,
         separationAge,
         yearsOfService,
+        civilianYearsOfService,
         annuityStartAge:
           annuityStartAge ?? defaultAnnuityStartAge({ path, separationAge, yearsOfService, mra }),
         mra,

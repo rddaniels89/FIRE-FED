@@ -66,18 +66,18 @@ active duty) round-trips through storage and classifies deterministically.
 Goal: the saved plan stops ignoring military service. Today `militaryServiceYears`
 is read only by `AssumptionsPage`.
 
-- [ ] `calculateFersResults` accepts `militaryCreditYears/Months`: counts toward
+- [x] `calculateFersResults` accepts `militaryCreditYears/Months`: counts toward
       eligibility and computation; never toward the five civilian years, High-3,
       the SRS numerator, or the special-provision minimum (§4.1).
       `src/lib/calculations/fers.js`, `srs.js`, `specialProvisions.js`,
       `retirementPaths.js`.
-- [ ] `plan.js` resolves credited years from paid-in-full supported periods only;
+- [x] `plan.js` resolves credited years from paid-in-full supported periods only;
       `timeline.js` consumes them; 1.1% at 62/20 evaluated with credit included.
-- [ ] Codes: `MIL_FIVE_CIVILIAN_YEARS`, `MIL_SRS_EXCLUSION`,
+- [x] Codes: `MIL_FIVE_CIVILIAN_YEARS`, `MIL_SRS_EXCLUSION`,
       `MIL_SPECIAL_SERVICE_EXCLUSION`.
-- [ ] Explanations and `AssumptionsPage` show military years as a separate bucket
+- [x] Explanations and `AssumptionsPage` show military years as a separate bucket
       beside sick leave (§5.9).
-- [ ] Tests: §14.1 cases 18–23; properties "military credit never increases High-3"
+- [x] Tests: §14.1 cases 18–23; properties "military credit never increases High-3"
       and "never enters the SRS numerator"; OPM differential and conformance tests
       unchanged.
 

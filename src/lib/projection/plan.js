@@ -35,6 +35,9 @@ import {
 import { projectCareerSalaries } from '../calculations/careerProjection';
 import { birthYearFromAgeAndMonths, isMraTransitionYear, minimumRetirementAge } from '../calculations/mra';
 import { RETIREMENT_PATH_AUTO } from '../scenarios/schema';
+import { resolveMilitaryFersCredit } from '../military/fersCredit';
+import { ISSUE_CODES, raiseIssue } from '../military/status';
+import { SERVICE_OWNERS } from '../military/servicePeriods';
 
 const num = (v, fallback = 0) => {
   const n = Number(v);
@@ -95,8 +98,8 @@ export function resolveSocialSecurityInputs(scenario, { asOfYear = new Date().ge
  * Unreduced beats an early-out beats MRA+10 beats deferred. Whether MRA+10 is
  * taken now or postponed depends on whether an annuity start age was chosen.
  */
-export function chooseAutomaticPath({ separationAge, yearsOfService, annuityStartAge, mra, isVeraOffered }) {
-  const paths = evaluateAllRetirementPaths({ separationAge, yearsOfService, annuityStartAge, mra, isVeraOffered });
+export function chooseAutomaticPath({ separationAge, yearsOfService, civilianYearsOfService, annuityStartAge, mra, isVeraOffered }) {
+  const paths = evaluateAllRetirementPaths({ separationAge, yearsOfService, civilianYearsOfService, annuityStartAge, mra, isVeraOffered });
   const eligible = (p) => paths.find((x) => x.path === p && x.isEligible);
 
   if (eligible(RETIREMENT_PATHS.IMMEDIATE_UNREDUCED)) return RETIREMENT_PATHS.IMMEDIATE_UNREDUCED;
@@ -170,12 +173,25 @@ export function resolveRetirementPlan(scenario, options = {}) {
   const separationAge = num(profile.separationAge, currentAge);
   const isSpecialProvision = isSpecialProvisionType(profile.employeeType);
 
-  const eligibilityYears = serviceAtSeparation({
+  // Civilian service at separation. Military service credited by a paid
+  // deposit is a separate bucket: it opens the age-and-service doors and
+  // raises the computation, but it cannot supply the five civilian years,
+  // the High-3, the supplement's numerator, or covered special-provision time.
+  const civilianYears = serviceAtSeparation({
     yearsOfService: fers.yearsOfService,
     monthsOfService: fers.monthsOfService,
     currentAge,
     separationAge,
   });
+  const militaryCredit = resolveMilitaryFersCredit(scenario.military, { ownerId: SERVICE_OWNERS.PRIMARY });
+  const militaryCreditYears = militaryCredit.creditYears;
+  const eligibilityYears = civilianYears + militaryCreditYears;
+  const militaryIssues = [...militaryCredit.issues];
+  if (
+    (scenario.military?.servicePeriods ?? []).some((p) => (p.ownerId ?? SERVICE_OWNERS.PRIMARY) === SERVICE_OWNERS.SPOUSE)
+  ) {
+    militaryIssues.push(raiseIssue(ISSUE_CODES.MIL_SPOUSE_CREDIT_NOT_MODELED));
+  }
 
   const requestedStart = profile.annuityStartAge == null ? null : num(profile.annuityStartAge);
 
@@ -184,15 +200,21 @@ export function resolveRetirementPlan(scenario, options = {}) {
     path = chooseAutomaticPath({
       separationAge,
       yearsOfService: eligibilityYears,
+      civilianYearsOfService: civilianYears,
       annuityStartAge: requestedStart,
       mra,
       isVeraOffered: Boolean(profile.isVeraOffered),
     });
   }
 
+  // Covered service for the special-provision test is civilian by definition;
+  // military credit is kept out of it.
   const special = isSpecialProvision
-    ? evaluateSpecialProvisionEligibility({ age: separationAge, coveredYears: eligibilityYears, type: profile.employeeType })
+    ? evaluateSpecialProvisionEligibility({ age: separationAge, coveredYears: civilianYears, type: profile.employeeType })
     : null;
+  if (isSpecialProvision && militaryCreditYears > 0) {
+    militaryIssues.push(raiseIssue(ISSUE_CODES.MIL_SPECIAL_SERVICE_EXCLUSION));
+  }
   // Special provision employees are separated by law at the mandatory age (57;
   // 56 for air traffic controllers). A later separation age is not available.
   const mandatoryRetirementAge = isSpecialProvision ? getMandatoryRetirementAge(profile.employeeType) : null;
@@ -207,6 +229,7 @@ export function resolveRetirementPlan(scenario, options = {}) {
         path,
         separationAge,
         yearsOfService: eligibilityYears,
+        civilianYearsOfService: civilianYears,
         annuityStartAge:
           requestedStart ?? defaultAnnuityStartAge({ path, separationAge, yearsOfService: eligibilityYears, mra }),
         mra,
@@ -215,6 +238,11 @@ export function resolveRetirementPlan(scenario, options = {}) {
     : null;
 
   const isEligibleForAnnuity = Boolean(pathEval?.isEligible) || Boolean(special?.isEligible);
+  // The one case the doors alone cannot explain: enough total service, too
+  // little of it civilian. Said plainly rather than left as "not eligible".
+  if (!isEligibleForAnnuity && militaryCreditYears > 0 && civilianYears < 5 && eligibilityYears >= 5) {
+    militaryIssues.push(raiseIssue(ISSUE_CODES.MIL_FIVE_CIVILIAN_YEARS));
+  }
   const annuityStartAge = special?.isEligible
     ? separationAge
     : isEligibleForAnnuity
@@ -231,8 +259,9 @@ export function resolveRetirementPlan(scenario, options = {}) {
   const fersResults =
     isEligibleForAnnuity && !takeRefund
       ? calculateFersResults({
-          yearsOfService: eligibilityYears,
+          yearsOfService: civilianYears,
           monthsOfService: 0,
+          militaryCreditYears,
           high3Salary: high3.high3AtSeparation,
           currentAge,
           retirementAge: annuityStartAge,
@@ -259,6 +288,8 @@ export function resolveRetirementPlan(scenario, options = {}) {
       ? calculateSrs({
           retirementAge: separationAge,
           creditableYearsOfService: eligibilityYears,
+          // The supplement is prorated on civilian FERS service only.
+          civilianYearsOfService: civilianYears,
           socialSecurityAt62Monthly: socialSecurity.monthlyAt62,
           mra,
           isVoluntaryEarlyRetirement: path === RETIREMENT_PATHS.VERA,
@@ -267,6 +298,10 @@ export function resolveRetirementPlan(scenario, options = {}) {
           isSpecialProvision: Boolean(special?.isEligible),
         })
       : null;
+
+  if (srs?.isEligible && militaryCreditYears > 0) {
+    militaryIssues.push(raiseIssue(ISSUE_CODES.MIL_SRS_EXCLUSION));
+  }
 
   const healthcare = scenario.healthcare ?? {};
   const fehb = evaluateFehbContinuation({
@@ -323,10 +358,23 @@ export function resolveRetirementPlan(scenario, options = {}) {
     mra,
     service: {
       todayYears: num(fers.yearsOfService) + num(fers.monthsOfService) / 12,
+      civilianYears,
+      militaryCreditYears,
       eligibilityYears,
       computationYears: fersResults?.service?.computationYears ?? eligibilityYears,
       sickLeaveYears: fersResults?.service?.sickLeaveYears ?? 0,
       creditsSickLeave,
+    },
+    military: {
+      creditYears: militaryCreditYears,
+      creditDuration: militaryCredit.creditDuration,
+      status: militaryCredit.status,
+      reason: militaryCredit.reason,
+      depositPaidInFull: militaryCredit.depositPaidInFull,
+      hasRecordedService: militaryCredit.hasRecordedService,
+      creditedPeriodIds: militaryCredit.creditedPeriodIds,
+      recordedYears: militaryCredit.normalized.totals.creditableYears + militaryCredit.normalized.totals.undatedApproximateYears,
+      issues: militaryIssues,
     },
     high3: high3,
     annuity: {

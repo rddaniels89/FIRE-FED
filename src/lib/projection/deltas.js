@@ -29,6 +29,7 @@ function snapshot(timeline) {
     pathLabel: plan.pathLabel,
     annuityStartAge: plan.annuityStartAge,
     eligibilityYears: plan.service.eligibilityYears,
+    militaryCreditYears: plan.service.militaryCreditYears ?? 0,
     computationYears: plan.service.computationYears,
     sickLeaveCredited: plan.service.creditsSickLeave && plan.service.sickLeaveYears > 0,
     multiplier: plan.annuity.multiplier,

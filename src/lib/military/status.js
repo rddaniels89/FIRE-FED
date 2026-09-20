@@ -193,6 +193,18 @@ export const ISSUE_CATALOG = Object.freeze({
     remediation: 'Add each period of service with its dates so FireFed can model the deposit and the credit.',
     source: OPM_CREDITABLE_SERVICE,
   }),
+  MIL_DEPOSIT_PARTIAL: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'The deposit for this service is not recorded as paid in full, so no FERS credit is modeled for it.',
+    remediation: 'Each period earns credit only once its deposit is fully paid before you separate. Record the paid-in-full date from your agency when you have it.',
+    source: OPM_HANDBOOK_CH22,
+  }),
+  MIL_SPOUSE_CREDIT_NOT_MODELED: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'Military service recorded for the other household member is not yet applied to their FERS figures.',
+    remediation: 'Nothing to do now. Their credit will be modeled when household military service is supported.',
+    source: OPM_CREDITABLE_SERVICE,
+  }),
   MIL_RETIRED_PAY_TYPE_UNKNOWN: Object.freeze({
     severity: ISSUE_SEVERITY.BLOCK,
     message: 'You receive military retired pay of an unknown type. Whether it must be waived to credit the service is an agency determination.',

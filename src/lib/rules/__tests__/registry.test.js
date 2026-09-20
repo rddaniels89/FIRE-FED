@@ -41,6 +41,7 @@ const REQUIRED_IDS = [
   'military.creditability',
   'military.service_duration',
   'military.deposit_required',
+  'military.fers_credit',
 ];
 
 describe('rules registry', () => {

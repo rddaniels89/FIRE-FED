@@ -504,6 +504,15 @@ export function createRetirementReportPdf({
     plan.service.sickLeaveYears > 0
       ? { label: 'Unused sick leave credited', value: `${years(plan.service.sickLeaveYears)}${plan.service.creditsSickLeave ? '' : ' (not credited on this path)'}` }
       : null,
+    plan.military?.hasRecordedService
+      ? {
+          label: 'Military service credited',
+          value:
+            plan.military.creditYears > 0
+              ? `${years(plan.military.creditYears)}${plan.military.status === 'estimate_only' ? ' (estimate)' : ''}; counts toward eligibility and the computation, not the supplement`
+              : `None (${String(plan.military.reason ?? '').replace(/_/g, ' ')})`,
+        }
+      : null,
     { label: 'High-3 at separation', value: `${money(plan.high3?.high3AtSeparation)} (${plan.high3?.basis === 'career' ? 'from the career simulator' : 'from salary growth'})` },
     { label: 'Multiplier', value: annuity.multiplier ? pct(annuity.multiplier * 100, 1) : '—' },
     { label: 'Age reduction', value: annuity.ageReductionPercent > 0 ? pct(annuity.ageReductionPercent, 1) : 'None' },

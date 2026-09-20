@@ -192,7 +192,11 @@ const RULE_LIST = [
     statute: '5 U.S.C. 8412, 8413, 8414',
     verifiedAgainst: 'OPM eligibility table; MRA of 57 for those born 1970 or later',
     inputs: ['separationAge', 'yearsOfService', 'monthsOfService', 'mra', 'isVeraOffered', 'retirementPath'],
-    caveats: ['Months of service are carried, so 29 years 6 months at 57 is not MRA+30.', 'Special provision employees (LEO, firefighter, ATC) qualify at 50 with 20 covered years or any age with 25, and face mandatory separation.'],
+    caveats: [
+      'Months of service are carried, so 29 years 6 months at 57 is not MRA+30.',
+      'Special provision employees (LEO, firefighter, ATC) qualify at 50 with 20 covered years or any age with 25, and face mandatory separation.',
+      'Military service credited by a paid deposit counts toward these age-and-service tests but cannot supply the five years of civilian service every FERS annuity requires (5 U.S.C. 8410).',
+    ],
   }),
   rule({
     id: 'leave.lump_sum',
@@ -606,6 +610,24 @@ const RULE_LIST = [
     caveats: [
       'Two periods that overlap are excluded from every total until the overlap is resolved or one is marked a sub-period of the other.',
       'A legacy year count entered before dates were collected is displayed but not credited.',
+    ],
+  }),
+  rule({
+    id: 'military.fers_credit',
+    category: 'military',
+    title: 'What credited military service does inside FERS',
+    formula:
+      'Eligibility service = civilian service + credited military service. Computation service = eligibility service + unused sick leave. Five-year minimum: civilian service only. High-3: unchanged. Supplement numerator: civilian service only. Special-provision covered minimum: civilian covered service only. 1.1% at 62: 20 years of eligibility service.',
+    plainEnglish:
+      'Once the deposit is paid, your military years count toward when you can retire and toward the size of the annuity, and they can help you reach the 20 years that earn 1.1% at 62. They never count toward the five civilian years you need to retire at all, never raise your high-3, and are left out of the Special Retirement Supplement, which is prorated on civilian service alone.',
+    source: { name: 'OPM — FERS types of retirement and the annuity supplement', url: OPM_FERS_TYPES },
+    statute: '5 U.S.C. 8410, 8411(c), 8415(h), 8421(a)',
+    verifiedAgainst: 'OPM types-of-retirement page; CSRS/FERS Handbook ch. 51 (supplement: civilian service only); src/lib/military/fersCredit.js and the service buckets in src/lib/calculations/fers.js',
+    inputs: ['military.servicePeriods', 'military.deposit.status', 'fers.yearsOfService', 'fers.monthsOfService'],
+    caveats: [
+      'Credit is modeled only for periods the classifier accepts and only once the deposit is recorded as paid in full; a partly paid deposit earns no credit for that period.',
+      'Whether retired pay must be waived to take the credit is handled with the retired-pay streams, not here.',
+      'Military service recorded for a spouse is not yet applied to a dual-fed spouse\'s figures.',
     ],
   }),
   rule({
