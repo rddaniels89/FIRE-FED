@@ -632,6 +632,7 @@ const RULE_LIST = [
   }),
   rule({
     id: 'military.deposit_rate',
+    lastVerified: '2026-09-20',
     category: 'military',
     title: 'Military service deposit: the principal',
     formula: 'Principal = Σ over calendar years of (military basic pay earned that year × rate for that year), where the rate is 3% except 3.25% for 1999 and 3.40% for 2000. USERRA interruption: the lesser of that figure and the FERS deductions that would have been withheld from the civilian pay for the same months.',
@@ -648,6 +649,7 @@ const RULE_LIST = [
   }),
   rule({
     id: 'military.deposit_interest',
+    lastVerified: '2026-09-20',
     category: 'military',
     title: 'Military service deposit: interest',
     formula: 'Interest-accrual date (IAD) = 2 years after the first FERS-covered appointment (or USERRA reemployment). On each IAD anniversary the unpaid balance is charged a year\'s interest at OPM\'s composite rate (the prior calendar year\'s rate for the months before 1 January and the new year\'s rate after, on a 30-day-month count), compounded. Payments received before the anniversary reduce the balance charged. A deposit paid in full before its first anniversary carries no interest.',
@@ -681,6 +683,7 @@ const RULE_LIST = [
   }),
   rule({
     id: 'military.income_tax_character',
+    lastVerified: '2026-09-20',
     category: 'military',
     title: 'Tax character of military and VA income',
     formula:
@@ -699,6 +702,7 @@ const RULE_LIST = [
   }),
   rule({
     id: 'military.va_estimate',
+    lastVerified: '2026-09-20',
     category: 'military',
     title: 'VA compensation from the rate table',
     formula: 'Monthly = base rate for the rating and dependent set (veteran alone; with spouse; with one or two parents; with one child) + per-child add-ons for further children under 18 and children over 18 in school + the spouse aid-and-attendance add-on. Rates effective 1 December 2025.',
@@ -732,6 +736,7 @@ const RULE_LIST = [
   }),
   rule({
     id: 'military.retired_pay_credit',
+    lastVerified: '2026-09-20',
     category: 'military',
     title: 'Military retired pay and FERS credit: the three paths',
     formula:

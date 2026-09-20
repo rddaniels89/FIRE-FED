@@ -136,3 +136,26 @@ describe('timeline one-off outflows', () => {
     expect(at(a, 52).balances.total - at(b, 52).balances.total).toBeGreaterThan(9000);
   });
 });
+
+describe('an incomplete deposit estimate', () => {
+  it('keeps the eligibility and annuity comparison but withholds every figure that depends on the amount', () => {
+    const partial = { ...PERIOD, earningsByYear: { 1999: 19000 } };
+    const r = compareMilitaryDeposit(scenario({ periods: [partial] }), AS_OF);
+    expect(r).not.toBeNull();
+    expect(r.deposit.amountIncomplete).toBe(true);
+    expect(r.deposit.principalComplete).toBe(false);
+    expect(r.credit.militaryCreditYears).toBeCloseTo(4, 10);
+    expect(r.delta.annuityAnnualAtStart).toBeGreaterThan(0);
+    expect(r.delta.simpleBreakEvenAge).toBeNull();
+    expect(r.delta.discountedBreakEvenAge).toBeNull();
+    expect(r.delta.netPresentValue).toBeNull();
+  });
+
+  it('is complete again in official-balance mode whatever the earnings say', () => {
+    const partial = { ...PERIOD, earningsByYear: { 1999: 19000 } };
+    const r = compareMilitaryDeposit(scenario({ periods: [partial], deposit: { mode: 'official_balance', officialBalance: 2600, officialBalanceThroughDate: '2026-06-01' } }), AS_OF);
+    expect(r.deposit.amountIncomplete).toBe(false);
+    expect(r.deposit.amount).toBe(2600);
+    expect(r.delta.netPresentValue).not.toBeNull();
+  });
+});

@@ -174,7 +174,7 @@ export default function MilitaryPlanPage() {
               {mil.creditYears > 0 ? yrs(mil.creditYears) : 'None credited'} {mil.status ? <StatusBadge status={mil.status} /> : null}
             </Stat>
             <Stat label="Service recorded">{yrs(mil.recordedYears)}</Stat>
-            <Stat label={mil.deposit.mode === 'official_balance' ? 'Official deposit balance' : 'Deposit balance (estimate)'} ruleId="military.deposit_interest">
+            <Stat label={mil.deposit.mode === 'official_balance' ? 'Official deposit balance' : mil.deposit.principalComplete ? 'Deposit balance (estimate)' : 'Deposit balance (incomplete)'} ruleId="military.deposit_interest">
               {fmtMoney(mil.deposit.balance)} <span className="text-xs text-slate-500">as of {mil.deposit.projectionDate}</span>
             </Stat>
             <Stat label="Retired pay" ruleId="military.retired_pay_credit">
@@ -244,10 +244,14 @@ export default function MilitaryPlanPage() {
                 <HowCalculated ruleId="military.deposit_comparison">{deposit.label}</HowCalculated>
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                Deposit {fmtMoney(deposit.deposit.amount)} paid at {ageOr(deposit.deposit.paymentAge)}
-                {deposit.deposit.paidAfterSeparation ? ' (after separation: not payable)' : ''}
+                {deposit.deposit.amountIncomplete
+                  ? 'Deposit amount incomplete: basic pay is missing for some years'
+                  : `Deposit ${fmtMoney(deposit.deposit.amount)} paid at ${ageOr(deposit.deposit.paymentAge)}${deposit.deposit.paidAfterSeparation ? ' (after separation: not payable)' : ''}`}
               </span>
             </div>
+            {deposit.deposit.amountIncomplete ? (
+              <MilitaryIssues issues={mil.issues.filter((i) => i.code === 'MIL_DEPOSIT_EARNINGS_MISSING')} compact className="mb-3" />
+            ) : null}
             <Table
               caption="Baseline versus credited scenario"
               columns={['', 'Without the deposit', 'With the deposit paid', 'Difference']}
@@ -264,8 +268,9 @@ export default function MilitaryPlanPage() {
               ]}
             />
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
-              Estimated deposit {fmtMoney(deposit.deposit.amount)} as of {deposit.deposit.projectionDate}. Your agency's official balance may
-              differ because earnings, interest-accrual dates, payments, rounding, or service credit can change the calculation.
+              {deposit.deposit.amountIncomplete
+                ? 'The eligibility and annuity rows do not depend on the deposit amount and stand. Break-even and present value are withheld until basic pay is entered for every year, or the official balance is entered.'
+                : `Estimated deposit ${fmtMoney(deposit.deposit.amount)} as of ${deposit.deposit.projectionDate}. Your agency's official balance may differ because earnings, interest-accrual dates, payments, rounding, or service credit can change the calculation.`}
             </p>
 
             <div className="mt-5 pt-4 border-t border-slate-200 dark:border-slate-700">
@@ -276,7 +281,7 @@ export default function MilitaryPlanPage() {
               {canAnalysis ? (
                 <>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                    <Stat label={`Net present value at ${pct(deposit.discountRate)}`}>{fmtMoney(deposit.delta.netPresentValue)}</Stat>
+                    <Stat label={`Net present value at ${pct(deposit.discountRate)}`}>{deposit.delta.netPresentValue == null ? '—' : fmtMoney(deposit.delta.netPresentValue)}</Stat>
                     <Stat label="Discounted break-even age">{ageOr(deposit.delta.discountedBreakEvenAge)}</Stat>
                     <Stat label="Lifetime after-tax difference">{fmtMoney(deposit.delta.lifetimeAfterTaxNominal)}</Stat>
                     <Stat label="Balance at end age, difference">{fmtMoney(deposit.delta.balanceAtEnd)}</Stat>

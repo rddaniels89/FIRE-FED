@@ -82,7 +82,10 @@ export function compareMilitaryDeposit(scenario, options = {}) {
   const baselinePlan = resolveRetirementPlan(baselineScenario, { asOfYear, asOfDate });
   const creditPlan = resolveRetirementPlan(creditScenario, { asOfYear, asOfDate });
 
-  const deposit = baselinePlan.military.deposit;
+  // What is owed comes from the user's own deposit record (official balance
+  // or estimate, less payments made), not from the baseline variant, which
+  // strips that record to model "nothing paid".
+  const deposit = resolveRetirementPlan(scenario, { asOfYear, asOfDate }).military.deposit;
   const creditYears = creditPlan.service.militaryCreditYears - baselinePlan.service.militaryCreditYears;
   if (creditYears <= 0) return null;
 
@@ -93,6 +96,10 @@ export function compareMilitaryDeposit(scenario, options = {}) {
     : num(profile.currentAge);
   const amountPaid = num(deposit.balance, 0);
   const paidAfterSeparation = paymentAge != null && paymentAge > num(profile.separationAge);
+  // An estimate with basic pay missing for some years understates the deposit.
+  // The eligibility and annuity comparison still holds (it does not depend on
+  // the amount), but every figure that does is withheld rather than shown low.
+  const depositAmountIncomplete = deposit.mode !== 'official_balance' && deposit.principalComplete === false;
 
   const baseline = buildTimeline(baselineScenario, { asOfYear, plan: baselinePlan });
   const credit = buildTimeline(creditScenario, {
@@ -160,6 +167,7 @@ export function compareMilitaryDeposit(scenario, options = {}) {
       interestAccrualDate: deposit.interestAccrualDate,
       projectionDate: deposit.projectionDate,
       principalComplete: deposit.principalComplete,
+      amountIncomplete: depositAmountIncomplete,
     },
     baseline: summarizePlan(baselinePlan, baseline),
     credit: summarizePlan(creditPlan, credit),
@@ -173,9 +181,9 @@ export function compareMilitaryDeposit(scenario, options = {}) {
       survivorAnnual: survivorDelta,
       lifetimeAfterTaxNominal: cumulativeNominal,
       lifetimeAfterTaxDiscounted: cumulativeDiscounted,
-      netPresentValue: cumulativeDiscounted - depositDiscounted,
-      simpleBreakEvenAge,
-      discountedBreakEvenAge,
+      netPresentValue: depositAmountIncomplete ? null : cumulativeDiscounted - depositDiscounted,
+      simpleBreakEvenAge: depositAmountIncomplete ? null : simpleBreakEvenAge,
+      discountedBreakEvenAge: depositAmountIncomplete ? null : discountedBreakEvenAge,
       balanceAtEnd: credit.summary.balanceAtEnd - baseline.summary.balanceAtEnd,
       isSustainable: { baseline: baseline.summary.isSustainable, credit: credit.summary.isSustainable },
       firstShortfallAge: { baseline: baseline.summary.firstShortfallAge, credit: credit.summary.firstShortfallAge },
