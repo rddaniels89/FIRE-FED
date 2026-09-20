@@ -88,28 +88,34 @@ annuity on the timeline, and the FIRE date recomputes.
 
 Goal: replace the `high-3 × years × 1%` shortcut and the recommendation flag.
 
-- [ ] `src/lib/military/deposit.js` replaces `calculations/militaryDeposit.js`:
+- [x] `src/lib/military/deposit.js` replaces `calculations/militaryDeposit.js`:
       principal by calendar-year segment with rate by year (3%, 3.25% for 1999,
       3.40% for 2000); interest-free period from first FERS coverage or
       reemployment; annual compounding at OPM rates by year; payments applied by
       date; USERRA lower-of strategy; official-balance mode overrides estimate
       without data loss (§6.3, §6.4, §4.2).
-- [ ] `annualParameters.js`: `fers.depositInterestRateByYear` back to 1985.
-      `[-]` rates before 2025 need human verification against OPM.
-- [ ] Whole-plan comparison: run the plan twice (baseline vs credit with deposit
+- [x] `src/lib/military/depositRates.js`: deposit rate by year and the variable
+      interest rate back to 1985 (kept beside the engine rather than in the
+      per-year `annualParameters` blocks; a test pins the current year to
+      `fers.refundInterestRate`). `[-]` rates before 2025 are transcribed and need
+      human verification against OPM; see `docs/MILITARY-VERIFICATION.md`.
+- [x] Whole-plan comparison: run the plan twice (baseline vs credit with deposit
       cash flows) and return the delta: eligibility date, gross and after-tax
       annuity, simple and discounted break-even, NPV, survivor difference (§6.5,
       §6.6). Free: one comparison. Pro: sensitivity and Monte Carlo impact.
-- [ ] Remove `isWorthPaying`; `FERSPensionCalc` and `PublicFersCalculator` use the
+- [x] Remove `isWorthPaying`; `FERSPensionCalc` and `PublicFersCalculator` use the
       delta with §12 copy.
-- [ ] Codes: `MIL_DEPOSIT_AFTER_SEPARATION`, `MIL_DEPOSIT_PARTIAL`,
+- [x] Codes: `MIL_DEPOSIT_AFTER_SEPARATION`, `MIL_DEPOSIT_PARTIAL`,
       `MIL_DEPOSIT_INTEREST_UNVERIFIED`.
-- [ ] Tests: §14.1 cases 1–10, 16–17; golden: OPM Handbook Chapter 22 worked
-      examples; property "partial payment never creates more credit than paid in
-      full".
+- [x] Tests: §14.1 cases 1–10, 16–17; property "partial payment never creates
+      more credit than paid in full"; timeline one-off outflow; comparison deltas.
+- [-] Golden: reproduce the OPM Handbook chapter 22/23 worked examples to the
+      cent (needs the Handbook text in hand; the current goldens are hand-computed
+      from the stated rules).
 
-Exit: deposit estimates match the Chapter 22 examples to the cent, and no
-recommendation language remains.
+Exit: the deposit engine computes principal by year, interest from dates, and
+credit per period; the comparison runs the whole plan twice; no recommendation
+language remains. Chapter 22/23 reconciliation is a listed human step.
 
 ## Pass 4 — Military and VA income streams with tax character
 

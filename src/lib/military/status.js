@@ -193,6 +193,36 @@ export const ISSUE_CATALOG = Object.freeze({
     remediation: 'Add each period of service with its dates so FireFed can model the deposit and the credit.',
     source: OPM_CREDITABLE_SERVICE,
   }),
+  MIL_DEPOSIT_AFTER_SEPARATION: Object.freeze({
+    severity: ISSUE_SEVERITY.BLOCK,
+    message: 'The planned deposit payment falls after separation from federal civilian service. A deposit cannot be completed after separation, so no credit is modeled.',
+    remediation: 'Move the planned payment before your separation date, or confirm your agency will accept payment before your final pay period.',
+    source: OPM_HANDBOOK_CH22,
+  }),
+  MIL_DEPOSIT_EARNINGS_MISSING: Object.freeze({
+    severity: ISSUE_SEVERITY.BLOCK,
+    message: 'No military basic pay is recorded for part of this service, so the deposit for it cannot be estimated.',
+    remediation: 'Request your estimated earnings from DFAS (or the pay center for your service) and enter basic pay by calendar year, or enter the official balance your agency quoted.',
+    source: OPM_CREDITABLE_SERVICE,
+  }),
+  MIL_DEPOSIT_INTEREST_UNVERIFIED: Object.freeze({
+    severity: ISSUE_SEVERITY.WARNING,
+    message: 'The interest on this deposit is an estimate: the interest-accrual date or a historical interest rate is missing or not yet verified against OPM\'s published table.',
+    remediation: 'Your agency\'s official balance controls. Enter it in official-balance mode, or supply the date you first became covered by FERS.',
+    source: OPM_CREDITABLE_SERVICE,
+  }),
+  MIL_DEPOSIT_PLANNED: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'Credit for this service assumes the deposit is paid in full on the planned payment date.',
+    remediation: 'Record each payment as it is made so the plan reflects the paid balance rather than the intention.',
+    source: OPM_HANDBOOK_CH22,
+  }),
+  MIL_DEPOSIT_OFFICIAL_BALANCE: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'The deposit figure is the official balance you entered, projected forward with interest from its through-date.',
+    remediation: 'Nothing to do. Update the balance when your agency issues a new one.',
+    source: OPM_CREDITABLE_SERVICE,
+  }),
   MIL_DEPOSIT_PARTIAL: Object.freeze({
     severity: ISSUE_SEVERITY.INFO,
     message: 'The deposit for this service is not recorded as paid in full, so no FERS credit is modeled for it.',

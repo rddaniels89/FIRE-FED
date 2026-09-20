@@ -44,6 +44,29 @@ const num = (v, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+/** 'YYYY-MM-DD' for a Date, in local calendar terms. */
+function isoDate(d) {
+  const date = d instanceof Date ? d : new Date(d);
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${m}-${day}`;
+}
+
+/**
+ * The first day of the month in which the person reaches `targetAge`, derived
+ * from their age in years and months today. Month precision is all the profile
+ * carries, and all the deposit deadline needs.
+ */
+export function isoMonthAtAge({ currentAge, currentAgeMonths = 0, targetAge, asOfDate = new Date() }) {
+  const d = asOfDate instanceof Date ? asOfDate : new Date(asOfDate);
+  const nowMonths = d.getFullYear() * 12 + d.getMonth();
+  const birthMonths = nowMonths - Math.floor(num(currentAge)) * 12 - Math.min(11, Math.max(0, Math.floor(num(currentAgeMonths))));
+  const target = birthMonths + Math.round(num(targetAge) * 12);
+  const year = Math.floor(target / 12);
+  const month = target - year * 12;
+  return `${year}-${String(month + 1).padStart(2, '0')}-01`;
+}
+
 export function isSpecialProvisionType(employeeType) {
   return Object.values(SPECIAL_PROVISION_TYPES).includes(employeeType);
 }
@@ -183,7 +206,17 @@ export function resolveRetirementPlan(scenario, options = {}) {
     currentAge,
     separationAge,
   });
-  const militaryCredit = resolveMilitaryFersCredit(scenario.military, { ownerId: SERVICE_OWNERS.PRIMARY });
+  // The deposit is date arithmetic, so the plan's as-of date and the month of
+  // separation are derived from the ages the profile stores (year and month,
+  // never a day) and handed to the credit resolver.
+  const asOfDate = options.asOfDate ?? new Date(asOfYear, options.asOfMonth ?? new Date().getMonth(), 1);
+  const separationDate = isoMonthAtAge({ currentAge, currentAgeMonths: num(profile.currentAgeMonths, 0), targetAge: separationAge, asOfDate });
+  const militaryCredit = resolveMilitaryFersCredit(scenario.military, {
+    ownerId: SERVICE_OWNERS.PRIMARY,
+    hireCohort: profile.hireCohort,
+    asOfDate: isoDate(asOfDate),
+    separationDate,
+  });
   const militaryCreditYears = militaryCredit.creditYears;
   const eligibilityYears = civilianYears + militaryCreditYears;
   const militaryIssues = [...militaryCredit.issues];
@@ -374,6 +407,25 @@ export function resolveRetirementPlan(scenario, options = {}) {
       hasRecordedService: militaryCredit.hasRecordedService,
       creditedPeriodIds: militaryCredit.creditedPeriodIds,
       recordedYears: militaryCredit.normalized.totals.creditableYears + militaryCredit.normalized.totals.undatedApproximateYears,
+      separationDate,
+      deposit: {
+        mode: militaryCredit.deposit.mode,
+        principal: militaryCredit.deposit.principal,
+        principalComplete: militaryCredit.deposit.principalComplete,
+        interest: militaryCredit.deposit.interest,
+        balance: militaryCredit.deposit.balance,
+        totalPaid: militaryCredit.deposit.totalPaid,
+        projectionDate: militaryCredit.deposit.projectionDate,
+        interestAccrualDate: militaryCredit.deposit.interestAccrualDate,
+        nextPostingDate: militaryCredit.deposit.nextPostingDate,
+        officialBalance: militaryCredit.deposit.officialBalance,
+        plannedPaymentDate: scenario.military?.deposit?.plannedPaymentDate ?? null,
+        plannedPaymentAssumed: militaryCredit.deposit.plannedPaymentAssumed,
+        plannedAfterSeparation: militaryCredit.deposit.plannedAfterSeparation,
+        byPeriod: militaryCredit.deposit.byPeriod,
+        ledger: militaryCredit.deposit.ledger,
+        ratesUsed: militaryCredit.deposit.ratesUsed,
+      },
       issues: militaryIssues,
     },
     high3: high3,

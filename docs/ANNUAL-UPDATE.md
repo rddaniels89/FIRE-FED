@@ -16,6 +16,7 @@ Copy the most recent year's entry, rename it, update every figure, and set
 | `tsp` | elective deferral, catch-up, super catch-up (60–63), Roth catch-up wage threshold | IRS notice on 402(g)/414(v); tsp.gov bulletins | November |
 | `ssaEarningsTest` | under-FRA and FRA-year exempt amounts | ssa.gov/oact/cola/rtea.html | October |
 | `fers` | refund and deposit interest rate | OPM service credit page | January |
+| `src/lib/military/depositRates.js` | the same rate appended to `FERS_DEPOSIT_INTEREST_RATES` with `verified: true`; a test checks it equals `fers.refundInterestRate` | the January BAL | January |
 | `federalTax` | standard deduction, age-65 addition, senior bonus, brackets by status, provisional-income thresholds (statutory, rarely change), FICA wage base | IRS Rev. Proc. for the year; SSA wage base | October–November |
 | `capitalGains` | 0% and 15% ceilings by status | same Rev. Proc. | October–November |
 | `medicare` | Part B premium and deductible, IRMAA tiers | CMS fact sheet | November |

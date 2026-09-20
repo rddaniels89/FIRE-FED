@@ -316,7 +316,10 @@ export function createDefaultMilitary() {
       paidThroughDate: null,
       paidInFullDate: null,
       firstFersCoverageDate: null,
+      /** Overrides the derived interest-accrual date when the agency has stated one. */
+      interestAccrualDate: null,
       plannedPaymentDate: null,
+      /** [{ id, date, amount, official }] in any order; the engine sorts them. */
       payments: [],
     },
     incomeStreams: [],

@@ -56,7 +56,10 @@ describe('resolveMilitaryFersCredit', () => {
     expect(r.creditDays).toBe(366);
     expect(r.creditDuration).toBeNull();
     expect(r.creditYears).toBeCloseTo(366 / 360, 10);
-    expect(r.issues.map((i) => i.code)).not.toContain(ISSUE_CODES.MIL_DEPOSIT_PARTIAL);
+    expect(r.partlyCreditedPeriodIds).toEqual(['p1']);
+    // The post-1956 tail is unpaid, and the note says so; the pre-1957 days are credited regardless.
+    expect(r.issues.map((i) => i.code)).toContain(ISSUE_CODES.MIL_DEPOSIT_PARTIAL);
+    expect(r.reason).toBeNull();
   });
 
   it('carries an estimate-only status when any credited period is an estimate', () => {

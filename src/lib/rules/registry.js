@@ -631,6 +631,55 @@ const RULE_LIST = [
     ],
   }),
   rule({
+    id: 'military.deposit_rate',
+    category: 'military',
+    title: 'Military service deposit: the principal',
+    formula: 'Principal = Σ over calendar years of (military basic pay earned that year × rate for that year), where the rate is 3% except 3.25% for 1999 and 3.40% for 2000. USERRA interruption: the lesser of that figure and the FERS deductions that would have been withheld from the civilian pay for the same months.',
+    plainEnglish:
+      'The deposit is a small percentage of the basic pay you earned while serving, in the dollars of the time, not today\'s money. Allowances, bonuses and special pays are not included. If you left a federal job to serve and came back under reemployment rights, you owe the smaller of that figure and what FERS would have taken from your civilian pay.',
+    source: { name: 'OPM — CSRS/FERS Handbook ch. 23, service credit payments', url: 'https://www.opm.gov/retirement-center/publications-forms/csrsfers-handbook/c023.pdf' },
+    statute: '5 U.S.C. 8422(e)(1), (5)',
+    verifiedAgainst: 'Handbook chapter 23 section 23A2.1-1 rate table; OPM creditable service page; src/lib/military/depositRates.js',
+    inputs: ['military.servicePeriods[].earningsByYear', 'military.servicePeriods[].civilianBasicPayByYear', 'profile.hireCohort'],
+    caveats: [
+      'Basic pay by year comes from a DFAS estimated-earnings statement; FireFed never derives it from a rank or pay table.',
+      'A year with no basic pay recorded leaves the principal incomplete and blocks the estimate for that period.',
+    ],
+  }),
+  rule({
+    id: 'military.deposit_interest',
+    category: 'military',
+    title: 'Military service deposit: interest',
+    formula: 'Interest-accrual date (IAD) = 2 years after the first FERS-covered appointment (or USERRA reemployment). From the IAD, interest accrues on the unpaid balance at each calendar year\'s variable rate for its own days and is posted, compounded, on each IAD anniversary. Payments are applied on their dates to the oldest unpaid period first. A deposit paid in full before the first posting carries no interest.',
+    plainEnglish:
+      'You get two interest-free years from when you first became covered by FERS. After that the unpaid balance earns interest at the rate Treasury sets each year, added once a year. Pay it off within the first year after the grace period and you pay no interest at all. Each period of service counts only once its own share is fully paid.',
+    source: { name: 'OPM — creditable service and annual interest rates', url: OPM_CREDITABLE_SERVICE },
+    statute: '5 U.S.C. 8422(e)(3), 8334(e)',
+    verifiedAgainst: 'OPM BAL 26-301 for the 2026 rate and BAL 25-301 for 2025; earlier rates transcribed from OPM\'s published series and flagged unverified in src/lib/military/depositRates.js; posting and proration conventions listed in docs/MILITARY-VERIFICATION.md',
+    inputs: ['military.deposit.firstFersCoverageDate', 'military.deposit.interestAccrualDate', 'military.deposit.payments', 'military.deposit.plannedPaymentDate'],
+    caveats: [
+      'Interest within an accrual year that spans two calendar years is prorated by days at each year\'s rate; an agency worksheet may apply a single rate. The difference is small and the official balance controls.',
+      'Interest rates before 2025 are transcribed and not yet verified; any figure that depends on them is labelled an estimate.',
+      'An official balance entered with its through-date replaces the computed balance from that date forward.',
+    ],
+  }),
+  rule({
+    id: 'military.deposit_comparison',
+    category: 'military',
+    title: 'Deposit comparison: the whole plan, twice',
+    formula: 'Baseline = plan with nothing paid and nothing credited. Credit = plan with every creditable period credited and the deposit balance paid as a one-off outflow on the payment date. Delta = credit − baseline on every timeline row: pension, supplement, taxes, balances. Break-even = first age where cumulative after-tax delta ≥ deposit; discounted at a disclosed rate. NPV = Σ discounted after-tax delta − discounted deposit.',
+    plainEnglish:
+      'FireFed does not value a deposit with a one-line formula, because paying it can change the door you retire through, remove a reduction, start the supplement, or change your multiplier and your taxes. It runs your whole plan with and without the deposit and shows the difference, year by year, with the break-even and present value at a discount rate you can see.',
+    source: { name: 'OPM — FERS types of retirement', url: OPM_FERS_TYPES },
+    statute: '5 U.S.C. 8410–8415, 8421',
+    verifiedAgainst: 'src/lib/military/depositComparison.js against resolveRetirementPlan and buildTimeline; the invariants in src/lib/military/__tests__/depositComparison.test.js',
+    inputs: ['military.deposit', 'military.servicePeriods', 'profile.separationAge', 'tsp.inflationRate'],
+    caveats: [
+      'The comparison shows consequences. It never states whether to pay.',
+      'If the deposit changes the retirement path, start age, supplement, or multiplier, the result is labelled a whole-plan comparison; an annuity-only break-even would understate it.',
+    ],
+  }),
+  rule({
     id: 'military.deposit_required',
     category: 'military',
     title: 'Post-1956 military service needs a deposit',

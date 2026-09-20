@@ -146,6 +146,11 @@ export function createServicePeriod(overrides = {}) {
     /** Basic pay by calendar year, in the dollars of the day. Null until entered. */
     earningsByYear: null,
     /**
+     * USERRA cases only: the civilian basic pay the person would have earned
+     * in each calendar year of the absence, for the lesser-of deposit rule.
+     */
+    civilianBasicPayByYear: null,
+    /**
      * Legacy only: a whole-year count carried over from the pre-v4 schema, which
      * recorded military service as a number with no dates. Never set by the UI.
      */

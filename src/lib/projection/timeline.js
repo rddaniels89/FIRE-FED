@@ -153,6 +153,10 @@ export function buildTimeline(scenario, options = {}) {
   const expectedReturn = num(overrides.expectedReturn, resolveExpectedReturn(scenario));
   const cashReturn = num(tsp.fundReturns?.G, 2) / 100;
   const returnsByYear = Array.isArray(options.returnsByYear) ? options.returnsByYear : null;
+  // One-off cash outflows keyed by age, such as a military service deposit paid
+  // in a given year. Funded like any other outflow: cash first, then the
+  // portfolio in the usual order.
+  const oneTimeOutflowsByAge = options.oneTimeOutflowsByAge ?? {};
 
   const filingStatus = taxes.filingStatus ?? 'single';
   const state = taxes.includeStateTax === false ? null : taxes.state ?? null;
@@ -292,6 +296,7 @@ export function buildTimeline(scenario, options = {}) {
     const lumpSums = age === separationAge ? nonNeg(plan.annualLeave.grossPayment) + nonNeg(plan.refund?.refundAmount) : 0;
 
     // ---------- Outflows ----------
+    const oneTimeOutflow = nonNeg(oneTimeOutflowsByAge[age]);
     const spendingBase = isWorking ? nonNeg(summary.monthlyExpenses) : nonNeg(fire.monthlyFireIncomeGoal);
     const spending = spendingBase * 12 * Math.pow(1 + spendingInflation, i) * spendingMultiplier;
 
@@ -358,7 +363,7 @@ export function buildTimeline(scenario, options = {}) {
       });
 
       const incomeTax = taxResult.totalTax + fica + penalties;
-      const outflows = spending + healthcareCost + incomeTax + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
+      const outflows = spending + healthcareCost + incomeTax + oneTimeOutflow + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
       const inflows = salary + guaranteedIncome + lumpSums + seppDraw;
       let need = outflows - inflows;
 
@@ -415,7 +420,7 @@ export function buildTimeline(scenario, options = {}) {
 
     // Excess when income exceeds outflows in retirement is kept as cash.
     const totalTax = (taxResult?.totalTax ?? 0) + fica + penalties;
-    const totalOutflow = spending + healthcareCost + totalTax + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
+    const totalOutflow = spending + healthcareCost + totalTax + oneTimeOutflow + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
     const totalInflow = salary + guaranteedIncome + lumpSums;
     const totalWithdrawals = w.cash + w.taxable + w.rothBasis + w.conversions + w.traditional + w.rothEarnings;
     const surplus = totalInflow + totalWithdrawals - totalOutflow - shortfall;
@@ -490,6 +495,7 @@ export function buildTimeline(scenario, options = {}) {
       spousePension,
       sideHustle,
       lumpSums,
+      oneTimeOutflow,
       withdrawals: { ...w, total: totalWithdrawals, sepp: seppDraw },
       rothConversion: conversionThisYear,
       penalties,
