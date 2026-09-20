@@ -49,6 +49,11 @@ const REQUIRED_IDS = [
   'military.va_estimate',
   'tax.state_military_retired_pay',
   'military.retired_pay_credit',
+  'military.retirement_system',
+  'military.retired_pay_formula',
+  'military.high36',
+  'military.redux',
+  'military.retired_pay_cola',
 ];
 
 describe('rules registry', () => {

@@ -15,6 +15,10 @@ more than an estimate.
 | Chapter 22 and 23 worked examples | `src/lib/military/__tests__/deposit.test.js` | reproduce the Handbook's deposit examples to the cent and add them as golden cases; the current goldens reproduce OPM's composite-rate tables, not the Handbook examples | CSRS/FERS Handbook ch. 22 and 23 |
 | State treatment of military retired pay, all 42 taxing jurisdictions | `src/lib/taxes/stateMilitaryRetiredPay.js` | each state's treatment, exclusion amount, age condition and effective window against the state's current-year instructions; set `verified` to the source and `reviewedOn` to the date. Until then the plan taxes the pay in full and flags it | each state department of revenue |
 | SBP/RCSBP annuity state treatment | same | whether each state's military exclusion extends to survivor annuities | each state department of revenue |
+| Basic pay tables 2024 and 2025 | `src/lib/military/retirement/payTables.js` | replace the derived tables (2026 rates with the across-the-board raise removed; E-1 to E-4 excluded) with the published tables, including the April 2025 junior-enlisted rates; then set `derived: false, verified: true` | DFAS / DoD pay tables for 2024 and 2025 |
+| First retired-pay COLA proration by quarter of retirement | `src/lib/military/retirement/cola.js` `FIRST_COLA_SHARE_BY_QUARTER` | Q1 half, Q2 quarter, Q3 none then full, Q4 three quarters next December | DoD FMR Vol. 7B ch. 8 |
+| Years-of-service band boundary | `src/lib/military/retirement/payTables.js` `yosBandIndex` | the "over N" rate starts on the anniversary of the pay entry base date (exactly N years is "over N") | DoD FMR Vol. 7A ch. 1 |
+| Regular retirement goldens | `src/lib/military/retirement/__tests__/retirement.test.js` | reconcile Final Pay, High-36, REDUX, and BRS fixtures against the MyArmyBenefits calculator and a de-identified DFAS estimate | MyArmyBenefits; DFAS |
 
 ## Verified
 
@@ -40,6 +44,12 @@ more than an estimate.
 | Federal tax character by stream: retired pay and CRDP taxable; VA compensation, DIC, CRSC, BAH/BAS not taxable; SBP taxable; disability retired pay per official classification | IRS Publications 525 and 3; IRC 104(a)(4), 122; 38 U.S.C. 5301 | build; pinned by `incomeStreams.test.js` | 2026-09-20 |
 | SBP not offset by DIC since 1 January 2023 | Pub. L. 116-92 §622 (FY2020 NDAA), phase-in complete 2023 | build; pinned by `incomeStreams.test.js` case 32 | 2026-09-20 |
 | Retired pay and FERS credit: not creditable while receiving military retired pay except (a) retired pay for a disability incurred in combat or caused by an instrumentality of war, (b) chapter 1223 Reserve retired pay; otherwise the retiree may waive retired pay effective the day before the FERS annuity begins, and the post-1956 deposit is still required before separation | OPM military retired pay page, retrieved 2026-09-20; 5 U.S.C. 8411(c)(2) | build; pinned by `retiredPayWaiver.test.js` | 2026-09-20 |
+| 2026 basic pay table, every grade and band, incl. E-1 under 4 months and the senior enlisted rate | DFAS basic pay pages (EM, WO, CO, CO_FE), read 2026-09-20; pages updated 2026-01-12 (titles still say 2025; every cell equals the 2025 rate raised 3.8%) | build; pinned by `retirement.test.js` | 2026-09-20 |
+| Retired-pay multipliers: 2.5% legacy, REDUX reduced one point per year short of 30, Final Pay and High-36 bases | DoD Active Duty Retirement page, retrieved 2026-09-20 | build | 2026-09-20 |
+| Gross retired pay rounded down to the next lower dollar | 10 U.S.C. 1412 | build | 2026-09-20 |
+| Multiplier service in whole years and full months, days disregarded | 10 U.S.C. 1405(b) | build | 2026-09-20 |
+| 75% cap only for retirements before 1 January 2007 | 10 U.S.C. 1409(b)(3) as amended by Pub. L. 109-364 §642 | build | 2026-09-20 |
+| High-36 is the highest 36 months whether or not consecutive | 10 U.S.C. 1407; DoD FMR Vol. 7B ch. 3 | build; pinned by `retirement.test.js` | 2026-09-20 |
 
 ## Corrections made during verification
 

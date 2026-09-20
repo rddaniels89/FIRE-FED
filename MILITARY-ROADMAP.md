@@ -204,28 +204,29 @@ the screen.
 Goal: a real gross retired-pay calculation for Final Pay, High-36, REDUX/CSB,
 and BRS with an auditable trace (§20.5–§20.9).
 
-- [ ] `src/lib/military/retirement/`: `suggestSystem` from DIEMS with mandatory
+- [x] `src/lib/military/retirement/`: `suggestSystem` from DIEMS with mandatory
       confirmation (§20.3); `validatePath`; `buildBasicPayHistory` from grade
       periods and pay tables; `selectHigh36PayBase` (highest 36, partial months,
       never current × 36); `computeLongevityMultiplier` (2.5% / 2.0%, REDUX
       reduction, effective-dated caps); COLA engine (full, REDUX CPI−1 with
       age-62 recomputation, first partial COLA); rounding rule; ordered trace
       steps with rule ids; input hash and `rulesVersion`.
-- [ ] Basic pay tables 2024–2026 in `annualParameters.js` or a sibling data file;
-      earlier months by user entry or official pay-base override; future months by
-      explicit growth assumption labelled as such (§20.6). `[-]` tables need human
-      verification against DFAS.
-- [ ] Codes: `MRT_PATH_UNKNOWN`, `MRT_SYSTEM_UNCONFIRMED`, `MRT_SYSTEM_CONFLICT`,
+- [x] Basic pay tables in `src/lib/military/retirement/payTables.js`: the 2026
+      table read from DFAS on 2026-09-20 (verified); 2024 and 2025 derived from it
+      by removing the raise, flagged, and excluding E-1 to E-4. `[-]` the published
+      2024 and 2025 tables still need to replace the derived ones. Earlier months by
+      official pay-base override; future months by explicit growth assumption.
+- [x] Codes: `MRT_PATH_UNKNOWN`, `MRT_SYSTEM_UNCONFIRMED`, `MRT_SYSTEM_CONFLICT`,
       `MRT_1405_SERVICE_UNKNOWN`, `MRT_ACTIVE_SERVICE_BELOW_THRESHOLD`,
       `MRT_PAY_ENTRY_DATE_UNKNOWN`, `MRT_PAY_HISTORY_INCOMPLETE`,
       `MRT_PAY_TABLE_MISSING`, `MRT_FUTURE_PAY_TABLE_ASSUMED`,
       `MRT_ROUNDING_RULE_MISSING`.
-- [ ] Tests: §20.18 longevity cases; properties "more service never reduces gross
+- [x] Tests: §20.18 longevity cases; properties "more service never reduces gross
       without a cap", "High-36 bounded by selected months", "BRS never uses 2.5%",
       "REDUX never runs unconfirmed", "same inputs and rules give same hash".
-- [ ] Golden: fixtures reconciled against the MyArmyBenefits calculator for
-      High-36, BRS, REDUX, and Final Pay, driven from the browser and recorded in
-      `docs/MILITARY-VERIFICATION.md`.
+- [-] Golden: reconcile fixtures against the MyArmyBenefits calculator and a
+      DFAS estimate. The DoD multiplier and REDUX formulas were confirmed from the
+      DoD retirement page; the interactive calculator run is still to do.
 
 Exit: all four systems match the Army calculator fixtures; every result exposes
 pay base, service, multiplier, reductions, rounding, and rule version.
