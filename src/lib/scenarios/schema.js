@@ -333,6 +333,20 @@ export function createDefaultMilitary() {
       payments: [],
     },
     incomeStreams: [],
+    /**
+     * Whether the person receives military retired pay and of what type. This
+     * gates the FERS credit: regular retired pay must be waived to credit the
+     * service; chapter 1223 Reserve retired pay and certain disability awards
+     * are exceptions the user identifies; an unknown type stops the credit.
+     */
+    retiredPay: {
+      receives: 'no',
+      type: null,
+      officialDeterminationStatus: 'unknown',
+      chapter61Exception: 'unknown',
+      exceptionAcknowledged: false,
+      waiver: { mode: 'none', effectiveAge: null },
+    },
     tsp: {
       uniformedServices: {
         enabled: false,

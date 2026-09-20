@@ -39,6 +39,7 @@ more than an estimate.
 | DIC surviving-spouse basic rate and add-ons, effective 2025-12-01 | va.gov DIC survivor rates page, retrieved 2026-09-20 | build | 2026-09-20 |
 | Federal tax character by stream: retired pay and CRDP taxable; VA compensation, DIC, CRSC, BAH/BAS not taxable; SBP taxable; disability retired pay per official classification | IRS Publications 525 and 3; IRC 104(a)(4), 122; 38 U.S.C. 5301 | build; pinned by `incomeStreams.test.js` | 2026-09-20 |
 | SBP not offset by DIC since 1 January 2023 | Pub. L. 116-92 §622 (FY2020 NDAA), phase-in complete 2023 | build; pinned by `incomeStreams.test.js` case 32 | 2026-09-20 |
+| Retired pay and FERS credit: not creditable while receiving military retired pay except (a) retired pay for a disability incurred in combat or caused by an instrumentality of war, (b) chapter 1223 Reserve retired pay; otherwise the retiree may waive retired pay effective the day before the FERS annuity begins, and the post-1956 deposit is still required before separation | OPM military retired pay page, retrieved 2026-09-20; 5 U.S.C. 8411(c)(2) | build; pinned by `retiredPayWaiver.test.js` | 2026-09-20 |
 
 ## Corrections made during verification
 

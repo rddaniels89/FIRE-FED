@@ -444,6 +444,12 @@ export function resolveRetirementPlan(scenario, options = {}) {
         ledger: militaryCredit.deposit.ledger,
         ratesUsed: militaryCredit.deposit.ratesUsed,
       },
+      retiredPay: {
+        ...militaryCredit.retiredPayGate,
+        receives: scenario.military?.retiredPay?.receives ?? 'no',
+        type: scenario.military?.retiredPay?.type ?? null,
+        hypotheticalWaiver: Boolean(scenario.military?.hypotheticalWaiver),
+      },
       incomeStreams: incomeStreams.streams,
       stateMilitaryRetiredPay: stateMilitaryRule
         ? { state: stateCode, applied: stateMilitaryRule.applied, verified: stateMilitaryRule.verified, treatment: stateMilitaryRule.treatment, reason: stateMilitaryRule.reason }

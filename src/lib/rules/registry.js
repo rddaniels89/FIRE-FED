@@ -731,6 +731,24 @@ const RULE_LIST = [
     ],
   }),
   rule({
+    id: 'military.retired_pay_credit',
+    category: 'military',
+    title: 'Military retired pay and FERS credit: the three paths',
+    formula:
+      'No retired pay: credit as usual once the deposit is paid. Retired pay of a type that must be waived (regular longevity, TERA, other): no credit until the waiver is elected, effective when the FERS annuity begins, and the agency determination is recorded; a hypothetical waiver comparison is offered. Chapter 1223 Reserve retired pay, or chapter 61 retired pay with an official combat or instrumentality-of-war finding: credit without a waiver once the user confirms the exception. Unknown type: no credit.',
+    plainEnglish:
+      'If you draw a regular military pension, the law lets you count that service toward FERS only if you give the pension up when your FERS annuity starts, and you still pay the deposit. Reserve retirees who started drawing at 60, and some disability retirees, may keep the pension and count the service. FireFed cannot tell which case you are in from the amount; you confirm the type and your agency and OPM decide. FireFed never prepares a waiver.',
+    source: { name: 'OPM — military retired pay and FERS', url: 'https://www.opm.gov/retirement-center/fers-information/military-retired-pay/' },
+    statute: '5 U.S.C. 8411(c)(2); 5 CFR 842.306',
+    verifiedAgainst: 'OPM military retired pay page; CSRS/FERS Handbook ch. 22 §22A3; src/lib/military/retiredPayWaiver.js evaluateRetiredPayGate',
+    inputs: ['military.retiredPay.receives', 'military.retiredPay.type', 'military.retiredPay.officialDeterminationStatus', 'military.retiredPay.chapter61Exception', 'military.retiredPay.waiver'],
+    caveats: [
+      'The waiver comparison stops retired pay and CRDP when the FERS annuity begins and credits the service; it leaves CRSC, VA compensation, SBP premiums, and healthcare as entered and says they need separate confirmation.',
+      'A chapter 61 award never enters the automated waiver path; FireFed does not model waiving disability retired pay.',
+      'The waiver comparison is always shown under the spec §6.7 warning and never states which scenario to choose.',
+    ],
+  }),
+  rule({
     id: 'military.deposit_required',
     category: 'military',
     title: 'Post-1956 military service needs a deposit',

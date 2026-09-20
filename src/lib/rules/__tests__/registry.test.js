@@ -48,6 +48,7 @@ const REQUIRED_IDS = [
   'military.income_tax_character',
   'military.va_estimate',
   'tax.state_military_retired_pay',
+  'military.retired_pay_credit',
 ];
 
 describe('rules registry', () => {

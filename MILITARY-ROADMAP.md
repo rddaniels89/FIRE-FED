@@ -154,16 +154,16 @@ lowers the FIRE date without changing taxable income.
 Goal: a military retiree with FERS service is handled correctly and never
 credited silently.
 
-- [ ] `src/lib/military/retiredPayWaiver.js`: no-retired-pay, waiver-required, and
+- [x] `src/lib/military/retiredPayWaiver.js`: no-retired-pay, waiver-required, and
       regulatory-exception paths (§4.3). Waiver scenario stops the retired-pay
       stream at the FERS annuity start, credits paid periods, recomputes
       eligibility, annuity, taxes, COLA on both streams, survivor inputs (§6.7).
-- [ ] Chapter 1223 Reserve retiree path: credit permitted with confirmation.
-- [ ] Chapter 61 and unknown-type cases: hard stop, official amount only.
-- [ ] §6.7 warning text rendered immediately above every waiver comparison.
-- [ ] Codes: `MIL_RETIRED_PAY_TYPE_UNKNOWN`, `MIL_WAIVER_CONFIRMATION_REQUIRED`,
+- [x] Chapter 1223 Reserve retiree path: credit permitted with confirmation.
+- [x] Chapter 61 and unknown-type cases: hard stop, official amount only.
+- [x] §6.7 warning text rendered immediately above every waiver comparison.
+- [x] Codes: `MIL_RETIRED_PAY_TYPE_UNKNOWN`, `MIL_WAIVER_CONFIRMATION_REQUIRED`,
       `MIL_CH61_OFFICIAL_INPUT_REQUIRED`.
-- [ ] Tests: §14.1 cases 24–27; integration "waiver scenario flows through survivor
+- [x] Tests: §14.1 cases 24–27; integration "waiver scenario flows through survivor
       and tax projections".
 
 Exit: a regular retiree's plan shows no credit until confirmed, and the waiver

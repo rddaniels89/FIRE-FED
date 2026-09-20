@@ -34,6 +34,7 @@ import {
   sumOpmDurations,
 } from './servicePeriods';
 import { estimateMilitaryDeposit } from './deposit';
+import { RETIRED_PAY_PATHS, evaluateRetiredPayGate } from './retiredPayWaiver';
 
 const DAYS_PER_OPM_YEAR = 360;
 
@@ -44,6 +45,18 @@ export const CREDIT_REASONS = Object.freeze({
   DEPOSIT_AFTER_SEPARATION: 'deposit_after_separation',
   OFFICIAL_DETERMINATION_REQUIRED: 'official_determination_required',
   NOT_CREDITABLE: 'not_creditable',
+  /** Retired pay of a type that must be waived, and no confirmed waiver is recorded. */
+  RETIRED_PAY_WAIVER_REQUIRED: 'retired_pay_waiver_required',
+  /** Retired pay of unknown type, or receipt unknown. */
+  RETIRED_PAY_TYPE_UNKNOWN: 'retired_pay_type_unknown',
+  /** Reserve or chapter 61 retired pay awaiting the user's confirmation of the exception. */
+  RETIRED_PAY_DETERMINATION_REQUIRED: 'retired_pay_determination_required',
+});
+
+const GATE_REASON = Object.freeze({
+  [RETIRED_PAY_PATHS.WAIVER_REQUIRED]: CREDIT_REASONS.RETIRED_PAY_WAIVER_REQUIRED,
+  [RETIRED_PAY_PATHS.TYPE_UNKNOWN]: CREDIT_REASONS.RETIRED_PAY_TYPE_UNKNOWN,
+  [RETIRED_PAY_PATHS.DETERMINATION_REQUIRED]: CREDIT_REASONS.RETIRED_PAY_DETERMINATION_REQUIRED,
 });
 
 /**
@@ -75,17 +88,24 @@ export function resolveMilitaryFersCredit(
   const deposit = estimateMilitaryDeposit({ military, periods: own, hireCohort, asOfDate, separationDate });
   const { normalized } = deposit;
 
-  const issues = [...normalized.issues, ...deposit.issues];
-  const creditedPeriodIds = new Set([...deposit.creditedPeriodIds, ...deposit.partlyCreditedPeriodIds]);
+  // Military retired pay gates the credit before the deposit does: retired pay
+  // that must be waived, an unknown type, or an unconfirmed exception means
+  // nothing is credited however the deposit stands. Spouse periods are not
+  // gated by the primary's retired pay.
+  const gate = ownerId === SERVICE_OWNERS.PRIMARY ? evaluateRetiredPayGate(military) : { path: RETIRED_PAY_PATHS.NO_RETIRED_PAY, allowsCredit: true, issues: [] };
+  const gated = own.length > 0 && !gate.allowsCredit;
+
+  const issues = [...normalized.issues, ...deposit.issues, ...(own.length > 0 ? gate.issues : [])];
+  const creditedPeriodIds = new Set(gated ? [] : [...deposit.creditedPeriodIds, ...deposit.partlyCreditedPeriodIds]);
 
   // Days come from the credited year segments, so a straddling period whose
   // post-1956 tail is unpaid contributes only its pre-1957 days.
-  const creditDays = deposit.creditedSegments.reduce((s, seg) => s + seg.days, 0);
+  const creditDays = gated ? 0 : deposit.creditedSegments.reduce((s, seg) => s + seg.days, 0);
 
   // OPM's duration is exact only when whole periods are credited; a part-
   // credited period falls back to calendar days on the 360-day year.
-  const wholePeriods = normalized.periods.filter((p) => deposit.creditedPeriodIds.includes(p.id) && p.startDate && p.endDate);
-  const anyPartial = deposit.partlyCreditedPeriodIds.length > 0;
+  const wholePeriods = gated ? [] : normalized.periods.filter((p) => deposit.creditedPeriodIds.includes(p.id) && p.startDate && p.endDate);
+  const anyPartial = !gated && deposit.partlyCreditedPeriodIds.length > 0;
   const creditDuration = anyPartial ? null : sumOpmDurations(wholePeriods.map((p) => opmDuration(p.startDate, p.endDate)));
   const creditYears = creditDuration && wholePeriods.length > 0 ? opmDurationToYears(creditDuration) : creditDays / DAYS_PER_OPM_YEAR;
   const creditedPeriods = normalized.periods.filter((p) => creditedPeriodIds.has(p.id));
@@ -101,6 +121,7 @@ export function resolveMilitaryFersCredit(
 
   let reason = null;
   if (own.length === 0) reason = CREDIT_REASONS.NO_SERVICE;
+  else if (gated) reason = GATE_REASON[gate.path] ?? CREDIT_REASONS.RETIRED_PAY_DETERMINATION_REQUIRED;
   else if (creditedPeriods.length === 0) {
     if (deposit.plannedAfterSeparation) reason = CREDIT_REASONS.DEPOSIT_AFTER_SEPARATION;
     else if (creditable.length > 0) reason = CREDIT_REASONS.DEPOSIT_UNPAID;
@@ -120,6 +141,14 @@ export function resolveMilitaryFersCredit(
     depositPaidInFull: deposit.paidInFullRecorded,
     hasRecordedService: own.length > 0,
     deposit,
+    retiredPayGate: {
+      path: gate.path,
+      allowsCredit: gate.allowsCredit,
+      waiverScenarioAllowed: Boolean(gate.waiverScenarioAllowed),
+      waiverElected: Boolean(gate.waiverElected),
+      exceptionApplied: Boolean(gate.exceptionApplied),
+      gatedCredit: gated,
+    },
     issues,
     normalized,
   };

@@ -283,6 +283,42 @@ export const ISSUE_CATALOG = Object.freeze({
     remediation: 'Identify the retirement type from your retirement orders or Retiree Account Statement and confirm the treatment with your agency HR office and OPM.',
     source: OPM_MILITARY_RETIRED_PAY,
   }),
+  MIL_WAIVER_CONFIRMATION_REQUIRED: Object.freeze({
+    severity: ISSUE_SEVERITY.BLOCK,
+    message: 'Military retired pay of this type must be waived, effective when the FERS annuity begins, before the service can be credited. No credit is modeled until the waiver is elected and your agency\'s determination is recorded. A hypothetical waiver comparison is available.',
+    remediation: 'Confirm the retirement type and the waiver requirement with your agency HR office and OPM. If you elect the waiver, record it here with the agency\'s determination; FireFed does not prepare or submit the waiver.',
+    source: OPM_MILITARY_RETIRED_PAY,
+  }),
+  MIL_WAIVER_ELECTED: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'The plan credits the military service on the basis of an elected waiver of retired pay, effective when the FERS annuity begins. Retired pay and CRDP stop then.',
+    remediation: 'Confirm the effect on survivor coverage, VA-related payments, and healthcare with your agency, OPM, and DFAS.',
+    source: OPM_MILITARY_RETIRED_PAY,
+  }),
+  MIL_WAIVER_HYPOTHETICAL: Object.freeze({
+    severity: ISSUE_SEVERITY.WARNING,
+    message: 'This is a hypothetical waiver scenario. It is not the plan of record and not a waiver determination or recommendation.',
+    remediation: 'Confirm the treatment of your retired pay, service credit, survivor coverage, VA-related payments, and healthcare with your agency, OPM, and DFAS before acting.',
+    source: OPM_MILITARY_RETIRED_PAY,
+  }),
+  MIL_RESERVE_RETIRED_PAY_CONFIRMATION: Object.freeze({
+    severity: ISSUE_SEVERITY.BLOCK,
+    message: 'Reserve (chapter 1223) retired pay can be kept while the service is credited, but only once you confirm that is the retirement type on your orders and acknowledge that your agency and OPM make the determination.',
+    remediation: 'Check the retirement authority on your retirement orders or Retiree Account Statement, confirm it with your agency HR office, and record the confirmation here.',
+    source: OPM_MILITARY_RETIRED_PAY,
+  }),
+  MIL_RETIRED_PAY_EXCEPTION_APPLIED: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'The plan credits the military service without a waiver under a statutory exception you identified. Your agency and OPM control whether the exception applies.',
+    remediation: 'Keep the official determination with your retirement records.',
+    source: OPM_MILITARY_RETIRED_PAY,
+  }),
+  MIL_CH61_OFFICIAL_INPUT_REQUIRED: Object.freeze({
+    severity: ISSUE_SEVERITY.BLOCK,
+    message: 'Chapter 61 disability retired pay is not credited by FireFed unless you have an official finding that it was awarded for a disability incurred in combat or caused by an instrumentality of war. FireFed does not decide that, and does not model waiving disability retired pay.',
+    remediation: 'Ask your agency HR office and OPM whether the exception applies to your award. Until then the retired pay is projected as entered and no service credit is modeled.',
+    source: OPM_MILITARY_RETIRED_PAY,
+  }),
   MIL_FIVE_CIVILIAN_YEARS: Object.freeze({
     severity: ISSUE_SEVERITY.BLOCK,
     message: 'Military service cannot supply the five years of civilian service FERS requires for any annuity.',
