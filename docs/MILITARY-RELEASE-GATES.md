@@ -38,11 +38,10 @@ a named reviewer, and **infra** when it lives outside this codebase.
 
 | Gate | Reviewer | Packet |
 |---|---|---|
-| Federal-retirement SME sign-off | a FERS benefits specialist | `docs/MILITARY-VERIFICATION.md` (deposit, credit buckets, waiver paths), `MILITARY-ROADMAP.md` passes 1–3 and 5, the Methodology page military and FERS rules, `deposit.test.js` and `militaryBuckets.test.js` as the case list |
-| Military-benefits SME sign-off | a retired-pay / RSO specialist (active and Reserve) | the calculator at `/calculators/military-retirement`, `retirement.test.js`, `reserve.test.js`, `special.test.js`, `sbp.test.js`, the pending rows in `MILITARY-VERIFICATION.md` (first-COLA proration, YOS band anniversary, former-member pay base, lump-sum algorithm, SBP premium formula) |
+| Federal-retirement and military-benefits SME sign-offs | **Not used** (owner decision, 2026-09-21) | The spec's two SME gates are waived. In their place: the primary-source verification record in `docs/MILITARY-VERIFICATION.md`, the golden-case table with its tolerances, and the pending `[-]` rows, which the owner works through against the primary sources directly. Every unverified figure keeps its issue code on the result it affects. |
 | Counsel review of the VA-claims boundary and non-affiliation copy | counsel | the copy in `status.js` (every message and remediation), `PublicMilitaryRetirementCalculator.jsx` constants, `MilitaryNotice`, spec §11.5–11.6 and §12, the FTC Health Breach Notification question (§11.4) |
 | WCAG 2.2 AA review | accessibility reviewer | the inputs section, the plan page, the calculator, the PDF; the keyboard e2e as a starting point |
-| De-identified DFAS statements and MyArmyBenefits runs for golden reconciliation | SME with permission-holding retirees | the golden-case table in `MILITARY-VERIFICATION.md`; add each case as a fixture with tolerance and rounding convention recorded |
+| De-identified DFAS statements and MyArmyBenefits runs for golden reconciliation | owner, with permission-holding retirees | the golden-case table in `MILITARY-VERIFICATION.md`; add each case as a fixture with tolerance and rounding convention recorded |
 | Private beta across personas | product | veteran fed with deposit; Guard member who is a fed (TRS/FEHB, dual TSP); active retiree with CRDP; surviving spouse with SBP and DIC; BRS member; Chapter 61 retiree |
 
 ## Data still marked `[-]`

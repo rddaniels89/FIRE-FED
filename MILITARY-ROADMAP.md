@@ -339,10 +339,11 @@ the release checklist with human items marked.
       `MRT_SCENARIO_RULES_STALE` (plus `MRT_RULES_STALE` per calculation from pass 8).
 - [x] Tests: §20.18 medical, TERA, SBP cases; §14.1 case 50 "rule update preserves
       prior snapshot"; PDF parity; telemetry redaction.
-- [-] Human release gates (§16, §20.21): federal-retirement SME sign-off,
-      military-benefits SME sign-off, counsel review of VA-claims boundary and
+- [-] Human release gates (§16, §20.21): counsel review of VA-claims boundary and
       non-affiliation copy, WCAG 2.2 AA review, de-identified DFAS statements for
-      golden reconciliation, private beta across personas.
+      golden reconciliation, private beta across personas. The spec's two SME
+      sign-offs are not used (owner decision, 2026-09-21); the primary-source
+      verification record in `docs/MILITARY-VERIFICATION.md` stands in for them.
 
 Exit: every code gate in §16 and §20.21 is green; the human gates are listed with
 what each reviewer receives.
