@@ -7,7 +7,7 @@ import { SPECIAL_PROVISION_LABELS } from '../../../lib/calculations/specialProvi
 import { PATH_LABELS } from '../../../lib/calculations/retirementPaths';
 import { OTHER_COVERAGE_TYPES } from '../../../lib/calculations/healthcareCosts';
 import { estimatePiaFromSalary } from '../../../lib/calculations/socialSecurity';
-import { RETIREMENT_PATH_AUTO } from '../../../lib/scenarios/schema';
+import { PROFILE_KIND_LABELS, RETIREMENT_PATH_AUTO, isFederalEmployeeKind } from '../../../lib/scenarios/schema';
 import { fractionToPercent, money, pct } from './format';
 import {
   ENROLLMENT_OPTIONS,
@@ -20,10 +20,13 @@ import {
 
 export function youSummary(scenario) {
   const p = scenario.profile;
+  const age = p.currentAgeMonths ? `${p.currentAge}y ${p.currentAgeMonths}m` : `${p.currentAge}`;
+  if (!isFederalEmployeeKind(p.kind)) {
+    return `${PROFILE_KIND_LABELS[p.kind] ?? p.kind} · age ${age} · stops working at ${p.separationAge} · Social Security at ${p.socialSecurityClaimAge}`;
+  }
   const employee = p.employeeType === 'regular' ? 'Regular' : SPECIAL_PROVISION_LABELS[p.employeeType] ?? p.employeeType;
   const annuity = p.annuityStartAge == null ? 'annuity at separation' : `annuity at ${p.annuityStartAge}`;
   const path = p.retirementPath === RETIREMENT_PATH_AUTO ? 'Auto path' : PATH_LABELS[p.retirementPath] ?? p.retirementPath;
-  const age = p.currentAgeMonths ? `${p.currentAge}y ${p.currentAgeMonths}m` : `${p.currentAge}`;
   return `Age ${age} · leaves at ${p.separationAge} · ${annuity} · Social Security at ${p.socialSecurityClaimAge} · ${path} · ${employee}`;
 }
 

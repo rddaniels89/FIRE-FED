@@ -114,6 +114,8 @@ export function createDefaultProfile() {
     // explicit override for someone who knows their own MRA.
     mra: null,
     isDiscontinuedService: false,
+    /** Who the plan is for; decides which sections and figures apply. See PROFILE_KINDS. */
+    kind: 'federal',
   };
 }
 
@@ -281,6 +283,54 @@ export const MILITARY_CONNECTIONS = Object.freeze({
   MULTIPLE: 'multiple',
   UNSURE: 'unsure',
 });
+
+/**
+ * Who the plan is for. Asked once, at onboarding and in the You section, so a
+ * military member with no federal job is never shown FERS questions and a
+ * veteran in federal service is pointed at the military sections.
+ */
+export const PROFILE_KINDS = Object.freeze({
+  FEDERAL: 'federal',
+  FEDERAL_WITH_MILITARY: 'federal_with_military',
+  MILITARY_ONLY: 'military_only',
+  SPOUSE_SURVIVOR: 'spouse_survivor',
+});
+
+export const PROFILE_KIND_LABELS = Object.freeze({
+  [PROFILE_KINDS.FEDERAL]: 'Federal employee',
+  [PROFILE_KINDS.FEDERAL_WITH_MILITARY]: 'Federal employee with military service',
+  [PROFILE_KINDS.MILITARY_ONLY]: 'Military member or veteran, no federal job',
+  [PROFILE_KINDS.SPOUSE_SURVIVOR]: 'Spouse or survivor of a service member, no federal job',
+});
+
+/** Whether the plan has a federal civilian job in it (FERS sections, FERS figures). */
+export function isFederalEmployeeKind(kind) {
+  return kind !== PROFILE_KINDS.MILITARY_ONLY && kind !== PROFILE_KINDS.SPOUSE_SURVIVOR;
+}
+
+/**
+ * The scenario patch that records who the person is. It sets the military
+ * connection when the answer implies one and nothing is recorded yet, and for
+ * a plan with no federal job it clears the FERS service and salary defaults
+ * (only untouched defaults; anything the user entered stays).
+ */
+export function profileKindUpdates(scenario, kind) {
+  const updates = { profile: { kind } };
+  const connection = scenario?.military?.connection ?? MILITARY_CONNECTIONS.NONE;
+  if (connection === MILITARY_CONNECTIONS.NONE) {
+    if (kind === PROFILE_KINDS.FEDERAL_WITH_MILITARY || kind === PROFILE_KINDS.MILITARY_ONLY) updates.military = { connection: MILITARY_CONNECTIONS.SELF };
+    if (kind === PROFILE_KINDS.SPOUSE_SURVIVOR) updates.military = { connection: MILITARY_CONNECTIONS.OTHER_MEMBER };
+  }
+  if (!isFederalEmployeeKind(kind)) {
+    const f = createDefaultFers();
+    const t = createDefaultTsp();
+    const fers = scenario?.fers ?? {};
+    const tsp = scenario?.tsp ?? {};
+    if (fers.yearsOfService === f.yearsOfService && fers.monthsOfService === f.monthsOfService) updates.fers = { yearsOfService: 0, monthsOfService: 0 };
+    if (tsp.annualSalary === t.annualSalary && tsp.monthlyContributionPercent === t.monthlyContributionPercent) updates.tsp = { annualSalary: 0, monthlyContributionPercent: 0 };
+  }
+  return updates;
+}
 
 /** The user's current relationship to the uniformed services. */
 export const MILITARY_RELATIONSHIPS = Object.freeze({

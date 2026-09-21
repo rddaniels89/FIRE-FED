@@ -17,6 +17,7 @@ import TimelineChart from './TimelineChart';
 import YearByYearTable, { YEAR_BY_YEAR_PANEL_ID } from './YearByYearTable';
 import DurabilitySection from './DurabilitySection';
 import { fmtMoney, fmtYears } from './planFormat';
+import { isFederalEmployeeKind } from '../../lib/scenarios/schema';
 
 const MAX_SEPARATION_AGE = 75;
 
@@ -140,6 +141,18 @@ export default function PlanDashboard() {
         </p>
       </div>
 
+      {!isFederalEmployeeKind(profile?.kind) ? (
+        <Section id="military-first" title="Your military plan" lede="This plan has no federal job in it, so there is no FERS eligibility to find. The Military + Federal Plan page is the main view; the sections below read the same timeline.">
+          <div className="card p-6" data-testid="military-first">
+            <p className="text-sm text-slate-700 dark:text-slate-300 mb-4">
+              Retired pay, VA income, the uniformed-services TSP, health coverage, and the gross-to-net ledger live there, with every rule and its source.
+            </p>
+            <Link to="/plan/military" className="btn-primary btn-sm">
+              Open the Military + Federal Plan
+            </Link>
+          </div>
+        </Section>
+      ) : (
       <Section
         id="when"
         title="When could I leave?"
@@ -229,6 +242,7 @@ export default function PlanDashboard() {
 
         <DeltaCards deltas={deltas} onUseAge={setSeparationAge} />
       </Section>
+      )}
 
       <Section
         id="bridge"

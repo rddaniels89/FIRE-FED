@@ -10,6 +10,9 @@ import { CheckField, Grid, NumberField, RadioField, Section, SelectField } from 
 import { money, pct } from './format';
 import { COHORT_OPTIONS, EMPLOYEE_TYPE_OPTIONS, PATH_OPTIONS } from './options';
 import { youSummary } from './summaries';
+import { PROFILE_KINDS, PROFILE_KIND_LABELS, isFederalEmployeeKind, profileKindUpdates } from '../../../lib/scenarios/schema';
+
+const KIND_OPTIONS = Object.entries(PROFILE_KIND_LABELS).map(([value, label]) => ({ value, label }));
 
 /** The PIA the claim-age menu prices from, or 0 when Social Security is not configured. */
 function resolvePia(scenario) {
@@ -37,10 +40,22 @@ export default function YouSection({ scenario, write, open, onToggle }) {
 
   const annuityMode = p.annuityStartAge == null ? 'default' : 'choose';
   const contributionRate = getFersContributionRate(p.hireCohort);
+  const kind = p.kind ?? PROFILE_KINDS.FEDERAL;
+  const federal = isFederalEmployeeKind(kind);
 
   return (
     <Section id="you" title="You" summary={youSummary(scenario)} open={open} onToggle={onToggle}>
       <Grid>
+        <div className="sm:col-span-2 lg:col-span-3" data-testid="profile-kind">
+          <RadioField
+            name="profile-kind"
+            label="Which describes you?"
+            value={kind}
+            options={KIND_OPTIONS}
+            hint={federal ? 'Federal retirement sections apply. Military service, if any, is entered in the military sections below.' : 'No federal retirement questions. The plan is built around military retired pay, VA income, the uniformed-services TSP, and health coverage.'}
+            onChange={(v) => write(profileKindUpdates(scenario, v))}
+          />
+        </div>
         <NumberField
           id="profile-currentAge"
           label="Current age"
@@ -71,14 +86,15 @@ export default function YouSection({ scenario, write, open, onToggle }) {
         />
         <NumberField
           id="profile-separationAge"
-          label="Separation age"
-          hint="When federal employment ends. Not necessarily when the pension starts."
+          label={federal ? 'Separation age' : 'Age you stop working'}
+          hint={federal ? 'When federal employment ends. Not necessarily when the pension starts.' : 'When earned income ends and spending comes from retired pay, VA income, and savings.'}
           value={p.separationAge}
           min={p.currentAge}
           max={100}
           stepper
           onCommit={(v) => writeProfile({ separationAge: v })}
         />
+        {federal ? (
         <div className="space-y-3">
           <RadioField
             name="annuity-start"
@@ -104,6 +120,7 @@ export default function YouSection({ scenario, write, open, onToggle }) {
             />
           ) : null}
         </div>
+        ) : null}
         <SelectField
           id="profile-socialSecurityClaimAge"
           label="Social Security claim age"
@@ -112,6 +129,8 @@ export default function YouSection({ scenario, write, open, onToggle }) {
           hint={rows ? 'Monthly benefit at each claim age, from your figure in the Social Security section.' : 'Enter a Social Security figure below to see the monthly benefit at each age.'}
           onChange={(v) => writeProfile({ socialSecurityClaimAge: Number(v) })}
         />
+        {federal ? (
+        <>
         <SelectField
           id="profile-retirementPath"
           label="Retirement path"
@@ -145,6 +164,8 @@ export default function YouSection({ scenario, write, open, onToggle }) {
             onChange={(v) => writeProfile({ isVeraOffered: v })}
           />
         </div>
+        </>
+        ) : null}
       </Grid>
     </Section>
   );

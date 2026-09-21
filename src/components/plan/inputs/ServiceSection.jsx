@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { ANNUAL_LEAVE_CARRYOVER_CAP_HOURS } from '../../../lib/calculations/fers';
 import { CheckField, Grid, NumberField, Section, SelectField } from './fields';
 import { SURVIVOR_OPTIONS } from './options';
@@ -9,6 +10,10 @@ export default function ServiceSection({ scenario, write, open, onToggle }) {
 
   return (
     <Section id="service" title="Service and pay" summary={serviceSummary(scenario)} open={open} onToggle={onToggle}>
+      <p className="text-xs text-slate-500 dark:text-slate-400 mb-4" data-testid="service-military-nudge">
+        Federal civilian service only. Prior military service is entered under{' '}
+        <Link to="/plan/inputs#military" className="underline underline-offset-2">Military service and benefits</Link>, where it can count toward FERS once its deposit is paid.
+      </p>
       <Grid>
         <NumberField
           id="fers-yearsOfService"

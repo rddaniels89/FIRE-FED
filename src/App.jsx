@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Layers,
   Sparkles,
+  Shield,
   Menu as MenuIcon,
   X as XIcon,
   Sun,
@@ -83,6 +84,7 @@ function Navigation() {
   const navItems = [
     { path: '/', label: 'Home', Icon: HomeIcon },
     { path: '/plan', label: 'My Plan', Icon: RouteIcon },
+    { path: '/plan/military', label: 'Military', Icon: Shield },
     { path: '/tsp-forecast', label: 'TSP Forecast', Icon: TrendingUp },
     { path: '/fers-pension', label: 'FERS Pension', Icon: Landmark },
     { path: '/summary', label: 'Summary', Icon: LayoutDashboard },

@@ -162,7 +162,11 @@ export default function MilitaryPlanPage() {
           <Link to="/plan/inputs#military" className="text-navy-600 dark:text-navy-300 hover:underline">
             Inputs
           </Link>{' '}
-          page. Nothing here is a recommendation.
+          page. Nothing here is a recommendation. Estimate or check retired pay in the{' '}
+          <Link to="/calculators/military-retirement" className="text-navy-600 dark:text-navy-300 hover:underline">
+            Military Retirement Calculator
+          </Link>
+          ; a saved result connects here as an income stream.
         </p>
         <MilitaryNotice className="mt-2" />
         {mil.rules?.stale ? (
