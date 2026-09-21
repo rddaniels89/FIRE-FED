@@ -10,6 +10,7 @@ import { REDUCED_AGE_AUTHORITIES, RETIRED_RESERVE_STATUSES } from '../../lib/mil
 import { saveRetirementCalculation } from '../../lib/military/retirement/connect';
 import { formToInputs } from './militaryCalculatorForm';
 import { createMilitaryRetirementReportPdf } from '../../lib/pdf/militaryReport';
+import MilitaryPathWizard from './MilitaryPathWizard';
 import { INPUT_PROVENANCE, ISSUE_SEVERITY, MILITARY_RESULT_STATUS } from '../../lib/military/status';
 import { MILITARY_CONNECTIONS } from '../../lib/scenarios/schema';
 import MilitaryIssues, { StatusBadge } from '../plan/MilitaryIssues';
@@ -189,15 +190,7 @@ export default function PublicMilitaryRetirementCalculator() {
         </div>
       </fieldset>
 
-      {form.path === 'unsure' && (
-        <div className="card p-6 mt-6 space-y-3 text-sm text-slate-700 dark:text-slate-200" data-testid="unsure-explainer">
-          <h2 className="text-lg font-semibold navy-text">The paths, in plain terms</h2>
-          <p><strong>Active or regular retirement</strong> follows 20 or more years of active service. Pay begins when you retire and is based on your service and your basic pay.</p>
-          <p><strong>Guard or Reserve retirement</strong> is earned in retirement points across 20 qualifying years. Pay usually starts at 60, and the pension is based on all your points divided by 360.</p>
-          <p><strong>Medical retirement</strong> and <strong>TERA</strong> are official determinations. FireFed can only work from the figures on the orders themselves.</p>
-          <p>None of this tells you which path you are on. Your service record, your points statement, or your orders do. Pick the path that matches them above.</p>
-        </div>
-      )}
+      {form.path === 'unsure' && <MilitaryPathWizard onChoose={(path) => patch({ path })} />}
 
       {calculable && (
         <div className="grid lg:grid-cols-2 gap-8 mt-8">

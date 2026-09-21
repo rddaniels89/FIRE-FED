@@ -19,12 +19,16 @@ test.describe('Military service and benefits', () => {
     }
   }
 
-  async function openMilitarySection(page) {
-    await page.goto('/plan/inputs');
-    const header = page.getByRole('button', { name: /^Military service and benefits/ });
+  async function openSection(page, titlePattern, testId) {
+    const header = page.getByRole('button', { name: titlePattern });
     await expect(header).toBeVisible();
     if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click();
-    return page.getByTestId('section-military');
+    return page.getByTestId(testId);
+  }
+
+  async function openMilitarySection(page) {
+    await page.goto('/plan/inputs');
+    return openSection(page, /^Military service and benefits/, 'section-military');
   }
 
   test('records a service period, sees its status, adds a VA award, and reaches the results', async ({ page }) => {
@@ -45,13 +49,17 @@ test.describe('Military service and benefits', () => {
     await expect(period.getByText('Calculated')).toBeVisible();
     await expect(period.getByLabel('Basic pay 1999')).toBeVisible();
 
-    // A VA stream: amount and date only; nothing medical is asked.
-    await section.getByLabel('Add income').selectOption('va_disability');
-    await section.getByRole('button', { name: 'Add', exact: true }).click();
-    const stream = section.getByTestId('income-stream-0');
+    // A VA stream, in its own section: amount and date only; nothing medical is asked.
+    const income = await openSection(page, /^Military retired pay, VA, and survivor income/, 'section-military-income');
+    await income.getByLabel('Add income').selectOption('va_disability');
+    await income.getByRole('button', { name: 'Add', exact: true }).click();
+    const stream = income.getByTestId('income-stream-0');
     await stream.getByLabel('Gross amount').fill('1500');
     await stream.getByLabel('Gross amount').blur();
-    await expect(section.getByLabel(/diagnos|condition|claim number/i)).toHaveCount(0);
+    await expect(income.getByLabel(/diagnos|condition|claim number/i)).toHaveCount(0);
+    // The TSP and coverage sections exist too, and only once the connection is recorded.
+    await expect(page.getByRole('button', { name: /^Uniformed-services TSP and BRS/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Health coverage by person/ })).toBeVisible();
 
     await page.goto('/plan/military');
     await expect(page.getByRole('heading', { name: 'Military + Federal Plan' })).toBeVisible();

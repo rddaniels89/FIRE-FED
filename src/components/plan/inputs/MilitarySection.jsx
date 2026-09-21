@@ -114,14 +114,32 @@ function yearsCovered(period) {
 }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
+/** Retired-pay gate, waiver, and Chapter 61 notes: shown beside the retired-pay fields. */
+const RETIRED_PAY_ISSUE = /CH61|RETIRED_PAY|WAIVER/;
+
+function incomeSummary(m) {
+  const streams = (m.incomeStreams ?? []).length;
+  const sbp = m.sbp?.elected === 'yes' ? 'SBP elected' : m.sbp?.elected === 'no' ? 'SBP declined' : 'SBP not recorded';
+  return [m.retiredPay?.receives === 'yes' ? 'receives retired pay' : 'no retired pay', `${streams} income stream${streams === 1 ? '' : 's'}`, sbp].join(' · ');
+}
+
+function tspSummary(m) {
+  const u = m.tsp?.uniformedServices ?? {};
+  if (!u.enabled) return 'No uniformed-services TSP account recorded';
+  return `Uniformed-services TSP on (${u.coverageSystem === 'brs' ? 'BRS' : u.coverageSystem === 'legacy' ? 'legacy' : 'system not recorded'})${u.contributing ? ', contributing' : ''}`;
+}
+
+function coverageSummary(m) {
+  const n = (m.coverage ?? []).length;
+  return n === 0 ? 'No coverage periods recorded' : `${n} coverage period${n === 1 ? '' : 's'}`;
+}
 
 /**
- * Military service and benefits (spec §5.1–§5.7). One section, five panels:
- * the connection, service periods, the deposit, retired pay, and income
- * streams. Every field is a fact the user reads off a record; nothing here
- * infers a status, and every consequence is shown on /plan/military.
+ * Everything the military sections share: the block, its writers, the live
+ * plan resolution, and the per-entity issue lookups. One hook, four sections,
+ * so the screens cannot disagree about what a fact does.
  */
-export default function MilitarySection({ scenario, write, open, onToggle, canUse }) {
+function useMilitary({ scenario, write, canUse }) {
   const m = scenario.military;
   const writeMil = (patch) => write({ military: patch });
   const householdAllowed = canUse(FEATURES.HOUSEHOLD);
@@ -151,8 +169,11 @@ export default function MilitarySection({ scenario, write, open, onToggle, canUs
       !String(i.code).startsWith('MRT_RCSBP') &&
       i.code !== 'MRT_CONCURRENT_RECEIPT_MANUAL' &&
       i.code !== 'MRT_NET_NOT_RECONCILED' &&
-      i.code !== 'MRT_SCENARIO_RULES_STALE'
+      i.code !== 'MRT_SCENARIO_RULES_STALE' &&
+      !RETIRED_PAY_ISSUE.test(String(i.code))
   );
+  // The retired-pay gate and waiver notes belong beside the retired-pay fields, in the income section.
+  const retiredPayIssues = (mil?.issues ?? []).filter((i) => (!i.entity || (i.entity.type !== 'servicePeriod' && i.entity.type !== 'incomeStream')) && RETIRED_PAY_ISSUE.test(String(i.code)));
   const classificationFor = (id) => mil?.normalizedPeriods?.find((p) => p.id === id)?.classification ?? null;
 
   const setConnection = (value) => {
@@ -216,7 +237,24 @@ export default function MilitarySection({ scenario, write, open, onToggle, canUs
     writeMil(createDefaultMilitary());
     setConfirmDelete(false);
   };
+  return { confirmDelete, setConfirmDelete, newStreamType, setNewStreamType, m, writeMil, householdAllowed, active, plan, mil, periodIssues, streamIssues, generalIssues, retiredPayIssues, classificationFor, setConnection, periods, writePeriods, updatePeriod, addPeriod, removePeriod, d, writeDeposit, payments, writePayments, rp, writeRp, needsWaiver, isReserve, isCh61, streams, writeStreams, updateStream, addStream, removeStream, sbp, writeSbp, net, writeNet, uts, writeUts, brs, writeBrs, coverage, writeCoverage, updateCoverage, addCoverage, removeCoverage, coverageIssues, deleteAll };
+}
 
+/**
+ * Military service and benefits (spec §5.1–§5.7), split into four sections
+ * so a Guard member who is also a fed is not scrolling one accordion:
+ *
+ *   MilitarySection          the connection, service periods, the deposit
+ *   MilitaryIncomeSection    retired pay, income streams, SBP and net pay, survivor ages
+ *   MilitaryTspSection       the uniformed-services TSP account and BRS extras
+ *   MilitaryCoverageSection  health coverage periods per person
+ *
+ * The last three appear only once a connection is recorded. Every field is
+ * a fact the user reads off a record; nothing here infers a status, and every
+ * consequence is shown on /plan/military.
+ */
+export default function MilitarySection({ scenario, write, open, onToggle, canUse }) {
+  const { confirmDelete, setConfirmDelete, m, writeMil, active, mil, periodIssues, generalIssues, classificationFor, setConnection, periods, updatePeriod, addPeriod, removePeriod, d, writeDeposit, payments, writePayments, deleteAll } = useMilitary({ scenario, write, canUse });
   return (
     <Section id="military" title="Military service and benefits" summary={militarySummary(scenario)} open={open} onToggle={onToggle}>
       <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
@@ -434,6 +472,38 @@ export default function MilitarySection({ scenario, write, open, onToggle, canUs
             </div>
           ) : null}
 
+          {/* ------------------------------------------------ general issues, links, delete */}
+          <MilitaryIssues issues={generalIssues} className="mt-6" />
+
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+            <Link to="/plan/military" className="btn-primary btn-sm">
+              See the military results
+            </Link>
+            {confirmDelete ? (
+              <span className="inline-flex items-center gap-3 text-sm">
+                <span>Delete every service period, deposit entry, retired-pay fact, and income stream?</span>
+                <button type="button" className="focus-ring text-red-700 dark:text-red-300 font-medium underline underline-offset-2" onClick={deleteAll}>
+                  Yes, delete all military data
+                </button>
+                <button type="button" className="focus-ring underline underline-offset-2" onClick={() => setConfirmDelete(false)}>
+                  Keep it
+                </button>
+              </span>
+            ) : (
+              <RemoveButton label="Delete all military data" onClick={() => setConfirmDelete(true)} />
+            )}
+          </div>
+        </>
+      ) : null}
+    </Section>
+  );
+}
+
+export function MilitaryIncomeSection({ scenario, write, open, onToggle, canUse }) {
+  const { newStreamType, setNewStreamType, m, householdAllowed, mil, streamIssues, retiredPayIssues, rp, writeRp, needsWaiver, isReserve, isCh61, streams, updateStream, addStream, removeStream, sbp, writeSbp, net, writeNet, active } = useMilitary({ scenario, write, canUse });
+  if (!active) return null;
+  return (
+    <Section id="military-income" title="Military retired pay, VA, and survivor income" summary={incomeSummary(m)} open={open} onToggle={onToggle}>
           {/* ------------------------------------------------ retired pay */}
           <SubHeading hint="Whether your service can count toward FERS depends on the kind of retired pay you draw. FireFed cannot tell from the amount; you read the type from your retirement orders.">
             Military retired pay
@@ -590,6 +660,33 @@ export default function MilitarySection({ scenario, write, open, onToggle, canUs
             </div>
           ) : null}
 
+          {/* ------------------------------------------------ survivor scenario */}
+          <SubHeading hint="Optional. Only the military and VA streams follow these ages today: a stream stops on its owner's death and survivor streams (SBP, DIC) start.">
+            <span className="inline-flex items-center gap-2">Survivor scenario {householdAllowed ? null : <ProBadge />}</span>
+          </SubHeading>
+          {!householdAllowed ? <ProNotice reason="military_survivor_pro">Model a death and the survivor streams with Pro.</ProNotice> : null}
+          <fieldset disabled={!householdAllowed} className="min-w-0 disabled:opacity-60">
+            <Grid>
+              <NumberField id="mil-death-primary" label="Your age at death (optional)" min={40} max={110} allowBlank placeholder="Not modeled" value={scenario.household?.deathAges?.primary ?? null} disabled={!householdAllowed} onCommit={(v) => write({ household: { deathAges: { primary: v } } })} />
+              <NumberField id="mil-death-spouse" label="Spouse age at death (optional)" min={40} max={110} allowBlank placeholder="Not modeled" value={scenario.household?.deathAges?.spouse ?? null} disabled={!householdAllowed} onCommit={(v) => write({ household: { deathAges: { spouse: v } } })} />
+            </Grid>
+          </fieldset>
+
+          <MilitaryIssues issues={[...retiredPayIssues, ...(mil?.issues ?? []).filter((i) => i.entity?.type === 'incomeStream' && !streams.some((s) => s.id === i.entity.id))]} className="mt-6" />
+          <div className="mt-6">
+            <Link to="/plan/military" className="btn-primary btn-sm">
+              See the military results
+            </Link>
+          </div>
+    </Section>
+  );
+}
+
+export function MilitaryTspSection({ scenario, write, open, onToggle, canUse }) {
+  const { m, writeMil, mil, uts, writeUts, brs, writeBrs, active } = useMilitary({ scenario, write, canUse });
+  if (!active) return null;
+  return (
+    <Section id="military-tsp" title="Uniformed-services TSP and BRS" summary={tspSummary(m)} open={open} onToggle={onToggle}>
           {/* ------------------------------------------------ uniformed-services TSP */}
           <SubHeading hint="A second TSP account, kept apart from your civilian one. Your own contributions to both share one yearly limit; service and agency contributions do not. Balances from your TSP statement.">
             Uniformed-services TSP
@@ -677,7 +774,15 @@ export default function MilitarySection({ scenario, write, open, onToggle, canUs
               <MilitaryIssues issues={(mil?.issues ?? []).filter((i) => String(i.code).startsWith('MRT_BRS'))} className="mt-3" compact />
             </div>
           ) : null}
+    </Section>
+  );
+}
 
+export function MilitaryCoverageSection({ scenario, write, open, onToggle, canUse }) {
+  const { coverage, updateCoverage, addCoverage, removeCoverage, coverageIssues, active, m } = useMilitary({ scenario, write, canUse });
+  if (!active) return null;
+  return (
+    <Section id="military-coverage" title="Health coverage by person" summary={coverageSummary(m)} open={open} onToggle={onToggle}>
           {/* ------------------------------------------------ health coverage periods */}
           <SubHeading hint="One row per person per period of coverage. FireFed costs the coverage you confirm; it does not decide who is eligible. A combination that breaks a current rule is flagged, never silently replaced.">
             Health coverage by person
@@ -720,42 +825,6 @@ export default function MilitarySection({ scenario, write, open, onToggle, canUs
               Add coverage period
             </button>
           </div>
-
-          {/* ------------------------------------------------ survivor scenario */}
-          <SubHeading hint="Optional. Only the military and VA streams follow these ages today: a stream stops on its owner's death and survivor streams (SBP, DIC) start.">
-            <span className="inline-flex items-center gap-2">Survivor scenario {householdAllowed ? null : <ProBadge />}</span>
-          </SubHeading>
-          {!householdAllowed ? <ProNotice reason="military_survivor_pro">Model a death and the survivor streams with Pro.</ProNotice> : null}
-          <fieldset disabled={!householdAllowed} className="min-w-0 disabled:opacity-60">
-            <Grid>
-              <NumberField id="mil-death-primary" label="Your age at death (optional)" min={40} max={110} allowBlank placeholder="Not modeled" value={scenario.household?.deathAges?.primary ?? null} disabled={!householdAllowed} onCommit={(v) => write({ household: { deathAges: { primary: v } } })} />
-              <NumberField id="mil-death-spouse" label="Spouse age at death (optional)" min={40} max={110} allowBlank placeholder="Not modeled" value={scenario.household?.deathAges?.spouse ?? null} disabled={!householdAllowed} onCommit={(v) => write({ household: { deathAges: { spouse: v } } })} />
-            </Grid>
-          </fieldset>
-
-          {/* ------------------------------------------------ general issues, links, delete */}
-          <MilitaryIssues issues={generalIssues} className="mt-6" />
-
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-            <Link to="/plan/military" className="btn-primary btn-sm">
-              See the military results
-            </Link>
-            {confirmDelete ? (
-              <span className="inline-flex items-center gap-3 text-sm">
-                <span>Delete every service period, deposit entry, retired-pay fact, and income stream?</span>
-                <button type="button" className="focus-ring text-red-700 dark:text-red-300 font-medium underline underline-offset-2" onClick={deleteAll}>
-                  Yes, delete all military data
-                </button>
-                <button type="button" className="focus-ring underline underline-offset-2" onClick={() => setConfirmDelete(false)}>
-                  Keep it
-                </button>
-              </span>
-            ) : (
-              <RemoveButton label="Delete all military data" onClick={() => setConfirmDelete(true)} />
-            )}
-          </div>
-        </>
-      ) : null}
     </Section>
   );
 }

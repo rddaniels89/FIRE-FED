@@ -1,7 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { createElement } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import MilitarySection from '../MilitarySection';
+import MilitarySection, { MilitaryCoverageSection, MilitaryIncomeSection, MilitaryTspSection } from '../MilitarySection';
 import { applyScenarioUpdates, createDefaultScenario, normalizeScenario } from '../../../../lib/scenarios/schema';
 
 vi.mock('../../../../lib/telemetry', () => ({ trackEvent: vi.fn() }));
@@ -20,14 +21,17 @@ const PERIOD = {
 const base = () => normalizeScenario({ ...createDefaultScenario('m'), profile: { currentAge: 50, separationAge: 57 }, fers: { yearsOfService: 19, high3Salary: 100000 } });
 const withMilitary = (military) => applyScenarioUpdates(base(), { military });
 
-function renderSection(scenario, { write = vi.fn(), canUse = () => false } = {}) {
+function renderSection(scenario, { write = vi.fn(), canUse = () => false, Component: SectionComponent = MilitarySection } = {}) {
   render(
     <MemoryRouter>
-      <MilitarySection scenario={scenario} write={write} open onToggle={() => {}} canUse={canUse} />
+      {createElement(SectionComponent, { scenario, write, open: true, onToggle: () => {}, canUse })}
     </MemoryRouter>
   );
   return write;
 }
+const renderIncome = (scenario, opts = {}) => renderSection(scenario, { ...opts, Component: MilitaryIncomeSection });
+const renderTsp = (scenario, opts = {}) => renderSection(scenario, { ...opts, Component: MilitaryTspSection });
+const renderCoverage = (scenario, opts = {}) => renderSection(scenario, { ...opts, Component: MilitaryCoverageSection });
 
 describe('MilitarySection', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -101,19 +105,19 @@ describe('MilitarySection', () => {
   });
 
   it('retired pay: shows the type and waiver fields, never a waiver for chapter 61', () => {
-    renderSection(withMilitary({ connection: 'self', retiredPay: { receives: 'yes', type: 'regular_longevity' } }));
+    renderIncome(withMilitary({ connection: 'self', retiredPay: { receives: 'yes', type: 'regular_longevity' } }));
     expect(screen.getByLabelText('Waiver of retired pay')).toBeInTheDocument();
     expect(screen.getByText(/FireFed never prepares or submits a waiver/)).toBeInTheDocument();
     cleanupRender();
     // The gate speaks only when there is service to credit.
-    renderSection(withMilitary({ connection: 'self', servicePeriods: [PERIOD], retiredPay: { receives: 'yes', type: 'disability_chapter61' } }));
+    renderIncome(withMilitary({ connection: 'self', servicePeriods: [PERIOD], retiredPay: { receives: 'yes', type: 'disability_chapter61' } }));
     expect(screen.queryByLabelText('Waiver of retired pay')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Combat or instrumentality-of-war finding')).toBeInTheDocument();
     expect(document.querySelector('[data-issue-code="MIL_CH61_OFFICIAL_INPUT_REQUIRED"]')).not.toBeNull();
   });
 
   it('adds an income stream of the chosen type', () => {
-    const write = renderSection(withMilitary({ connection: 'self' }));
+    const write = renderIncome(withMilitary({ connection: 'self' }));
     fireEvent.change(screen.getByLabelText('Add income'), { target: { value: 'va_disability' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
     const patch = write.mock.calls[0][0];
@@ -122,7 +126,7 @@ describe('MilitarySection', () => {
   });
 
   it('a VA stream asks for an amount or a rating and dependents, and nothing medical', () => {
-    renderSection(withMilitary({ connection: 'self', incomeStreams: [{ id: 'va', type: 'va_disability', grossAmount: null }] }));
+    renderIncome(withMilitary({ connection: 'self', incomeStreams: [{ id: 'va', type: 'va_disability', grossAmount: null }] }));
     const card = screen.getByTestId('income-stream-0');
     expect(within(card).getByLabelText('Combined rating')).toBeInTheDocument();
     expect(within(card).getByLabelText('Children under 18')).toBeInTheDocument();
@@ -131,19 +135,19 @@ describe('MilitarySection', () => {
   });
 
   it('shows the estimate note once a rating is chosen, and the staleness note on an old official amount', () => {
-    renderSection(withMilitary({ connection: 'self', incomeStreams: [{ id: 'va', type: 'va_disability', grossAmount: null, amountStatus: 'estimated', vaEstimate: { rating: 70, spouse: true } }] }));
+    renderIncome(withMilitary({ connection: 'self', incomeStreams: [{ id: 'va', type: 'va_disability', grossAmount: null, amountStatus: 'estimated', vaEstimate: { rating: 70, spouse: true } }] }));
     expect(document.querySelector('[data-issue-code="MIL_VA_TABLE_ESTIMATE"]')).not.toBeNull();
     cleanupRender();
-    renderSection(withMilitary({ connection: 'self', incomeStreams: [{ id: 'rp', type: 'longevity_retired_pay', grossAmount: 2500, amountStatus: 'official', officialAmountAsOfDate: '2023-01-01' }] }));
+    renderIncome(withMilitary({ connection: 'self', incomeStreams: [{ id: 'rp', type: 'longevity_retired_pay', grossAmount: 2500, amountStatus: 'official', officialAmountAsOfDate: '2023-01-01' }] }));
     expect(document.querySelector('[data-issue-code="MIL_OFFICIAL_AMOUNT_STALE"]')).not.toBeNull();
   });
 
   it('gates the survivor scenario behind Pro', () => {
-    renderSection(withMilitary({ connection: 'self' }));
+    renderIncome(withMilitary({ connection: 'self' }));
     expect(screen.getByText(/Model a death and the survivor streams with Pro/)).toBeInTheDocument();
     expect(screen.getByLabelText('Your age at death (optional)')).toBeDisabled();
     cleanupRender();
-    renderSection(withMilitary({ connection: 'self' }), { canUse: () => true });
+    renderIncome(withMilitary({ connection: 'self' }), { canUse: () => true });
     expect(screen.getByLabelText('Your age at death (optional)')).not.toBeDisabled();
   });
 
@@ -165,37 +169,37 @@ describe('MilitarySection', () => {
   });
 
   it('uniformed TSP: hidden until enabled, then shows the buckets, the shared-limit summary, and the BRS extras only for BRS', () => {
-    const write = renderSection(withMilitary({ connection: 'self' }));
+    const write = renderTsp(withMilitary({ connection: 'self' }));
     const panel = screen.getByTestId('uniformed-tsp');
     expect(within(panel).queryByLabelText('Traditional balance (taxable)')).not.toBeInTheDocument();
     fireEvent.click(within(panel).getByLabelText('I have a uniformed-services TSP account'));
     expect(write).toHaveBeenCalledWith({ military: { tsp: { uniformedServices: { enabled: true } } } });
     cleanupRender();
-    renderSection(withMilitary({ connection: 'self', tsp: { uniformedServices: { enabled: true, coverageSystem: 'brs', monthsOfService: 96, contributing: true, monthlyBasicPay: 3000, employeePercent: 5 } } }));
+    renderTsp(withMilitary({ connection: 'self', tsp: { uniformedServices: { enabled: true, coverageSystem: 'brs', monthsOfService: 96, contributing: true, monthlyBasicPay: 3000, employeePercent: 5 } } }));
     expect(screen.getByLabelText('Tax-exempt (combat-zone) balance')).toBeInTheDocument();
     expect(screen.getByLabelText('Of which from tax-exempt combat-zone pay, per year')).toBeInTheDocument();
     expect(screen.getByTestId('tsp-coordination-summary')).toHaveTextContent('Shared limit $32,500 (with catch-up)'); // age 50 in the base scenario
     expect(screen.getByTestId('brs-extras')).toBeInTheDocument();
     expect(screen.getByLabelText('Lump-sum scenario')).toBeInTheDocument();
     cleanupRender();
-    renderSection(withMilitary({ connection: 'self', tsp: { uniformedServices: { enabled: true, coverageSystem: 'legacy' } } }));
+    renderTsp(withMilitary({ connection: 'self', tsp: { uniformedServices: { enabled: true, coverageSystem: 'legacy' } } }));
     expect(screen.queryByTestId('brs-extras')).not.toBeInTheDocument();
   });
 
   it('flags a shared-limit overrun on the section itself', () => {
-    renderSection(withMilitary({ connection: 'self', tsp: { uniformedServices: { enabled: true, coverageSystem: 'brs', monthsOfService: 96, contributing: true, monthlyBasicPay: 8000, employeePercent: 60, ytdEmployeeDeferrals: 20000 } } }));
+    renderTsp(withMilitary({ connection: 'self', tsp: { uniformedServices: { enabled: true, coverageSystem: 'brs', monthsOfService: 96, contributing: true, monthlyBasicPay: 8000, employeePercent: 60, ytdEmployeeDeferrals: 20000 } } }));
     expect(screen.getByText(/exceed this year’s elective-deferral limit/)).toBeInTheDocument();
   });
 
   it('coverage periods: adds a row per person, and a TRS row for a current fed is blocked in place', () => {
-    const write = renderSection(withMilitary({ connection: 'self' }));
+    const write = renderCoverage(withMilitary({ connection: 'self' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add coverage period' }));
     expect(write).toHaveBeenCalledTimes(1);
     const added = write.mock.calls[0][0].military.coverage;
     expect(added).toHaveLength(1);
     expect(added[0]).toMatchObject({ source: 'fehb', ownerId: 'primary', enrollmentConfirmed: false });
     cleanupRender();
-    renderSection(withMilitary({ connection: 'self', coverage: [{ id: 'c1', ownerId: 'primary', source: 'trs', startDate: '2026-01-01', enrollmentConfirmed: true }] }));
+    renderCoverage(withMilitary({ connection: 'self', coverage: [{ id: 'c1', ownerId: 'primary', source: 'trs', startDate: '2026-01-01', enrollmentConfirmed: true }] }));
     const row = screen.getByTestId('coverage-period-0');
     expect(within(row).getByLabelText('Coverage')).toHaveValue('trs');
     expect(within(row).getByText(/cannot purchase TRICARE Reserve Select/)).toBeInTheDocument();
@@ -205,10 +209,10 @@ describe('MilitarySection', () => {
   });
 
   it('SBP panel: appears with retired pay, records the election, and summarizes the estimated net deposit', () => {
-    renderSection(withMilitary({ connection: 'self' }));
+    renderIncome(withMilitary({ connection: 'self' }));
     expect(screen.queryByTestId('sbp-panel')).not.toBeInTheDocument();
     cleanupRender();
-    const write = renderSection(
+    const write = renderIncome(
       withMilitary({
         connection: 'self',
         retiredPay: { receives: 'yes', type: 'regular_longevity' },

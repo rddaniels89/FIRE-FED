@@ -6,7 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { hasEntitlement } from '../../lib/entitlements';
 import YouSection from './inputs/YouSection';
 import ServiceSection from './inputs/ServiceSection';
-import MilitarySection from './inputs/MilitarySection';
+import MilitarySection, { MilitaryCoverageSection, MilitaryIncomeSection, MilitaryTspSection } from './inputs/MilitarySection';
 import SavingsSection from './inputs/SavingsSection';
 import SpendingSection from './inputs/SpendingSection';
 import SocialSecuritySection from './inputs/SocialSecuritySection';
@@ -21,6 +21,10 @@ const SECTIONS = [
   ['you', YouSection],
   ['service', ServiceSection],
   ['military', MilitarySection],
+  // The next three render nothing until a military connection is recorded.
+  ['military-income', MilitaryIncomeSection],
+  ['military-tsp', MilitaryTspSection],
+  ['military-coverage', MilitaryCoverageSection],
   ['savings', SavingsSection],
   ['spending', SpendingSection],
   ['social-security', SocialSecuritySection],

@@ -38,11 +38,27 @@ describe('PublicMilitaryRetirementCalculator', () => {
     expect(screen.queryByText(/guaranteed|approved|you qualify|official calculator|best election/i)).not.toBeInTheDocument();
   });
 
-  it('the "not sure" path explains and never declares eligibility', () => {
+  it('the "not sure" path asks a few questions, suggests a path with the records that decide it, and moves the visitor there', () => {
     renderPage();
     fireEvent.click(screen.getByRole('radio', { name: /I am not sure/ }));
-    expect(screen.getByTestId('unsure-explainer')).toHaveTextContent('None of this tells you which path you are on');
+    const wizard = screen.getByTestId('unsure-explainer');
+    expect(wizard).toHaveTextContent('None of this tells you which path you are on');
     expect(screen.queryByTestId('result-cards')).not.toBeInTheDocument();
+    expect(screen.getByTestId('wizard-suggestion')).toHaveTextContent('Answer what you can');
+    // Reserve-only questions appear once the component is known.
+    expect(screen.queryByTestId('wizard-qualifyingYears')).not.toBeInTheDocument();
+    fireEvent.click(within(wizard).getByLabelText('Still serving (active, Guard, or Reserve)'));
+    fireEvent.click(within(wizard).getByLabelText('National Guard or Reserve'));
+    fireEvent.click(within(wizard).getByLabelText('No', { selector: 'input[name="wizard-medical"]' }));
+    fireEvent.click(within(wizard).getByLabelText('No', { selector: 'input[name="wizard-tera"]' }));
+    fireEvent.click(within(wizard).getByLabelText('Under 20'));
+    const suggestion = screen.getByTestId('wizard-suggestion');
+    expect(suggestion).toHaveTextContent('Continue with: Guard or Reserve retirement based on points');
+    expect(suggestion).toHaveTextContent('20-year letter');
+    expect(suggestion.textContent.toLowerCase()).not.toMatch(/you qualify|you are eligible|you should/);
+    fireEvent.click(within(suggestion).getByRole('button', { name: /Continue with guard or reserve/i }));
+    expect(screen.getByRole('radio', { name: /Guard or Reserve retirement based on points/ })).toBeChecked();
+    expect(screen.getByTestId('reserve-notice')).toBeInTheDocument();
   });
 
   it('computes a regular High-36 retirement with the result cards, the audit, and the pay-base table', () => {
