@@ -43,6 +43,8 @@ import { stateMilitaryRetiredPayExclusion } from '../taxes/stateMilitaryRetiredP
 import { ACCOUNT_CONTEXTS, TSP_SYSTEMS, isAutomaticVested, normalizeUserraMakeUp, validateTspCoordination } from '../military/tspCoordination';
 import { validateCoveragePeriods } from '../military/coverage';
 import { continuationPayScenario, lumpSumScenario } from '../military/brs';
+import { computeRcsbp, computeSbp, retiredPayLedger } from '../military/sbp';
+import { rulesStatus } from '../military/status';
 
 const num = (v, fallback = 0) => {
   const n = Number(v);
@@ -479,6 +481,35 @@ export function resolveRetirementPlan(scenario, options = {}) {
     militaryIssues.push(...(continuationPay?.issues ?? []), ...(lumpSum?.issues ?? []));
   }
 
+  // ---- SBP, RCSBP, and the gross-to-net ledger on the primary's retired pay.
+  const retiredPayMonthly = incomeStreams.streams
+    .filter((s) => s.resolved.included && (s.type === 'longevity_retired_pay' || s.type === 'reserve_retired_pay' || s.type === 'disability_retired_pay') && (s.ownerId ?? 'primary') === 'primary')
+    .reduce((sum, s) => sum + s.resolved.annualGross / 12, 0);
+  const sbpElection = scenario.military?.sbp ?? null;
+  const sbp = sbpElection && sbpElection.elected !== 'unknown' ? computeSbp({ election: sbpElection, grossMonthly: retiredPayMonthly, memberAge: currentAge }) : null;
+  const rcsbp = sbpElection?.rcsbp?.elected ? computeRcsbp({ rcsbp: sbpElection.rcsbp }) : null;
+  const netPay = scenario.military?.netPay ?? {};
+  const ledger = retiredPayMonthly > 0
+    ? retiredPayLedger({
+        grossMonthly: retiredPayMonthly,
+        sbpPremiumMonthly: sbp?.applies ? sbp.premiumMonthly : 0,
+        rcsbpPremiumMonthly: rcsbp && !rcsbp.blocked ? rcsbp.premiumMonthly : 0,
+        vaWaiverMonthly: num(netPay.vaWaiverMonthly),
+        crdpMonthly: num(netPay.crdpMonthly),
+        crscMonthly: num(netPay.crscMonthly),
+        federalWithholdingRate: num(netPay.federalWithholdingRate),
+        stateWithholdingRate: num(netPay.stateWithholdingRate),
+        otherDeductionsMonthly: num(netPay.otherDeductionsMonthly),
+        adjustmentsOfficial: Boolean(netPay.adjustmentsOfficial),
+        reconciledToRas: Boolean(netPay.reconciledToRas),
+      })
+    : null;
+  militaryIssues.push(...(sbp?.issues ?? []), ...(rcsbp?.issues ?? []), ...(ledger?.issues ?? []));
+
+  // ---- rules version: saved scenarios are marked, never rewritten.
+  const rules = rulesStatus(scenario.military);
+  if (rules.stale) militaryIssues.push(raiseIssue(ISSUE_CODES.MRT_SCENARIO_RULES_STALE, { detail: { savedRulesVersion: rules.saved, currentRulesVersion: rules.current } }));
+
   return {
     path,
     pathLabel: pathEval?.label ?? (special?.isEligible ? 'Special provision, immediate' : 'No annuity'),
@@ -559,6 +590,12 @@ export function resolveRetirementPlan(scenario, options = {}) {
       /** Validated coverage periods, one per person per period, with their issues. */
       coverage: coverage.periods,
       brs,
+      /** SBP election as computed (null when no election is recorded), RCSBP official amounts, and the gross-to-net ledger. */
+      sbp,
+      rcsbp,
+      ledger,
+      retiredPayMonthly,
+      rules,
       issues: militaryIssues,
     },
     high3: high3,

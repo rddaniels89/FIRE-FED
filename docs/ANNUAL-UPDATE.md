@@ -24,6 +24,24 @@ Copy the most recent year's entry, rename it, update every figure, and set
 | `medicare` | Part B premium and deductible, IRMAA tiers | CMS fact sheet | November |
 | `fehb` | average enrollee-share increase, default premiums | OPM FEHB premiums page | October |
 
+### Military module calendar (spec §17)
+
+| Period | Review | Where |
+|---|---|---|
+| October–November | IRS/TSP limits incl. 415(c); FEHB/PSHB rates; announced BRS continuation-pay policies | `annualParameters.js` `tsp`, `fehb`; `docs/MILITARY-VERIFICATION.md` |
+| November–December | Military basic pay tables; VA compensation and DIC tables; military and VA COLA; TRICARE costs; BRS lump-sum discount rate | `payTables.js`, `vaCompensationRates.js`, `cola.js` `publishedColas`, `tricareCosts.js`, `brs.js` |
+| January | Effective-year validation (deposit interest rate BAL; `MILITARY_RULES_VERSION` bump); state military-retired-pay tax changes | `depositRates.js`, `status.js`, `stateMilitaryRetiredPay.js` |
+| Quarterly | OPM creditability and retired-pay guidance; DoD/DFAS retirement guidance; Reserve policy; SBP; TRICARE eligibility interactions; VA/DFAS changes | `fersCredit.js`, `retiredPayWaiver.js`, `reserve.js`, `sbp.js`, `coverage.js` |
+| On alert | Statutory or regulatory changes with mid-year effective dates | the effective-dated rule tables in each module |
+
+Rules-change behaviour: bump `MILITARY_RULES_VERSION` in `src/lib/military/status.js`.
+Saved scenarios then show "newer rules available" (`MRT_SCENARIO_RULES_STALE`) and
+saved calculations keep their own `rulesVersion` (`MRT_RULES_STALE`); nothing is
+rewritten. The user applies the current rules to a scenario or recalculates; the
+earlier calculation stays in the history. If a rule is withdrawn or uncertain,
+disable the automatic calculation for that path (status `NOT_SUPPORTED`) and keep
+the manual official-amount entry working.
+
 ## 2. `src/lib/calculations/gsPay.js`
 
 Add a new year to `GS_PAY_TABLES` from OPM's XML salary tables: base table,

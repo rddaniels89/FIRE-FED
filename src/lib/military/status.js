@@ -265,6 +265,12 @@ export const ISSUE_CATALOG = Object.freeze({
     remediation: 'Check the taxable amount shown on your Form 1099-R or Retiree Account Statement and set the tax treatment on this stream to match.',
     source: 'https://www.irs.gov/publications/p525',
   }),
+  MIL_SBP_ANNUITY_FROM_ELECTION: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'No survivor annuity amount was entered, so the SBP stream uses 55% of the elected base from the recorded election.',
+    remediation: 'Enter the official annuity from the election or statement to replace it.',
+    source: 'https://www.dfas.mil/retiredmilitary/provide/sbp/',
+  }),
   MIL_SBP_STATE_TREATMENT_UNKNOWN: Object.freeze({
     severity: ISSUE_SEVERITY.INFO,
     message: 'A Survivor Benefit Plan annuity is projected as a taxable pension. Whether your state extends its military-retirement exclusion to survivor annuities is not yet modeled.',
@@ -503,6 +509,146 @@ export const ISSUE_CATALOG = Object.freeze({
     remediation: 'TRICARE publishes new costs each calendar year.',
     source: 'https://tricare.mil/Costs',
   }),
+  // ---- Chapter 61, severance, TERA (spec §20.10)
+  MRT_MEDICAL_DISPOSITION_REQUIRED: Object.freeze({
+    severity: ISSUE_SEVERITY.BLOCK,
+    message: 'No official medical disposition is recorded. FireFed calculates from the disposition your service issued; it does not predict one.',
+    remediation: 'Enter the disposition from your orders: permanent (PDRL), temporary (TDRL), or separation with severance.',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1201',
+  }),
+  MRT_MEDICAL_DOD_PERCENT_REQUIRED: Object.freeze({
+    severity: ISSUE_SEVERITY.BLOCK,
+    message: 'The official DoD disability percentage is missing. It is not the VA rating and cannot be inferred from it.',
+    remediation: 'Enter the DoD percentage from your retirement or separation orders.',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1401',
+  }),
+  MRT_MEDICAL_VA_RATING_SEPARATE: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'The VA rating recorded here is kept separate. Chapter 61 retired pay uses the DoD percentage; the VA rating drives VA compensation and any waiver, which are entered as official amounts.',
+    remediation: 'Nothing to do. Both figures are shown so they are not confused.',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1401',
+  }),
+  MRT_MEDICAL_METHOD_APPLIED: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'Both authorized methods were computed: the disability-percentage method and the longevity method. The displayed gross is the greater of the two.',
+    remediation: 'The formula audit shows each method and which one produced the figure.',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1401',
+  }),
+  MRT_MEDICAL_TDRL_FLOOR_APPLIED: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'A 50% floor applies to this TDRL placement because it predates 1 January 2017.',
+    remediation: 'Placements on or after that date have no floor (FY2017 NDAA §521).',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1401',
+  }),
+  MRT_MEDICAL_TDRL_TEMPORARY: Object.freeze({
+    severity: ISSUE_SEVERITY.WARNING,
+    message: 'TDRL is temporary. The percentage and the pay can change at each re-evaluation, and the placement ends with a permanent disposition.',
+    remediation: 'Re-enter the official figures after each re-evaluation.',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1202',
+  }),
+  MRT_MEDICAL_SEVERANCE_PATH: Object.freeze({
+    severity: ISSUE_SEVERITY.WARNING,
+    message: 'This is a medical separation with severance pay, not a retirement. There is no monthly retired pay; the one-time payment is shown instead.',
+    remediation: 'Severance may be recouped from later VA compensation; that is an official matter between DFAS and the VA.',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1212',
+  }),
+  MRT_MEDICAL_TAX_NOT_DECIDED: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'Whether disability retired pay is taxable depends on an official classification (combat-related, or entitlement in place before 25 September 1975). FireFed projects it as taxable until the classification is entered on the income stream.',
+    remediation: 'Set the federal tax class on the retired-pay stream from your 1099-R.',
+    source: 'https://www.irs.gov/publications/p525',
+  }),
+  MRT_AUTHORITY_UNCONFIRMED: Object.freeze({
+    severity: ISSUE_SEVERITY.WARNING,
+    message: 'The authority for this calculation is entered as an estimate, not from the official record, so the result is an estimate.',
+    remediation: 'Mark the figures official once they are read from the orders or approval.',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1293',
+  }),
+  MRT_TERA_AUTHORITY_REQUIRED: Object.freeze({
+    severity: ISSUE_SEVERITY.BLOCK,
+    message: 'TERA is calculated only under an official Temporary Early Retirement Authority approval. None is recorded. Having 15 to 19 years does not make TERA available.',
+    remediation: 'Enter the authority and approval date from your service if you were approved.',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1293',
+  }),
+  MRT_TERA_SERVICE_OUT_OF_RANGE: Object.freeze({
+    severity: ISSUE_SEVERITY.BLOCK,
+    message: 'TERA applies to 15 or more and fewer than 20 years of service. The service entered is outside that range.',
+    remediation: 'Check the creditable service, or use the regular retirement path at 20 years.',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1293',
+  }),
+  MRT_TERA_NOT_AN_OPTION: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'TERA is not shown as a future option. It has existed only for limited force-management periods and populations; the service decides who is offered it.',
+    remediation: 'Nothing to do.',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1293',
+  }),
+  // ---- SBP, RCSBP, gross to net (spec §20.11)
+  MRT_SBP_ELECTION_INCOMPLETE: Object.freeze({
+    severity: ISSUE_SEVERITY.BLOCK,
+    message: 'The SBP election is incomplete: whether coverage was elected, the beneficiary category, or the elected base is missing. No premium or survivor annuity is projected.',
+    remediation: 'Read the election from your retirement orders or Retiree Account Statement and enter it. FireFed does not recommend an election.',
+    source: 'https://www.dfas.mil/retiredmilitary/provide/sbp/',
+  }),
+  MRT_SBP_CATEGORY_OFFICIAL_ONLY: Object.freeze({
+    severity: ISSUE_SEVERITY.WARNING,
+    message: 'This SBP category (former spouse, child-only, insurable interest, or a court-ordered election) is projected only from the official premium and annuity on your statement.',
+    remediation: 'Enter both figures from the Retiree Account Statement or the election form.',
+    source: 'https://www.dfas.mil/retiredmilitary/provide/sbp/',
+  }),
+  MRT_SBP_BASE_BELOW_MINIMUM: Object.freeze({
+    severity: ISSUE_SEVERITY.WARNING,
+    message: 'The elected SBP base is below the $300 minimum the plan allows.',
+    remediation: 'Check the base on the election form.',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1447',
+  }),
+  MRT_SBP_BASE_ABOVE_GROSS: Object.freeze({
+    severity: ISSUE_SEVERITY.WARNING,
+    message: 'The elected SBP base is higher than the gross retired pay it is meant to cover.',
+    remediation: 'The base cannot exceed full retired pay; check the figures.',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1447',
+  }),
+  MRT_SBP_PREMIUM_FORMULA_UNVERIFIED: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'This election predates the 6.5% formula. The older threshold formula may give a lower premium; FireFed shows the 6.5% figure until the official premium is entered.',
+    remediation: 'Enter the premium from your statement.',
+    source: 'https://www.dfas.mil/retiredmilitary/provide/sbp/',
+  }),
+  MRT_SBP_CHILD_ADDON_OFFICIAL: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'Spouse-and-child coverage adds a small child premium set by actuarial factors. It is not included until the official premium is entered.',
+    remediation: 'Enter the total premium from your statement.',
+    source: 'https://www.dfas.mil/retiredmilitary/provide/sbp/',
+  }),
+  MRT_SBP_PAID_UP: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'SBP is paid up: age 70 reached with 360 monthly premiums made. Coverage continues without premiums.',
+    remediation: 'Nothing to do.',
+    source: 'https://www.law.cornell.edu/uscode/text/10/1452',
+  }),
+  MRT_RCSBP_OFFICIAL_AMOUNT_REQUIRED: Object.freeze({
+    severity: ISSUE_SEVERITY.BLOCK,
+    message: 'Reserve Component SBP premiums and annuities depend on the option (A, B, or C), ages, and official actuarial factors. FireFed projects RCSBP only from the official premium and annuity.',
+    remediation: 'Enter both from your election or statement and mark them official.',
+    source: 'https://www.dfas.mil/retiredmilitary/provide/rcsbp/',
+  }),
+  MRT_CONCURRENT_RECEIPT_MANUAL: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'The VA waiver, CRDP, and CRSC lines are official amounts you entered. FireFed does not compute concurrent receipt or decide combat-relatedness.',
+    remediation: 'Keep them current with your Retiree Account Statement and VA award letter.',
+    source: 'https://www.dfas.mil/retiredmilitary/disability/crdp/',
+  }),
+  MRT_NET_NOT_RECONCILED: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'This is an estimated net deposit, not DFAS net pay. Allotments, debts, insurance, and withholding elections can make the real figure differ.',
+    remediation: 'Compare with a Retiree Account Statement; mark the ledger reconciled when it matches.',
+    source: 'https://www.dfas.mil/retiredmilitary/manage/ras/',
+  }),
+  MRT_SCENARIO_RULES_STALE: Object.freeze({
+    severity: ISSUE_SEVERITY.INFO,
+    message: 'Newer military rules are available. This scenario was last resolved under an earlier rules version; saved calculations keep their own version and are not changed.',
+    remediation: 'Apply the current rules to the scenario when ready. Earlier calculations stay in the history.',
+    source: 'https://militarypay.defense.gov/Pay/Retirement/',
+  }),
   MRT_RESERVE_POINTS_OFFICIAL_REQUIRED: Object.freeze({
     severity: ISSUE_SEVERITY.WARNING,
     message: 'The retirement points used are an estimate. An actual entitlement needs the totals from your official point statement.',
@@ -628,6 +774,15 @@ export const ISSUE_CATALOG = Object.freeze({
 export const ISSUE_CODES = Object.freeze(
   Object.fromEntries(Object.keys(ISSUE_CATALOG).map((code) => [code, code]))
 );
+
+/**
+ * Where a scenario stands against the current military rules (spec §17):
+ * saved scenarios are marked when newer rules exist and are never rewritten.
+ */
+export function rulesStatus(military) {
+  const saved = military?.rulesVersion ?? null;
+  return { saved, current: MILITARY_RULES_VERSION, stale: saved !== null && saved !== MILITARY_RULES_VERSION };
+}
 
 /**
  * Raises an issue from the catalogue against an entity. The shape is stable:

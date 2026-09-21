@@ -203,6 +203,39 @@ describe('MilitarySection', () => {
     // Nothing medical is asked anywhere in the coverage row.
     expect(within(row).queryByLabelText(/diagnos|condition|claim number/i)).not.toBeInTheDocument();
   });
+
+  it('SBP panel: appears with retired pay, records the election, and summarizes the estimated net deposit', () => {
+    renderSection(withMilitary({ connection: 'self' }));
+    expect(screen.queryByTestId('sbp-panel')).not.toBeInTheDocument();
+    cleanupRender();
+    const write = renderSection(
+      withMilitary({
+        connection: 'self',
+        retiredPay: { receives: 'yes', type: 'regular_longevity' },
+        incomeStreams: [{ id: 'rp', type: 'longevity_retired_pay', grossAmount: 3000, frequency: 'monthly', amountStatus: 'official', officialAmountAsOfDate: '2026-01-01' }],
+        sbp: { elected: 'yes', category: 'spouse', fullBase: true, provenance: 'user_entered_official' },
+      })
+    );
+    const panel = screen.getByTestId('sbp-panel');
+    expect(within(panel).getByLabelText('SBP coverage')).toHaveValue('yes');
+    expect(within(panel).getByLabelText('Beneficiary category')).toHaveValue('spouse');
+    expect(screen.getByTestId('ledger-summary')).toHaveTextContent('Estimated net deposit: $2,805 per month from $3,000 gross; SBP premium $195, survivor annuity $1,650');
+    fireEvent.change(within(panel).getByLabelText('SBP coverage'), { target: { value: 'no' } });
+    expect(write).toHaveBeenCalledWith({ military: { sbp: { elected: 'no' } } });
+    // Never a recommendation.
+    expect(panel.textContent.toLowerCase()).not.toMatch(/you should|best election|worth electing/);
+  });
+
+  it('shows the newer-rules banner for a scenario saved under older rules and applies the current version on request', () => {
+    const write = renderSection(withMilitary({ connection: 'self', rulesVersion: '2025.1' }));
+    const banner = screen.getByTestId('rules-stale-banner');
+    expect(banner).toHaveTextContent('Saved calculations keep their own version and are not changed');
+    fireEvent.click(within(banner).getByRole('button', { name: 'Apply current rules to this scenario' }));
+    expect(write).toHaveBeenCalledWith({ military: { rulesVersion: '2026.1' } });
+    cleanupRender();
+    renderSection(withMilitary({ connection: 'self' }));
+    expect(screen.queryByTestId('rules-stale-banner')).not.toBeInTheDocument();
+  });
 });
 
 function cleanupRender() {

@@ -61,6 +61,10 @@ const REQUIRED_IDS = [
   'military.brs_continuation_pay',
   'military.brs_lump_sum',
   'healthcare.coverage_periods',
+  'military.chapter61',
+  'military.tera',
+  'military.sbp',
+  'military.gross_to_net',
 ];
 
 describe('rules registry', () => {

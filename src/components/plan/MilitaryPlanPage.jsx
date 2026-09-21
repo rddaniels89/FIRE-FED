@@ -165,6 +165,12 @@ export default function MilitaryPlanPage() {
           page. Nothing here is a recommendation.
         </p>
         <MilitaryNotice className="mt-2" />
+        {mil.rules?.stale ? (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-100" role="status" data-testid="rules-stale-banner">
+            Newer military rules are available ({mil.rules.current}); this scenario was last resolved under {mil.rules.saved}. Saved calculations keep their own version and are not changed. Apply the current rules from the{' '}
+            <Link to="/plan/inputs#military" className="underline underline-offset-2 font-medium">Inputs</Link> page when ready.
+          </div>
+        ) : null}
       </div>
 
       {/* ------------------------------------------------ 1. snapshot */}
@@ -370,6 +376,32 @@ export default function MilitaryPlanPage() {
           </div>
         )}
       </View>
+
+      {/* ------------------------------------------------ 4a. retired pay, gross to net */}
+      {mil.ledger ? (
+        <View id="mil-net" title="Retired pay: gross to net" lede="From the pension formula to the estimated deposit, one labelled line at a time. Official adjustments are yours; withholding is an assumption.">
+          <div className="card p-6">
+            <Table caption="Gross-to-net ledger" columns={['Line', 'Per month', 'Source']} rows={[...mil.ledger.lines.map((l) => [l.label, fmtMoney(l.amount), l.source]), [mil.ledger.label, fmtMoney(mil.ledger.net), mil.ledger.reconciledToRas ? 'reconciled' : 'estimate']]} />
+            {mil.sbp?.applies ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mt-4">
+                <Stat label="SBP category" ruleId="military.sbp">{String(mil.sbp.category).replace(/_/g, ' ')}</Stat>
+                <Stat label="Covered base">{mil.sbp.base != null ? fmtMoney(mil.sbp.base) : 'Official'}</Stat>
+                <Stat label="Premium / survivor annuity">{fmtMoney(mil.sbp.premiumMonthly)} / {fmtMoney(mil.sbp.annuityMonthly)}</Stat>
+                <Stat label="Paid up">{mil.sbp.paidUp?.eligibleNow ? 'Yes' : mil.sbp.paidUp?.paidUpAge != null ? `Age ${mil.sbp.paidUp.paidUpAge}` : '—'}</Stat>
+              </div>
+            ) : null}
+            {mil.rcsbp?.applies ? (
+              <p className="text-sm text-slate-700 dark:text-slate-300 mt-3">
+                RCSBP option {mil.rcsbp.option ?? '—'}: {mil.rcsbp.blocked ? 'official premium and annuity needed' : `${fmtMoney(mil.rcsbp.premiumMonthly)} premium, ${fmtMoney(mil.rcsbp.annuityMonthly)} annuity (official amounts)`}.
+              </p>
+            ) : null}
+            <MilitaryIssues issues={mil.issues.filter((i) => String(i.code).startsWith('MRT_SBP') || String(i.code).startsWith('MRT_RCSBP') || i.code === 'MRT_CONCURRENT_RECEIPT_MANUAL' || i.code === 'MRT_NET_NOT_RECONCILED')} className="mt-4" />
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
+              <HowCalculated ruleId="military.gross_to_net">How the ledger is built</HowCalculated>. Not DFAS net pay unless reconciled to a Retiree Account Statement.
+            </p>
+          </div>
+        </View>
+      ) : null}
 
       {/* ------------------------------------------------ 4b. TSP coordination and BRS value stack */}
       {mil.tsp ? (

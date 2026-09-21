@@ -147,6 +147,28 @@ describe('MilitaryPlanPage', () => {
     expect(document.body.textContent).not.toMatch(/total retirement benefit/i);
   });
 
+  it('shows the gross-to-net ledger with SBP and the newer-rules banner', () => {
+    mocks.entitlements = { features: {} };
+    mocks.scenario = scenario({
+      connection: 'self',
+      rulesVersion: '2025.1',
+      retiredPay: { receives: 'yes', type: 'regular_longevity' },
+      incomeStreams: [{ id: 'rp', type: 'longevity_retired_pay', grossAmount: 3000, frequency: 'monthly', amountStatus: 'official', officialAmountAsOfDate: '2026-01-01' }],
+      sbp: { elected: 'yes', category: 'spouse', fullBase: true, provenance: 'user_entered_official', premiumsPaidToDate: 0 },
+      netPay: { vaWaiverMonthly: 500, crdpMonthly: 500, federalWithholdingRate: 0.1, adjustmentsOfficial: true },
+    });
+    renderPage();
+    expect(screen.getByTestId('rules-stale-banner')).toHaveTextContent('Newer military rules are available (2026.1); this scenario was last resolved under 2025.1');
+    const view = screen.getByRole('heading', { name: 'Retired pay: gross to net' }).closest('section');
+    const table = within(view).getByRole('table', { name: 'Gross-to-net ledger' });
+    expect(within(table).getByText('SBP premium')).toBeInTheDocument();
+    expect(within(table).getByText('VA waiver / offset')).toBeInTheDocument();
+    expect(within(table).getByText('CRDP restored')).toBeInTheDocument();
+    expect(within(table).getByText('Estimated net deposit')).toBeInTheDocument();
+    expect(within(view).getByText(/Not DFAS net pay unless reconciled/)).toBeInTheDocument();
+    expect(within(view).getByText(/FireFed does not compute concurrent receipt/)).toBeInTheDocument();
+  });
+
   it('never uses recommendation language', () => {
     mocks.entitlements = { features: { [FEATURES.MILITARY_SCENARIOS]: true, [FEATURES.MILITARY_ANALYSIS]: true } };
     mocks.scenario = scenario({ connection: 'self', servicePeriods: [PERIOD], retiredPay: { receives: 'yes', type: 'regular_longevity' }, incomeStreams: [{ id: 'rp', type: 'longevity_retired_pay', grossAmount: 3000, amountStatus: 'official' }] });

@@ -224,6 +224,28 @@ export const COVERAGE_ENROLLMENT_OPTIONS = [
   { value: 'family', label: 'Family' },
 ];
 
+export const SBP_ELECTED_OPTIONS = [
+  { value: 'unknown', label: 'Not recorded yet' },
+  { value: 'yes', label: 'Yes, coverage elected' },
+  { value: 'no', label: 'No, declined' },
+];
+
+export const SBP_CATEGORY_OPTIONS = [
+  { value: 'unknown', label: 'Choose a category' },
+  { value: 'spouse', label: 'Spouse' },
+  { value: 'spouse_child', label: 'Spouse and child' },
+  { value: 'child_only', label: 'Child only (official amounts)' },
+  { value: 'former_spouse', label: 'Former spouse (official amounts)' },
+  { value: 'insurable_interest', label: 'Insurable interest (official amounts)' },
+];
+
+export const RCSBP_OPTION_OPTIONS = [
+  { value: '', label: 'Not recorded' },
+  { value: 'A', label: 'Option A (decline until 60)' },
+  { value: 'B', label: 'Option B (deferred to 60)' },
+  { value: 'C', label: 'Option C (immediate)' },
+];
+
 export const COVERAGE_RELATIONSHIP_OPTIONS = [
   { value: 'sponsor', label: 'Sponsor / member' },
   { value: 'spouse', label: 'Spouse' },

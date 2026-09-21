@@ -29,6 +29,10 @@ more than an estimate.
 | TRR versus FEHB restriction | `src/lib/military/coverage.js` `COVERAGE_RULES.trrFehbConflict` | whether the 2030 TRS change (Pub. L. 116-92 §701) also reaches TRICARE Retired Reserve; the code keeps the TRR restriction open-ended | 10 U.S.C. 1076e; tricare.mil TRR page |
 | BRS opt-in matching start | `src/lib/military/tspCoordination.js` `serviceContributionPercents` | 2018 opt-ins with two or more years of service received matching from the first pay period after opting in; those with less waited for the 25th month | DoD BRS implementation guidance; TSP bulletin for uniformed services |
 | FERS TSP vesting for two-year positions | `src/lib/military/tspCoordination.js` `TSP_CONTRIBUTION_RULES.fers.vestingYearsAutomatic` | the default is three years; the two-year positions (congressional, certain noncareer) use the per-account override | 5 U.S.C. 8432(g) |
+| SBP spouse premium 6.5%, $300 minimum base, pre-1990 threshold formula | `src/lib/military/sbp.js` `SBP_RULES` | the standard spouse premium formula and the minimum base against DFAS; the threshold formula for pre-1990 elections (not computed; official premium required) | DFAS SBP pages; 10 U.S.C. 1452 |
+| Chapter 61 TDRL floor change date | `src/lib/military/retirement/special.js` `MEDICAL_RULES.tdrlFloorRemovedFrom` | the 50% floor ended for placements on or after 1 January 2017 | Pub. L. 114-328 §521; 10 U.S.C. 1401 |
+| Severance rounding and bounds | `src/lib/military/retirement/special.js` `computeSeverance` | fractions of six months or more round up; minimum 3 (6 combat-related), maximum 19 years | 10 U.S.C. 1212 |
+| TERA reduction proration | `src/lib/military/retirement/special.js` `computeTera` | 1/12 of 1% per month short of 20 years | 10 U.S.C. 1293; DoD FMR Vol. 7B ch. 1 |
 
 ## Verified
 
@@ -68,6 +72,35 @@ more than an estimate.
 | BRS: 1% automatic after 60 days, matching from the 25th month, both through 26 years; automatic vests at two years; FERS automatic vests at three | 37 U.S.C. 8440e; 5 U.S.C. 8432b; DoD BRS page; tsp.gov contribution types | build; pinned by cases 38–39 | 2026-09-20 |
 | TRS unavailable to FEHB-eligible members until 1 January 2030 | 10 U.S.C. 1076d(a)(1) as amended by Pub. L. 116-92 §701 | build; pinned by `coverage.test.js` case 41 | 2026-09-20 |
 | TFL requires Medicare Parts A and B; CHAMPVA excluded for TRICARE-eligible persons; TAMP 180 days; CHCBP 18 months (members) / 36 months (others) | 10 U.S.C. 1086(d), 1145, 1078a; 38 U.S.C. 1781; TRICARE plan pages | build; pinned by cases 43–46 | 2026-09-20 |
+| Chapter 61: greater of the disability-percentage and longevity methods, 75% cap; severance 2 × monthly basic pay × years | 10 U.S.C. 1401, 1212 | build; pinned by `special.test.js` | 2026-09-20 |
+| TERA: 15 to under 20 years, 1% reduction per year short of 20 | 10 U.S.C. 1293 | build; pinned by `special.test.js` | 2026-09-20 |
+| SBP annuity 55% of the elected base; paid-up at 70 with 360 payments; SBP-DIC offset two-thirds 2021, one-third 2022, none from 2023 | 10 U.S.C. 1451, 1452(j); Pub. L. 116-92 §622 | build; pinned by `sbp.test.js` | 2026-09-20 |
+
+## Golden cases
+
+Every fixture the suites pin, with the authority it reproduces and the approved
+variance. A golden case is never made to pass by widening its tolerance; a
+change goes through this table with a root-cause note.
+
+| Case | Test | Reproduces | Tolerance / variance |
+|---|---|---|---|
+| OPM composite deposit interest tables 2020, 2024 | `deposit.test.js` "reproduces OPM's composite tables" | BAL 24-301 and 2020 attachment factors | exact to 5 decimals |
+| Deposit rates by year, 30-day months, IAD anniversary posting | `deposit.test.js` | Handbook ch. 23; BALs | exact cents |
+| Military credit buckets (eligibility, computation, not the 5 civilian years, not the SRS numerator, not special coverage) | `militaryBuckets.test.js`, `militaryCredit.test.js` | OPM types-of-retirement page; Handbook ch. 51 | exact |
+| VA compensation and DIC amounts, 2025-12-01 | `incomeStreams.test.js` | va.gov rate tables | exact cents |
+| 2026 basic pay cells (E-7 over 20, O-5 over 22, E-9 senior enlisted, E-1 under 4 months) | `retirement.test.js` | DFAS 2026 tables | exact cents |
+| Regular High-36 at 20 years, REDUX reduction and age-62 restoration, BRS 2.0%, Final Pay | `retirement.test.js` | 10 U.S.C. 1401, 1409, 1412; DoD retirement page | exact dollars after round-down |
+| Reserve 49/50/51 points, inactive caps 60/75/90/130, leap year, points ÷ 360, reduced age units and floor | `reserve.test.js` | 10 U.S.C. 12731–12733 | exact |
+| Shared elective-deferral limit, catch-ups, annual additions with tax-exempt contributions, per-period match loss | `tspCoordination.test.js` | IRS Notice 2025-67; TSP fact sheet 07 | exact dollars |
+| TRS/TRR/TFL/CHAMPVA/TAMP/CHCBP rules | `coverage.test.js` | statute and TRICARE pages | rule outcomes |
+| Chapter 61 two methods, cap, TDRL floor, severance bounds; TERA reduction | `special.test.js` | 10 U.S.C. 1401, 1212, 1293 | exact |
+| SBP premium, annuity, paid-up, SBP-DIC offset phase-out | `sbp.test.js` | 10 U.S.C. 1447–1455; Pub. L. 116-92 §622 | exact |
+| Official reconciliation within one dollar | `retirement.test.js` | tolerance set in `RECONCILIATION_TOLERANCE_MONTHLY` | $1.00 monthly |
+
+Pending official goldens (human): MyArmyBenefits runs for active, Reserve, BRS,
+legacy, REDUX, and medical inputs; de-identified DFAS estimates and RASs;
+official points statements and 20-year letters. Record each as a fixture with
+its source, retrieval date, and rounding convention.
 
 ## Corrections made during verification
 

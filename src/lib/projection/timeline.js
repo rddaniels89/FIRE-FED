@@ -347,6 +347,17 @@ export function buildTimeline(scenario, options = {}) {
       profile: streamProfile,
       asOfDate: streamAsOfDate,
     });
+    // SBP and RCSBP premiums come out of retired pay while it is paid, until
+    // the plan is paid up (age 70 and 360 payments) or the member dies.
+    let sbpPremiumOutflow = 0;
+    if (militaryIncome.militaryRetiredPay + militaryIncome.taxablePension > 0) {
+      const sbpPlan = plan.military?.sbp;
+      const paidUpAge = sbpPlan?.paidUp?.paidUpAge ?? null;
+      const stillPaying = paidUpAge === null || age < paidUpAge;
+      if (sbpPlan?.applies && stillPaying) sbpPremiumOutflow += nonNeg(sbpPlan.premiumMonthly) * 12 * Math.pow(1 + inflation, i);
+      const rc = plan.military?.rcsbp;
+      if (rc?.applies && !rc.blocked) sbpPremiumOutflow += nonNeg(rc.premiumMonthly) * 12 * Math.pow(1 + inflation, i);
+    }
 
     // Uniformed-services TSP contributions for the year (applied to the account below).
     let uniContrib = { employeeTraditional: 0, employeeTaxExempt: 0, employeeRoth: 0, automatic: 0, matching: 0 };
@@ -468,7 +479,7 @@ export function buildTimeline(scenario, options = {}) {
       });
 
       const incomeTax = taxResult.totalTax + fica + penalties;
-      const outflows = spending + healthcareCost + incomeTax + oneTimeOutflow + uniEmployeeOutflow + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
+      const outflows = spending + healthcareCost + incomeTax + oneTimeOutflow + uniEmployeeOutflow + sbpPremiumOutflow + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
       const inflows = salary + guaranteedIncome + lumpSums + seppDraw;
       let need = outflows - inflows;
 
@@ -525,7 +536,7 @@ export function buildTimeline(scenario, options = {}) {
 
     // Excess when income exceeds outflows in retirement is kept as cash.
     const totalTax = (taxResult?.totalTax ?? 0) + fica + penalties;
-    const totalOutflow = spending + healthcareCost + totalTax + oneTimeOutflow + uniEmployeeOutflow + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
+    const totalOutflow = spending + healthcareCost + totalTax + oneTimeOutflow + uniEmployeeOutflow + sbpPremiumOutflow + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
     const totalInflow = salary + guaranteedIncome + lumpSums;
     const totalWithdrawals = w.cash + w.taxable + w.rothBasis + w.conversions + w.traditional + w.rothEarnings;
     const surplus = totalInflow + totalWithdrawals - totalOutflow - shortfall;
@@ -616,6 +627,7 @@ export function buildTimeline(scenario, options = {}) {
       spousePension,
       sideHustle,
       militaryIncome,
+      sbpPremium: sbpPremiumOutflow,
       lumpSums,
       oneTimeOutflow,
       withdrawals: { ...w, total: totalWithdrawals, sepp: seppDraw },

@@ -16,6 +16,9 @@ import {
   COVERAGE_RELATIONSHIP_OPTIONS,
   COVERAGE_SOURCE_OPTIONS,
   LUMP_SUM_OPTIONS,
+  RCSBP_OPTION_OPTIONS,
+  SBP_CATEGORY_OPTIONS,
+  SBP_ELECTED_OPTIONS,
   TSP_CONTRIBUTION_KIND_OPTIONS,
   UNIFORMED_TSP_SYSTEM_OPTIONS,
   DEPOSIT_MODE_OPTIONS,
@@ -41,6 +44,7 @@ import { MILITARY_CONNECTIONS, createDefaultMilitary } from '../../../lib/scenar
 import { DUTY_STATUS, createServicePeriod, parseIsoDate } from '../../../lib/military/servicePeriods';
 import { COLA_POLICIES, createIncomeStream } from '../../../lib/military/incomeStreams';
 import { createCoveragePeriod } from '../../../lib/military/coverage';
+import { MILITARY_RULES_VERSION, rulesStatus } from '../../../lib/military/status';
 import { RETIRED_PAY_RECEIPT, RETIRED_PAY_TYPES, WAIVER_MODES } from '../../../lib/military/retiredPayWaiver';
 import { resolveRetirementPlan } from '../../../lib/projection/plan';
 import { trackEvent } from '../../../lib/telemetry';
@@ -142,7 +146,12 @@ export default function MilitarySection({ scenario, write, open, onToggle, canUs
       (!i.entity || (i.entity.type !== 'servicePeriod' && i.entity.type !== 'incomeStream' && i.entity.type !== 'coveragePeriod' && i.entity.type !== 'tspAccount')) &&
       !String(i.code).startsWith('MIL_TSP') &&
       !String(i.code).startsWith('MIL_USERRA') &&
-      !String(i.code).startsWith('MRT_BRS')
+      !String(i.code).startsWith('MRT_BRS') &&
+      !String(i.code).startsWith('MRT_SBP') &&
+      !String(i.code).startsWith('MRT_RCSBP') &&
+      i.code !== 'MRT_CONCURRENT_RECEIPT_MANUAL' &&
+      i.code !== 'MRT_NET_NOT_RECONCILED' &&
+      i.code !== 'MRT_SCENARIO_RULES_STALE'
   );
   const classificationFor = (id) => mil?.normalizedPeriods?.find((p) => p.id === id)?.classification ?? null;
 
@@ -184,6 +193,12 @@ export default function MilitarySection({ scenario, write, open, onToggle, canUs
     writeStreams([...streams, s]);
   };
   const removeStream = (id) => writeStreams(streams.filter((s) => s.id !== id));
+
+  // ---- SBP and the gross-to-net ledger (pass 10)
+  const sbp = m.sbp ?? {};
+  const writeSbp = (patch) => writeMil({ sbp: patch });
+  const net = m.netPay ?? {};
+  const writeNet = (patch) => writeMil({ netPay: patch });
 
   // ---- uniformed-services TSP, BRS extras, coverage periods (pass 9)
   const uts = m.tsp?.uniformedServices ?? {};
@@ -229,6 +244,14 @@ export default function MilitarySection({ scenario, write, open, onToggle, canUs
             />
           </Grid>
           <MilitaryNotice className="mt-3" />
+          {rulesStatus(m).stale ? (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-100" role="status" data-testid="rules-stale-banner">
+              Newer military rules are available ({MILITARY_RULES_VERSION}; this scenario was last resolved under {m.rulesVersion}). Saved calculations keep their own version and are not changed.{' '}
+              <button type="button" className="underline underline-offset-2 font-medium" onClick={() => writeMil({ rulesVersion: MILITARY_RULES_VERSION })}>
+                Apply current rules to this scenario
+              </button>
+            </div>
+          ) : null}
 
           {/* ------------------------------------------------ service periods */}
           <SubHeading hint="One entry per period of service as it appears on your DD 214 or orders. Weekend drill and state active duty can be recorded; they are shown but never credited.">
@@ -507,6 +530,65 @@ export default function MilitarySection({ scenario, write, open, onToggle, canUs
               Add
             </button>
           </div>
+
+          {/* ------------------------------------------------ SBP and gross-to-net */}
+          {m.retiredPay?.receives === 'yes' || streams.some((s) => ['longevity_retired_pay', 'reserve_retired_pay', 'disability_retired_pay'].includes(s.type)) ? (
+            <div data-testid="sbp-panel">
+              <SubHeading hint="The Survivor Benefit Plan election as it appears on your retirement orders or Retiree Account Statement. FireFed models the election you record; it never recommends one.">
+                Survivor Benefit Plan and net pay
+              </SubHeading>
+              <Grid>
+                <SelectField id="mil-sbp-elected" label="SBP coverage" value={sbp.elected ?? 'unknown'} options={SBP_ELECTED_OPTIONS} onChange={(v) => writeSbp({ elected: v })} />
+                {sbp.elected === 'yes' ? (
+                  <>
+                    <SelectField id="mil-sbp-category" label="Beneficiary category" value={sbp.category ?? 'unknown'} options={SBP_CATEGORY_OPTIONS} onChange={(v) => writeSbp({ category: v })} />
+                    <div className="sm:col-span-2 lg:col-span-3">
+                      <CheckField id="mil-sbp-fullbase" label="Covered base is full gross retired pay" checked={sbp.fullBase !== false} onChange={(v) => writeSbp({ fullBase: v })} />
+                    </div>
+                    {sbp.fullBase === false ? <NumberField id="mil-sbp-base" label="Elected base per month" prefix="$" min={0} step={10} allowBlank placeholder="—" value={sbp.electedBase ?? null} onCommit={(v) => writeSbp({ electedBase: v })} hint="At least $300." /> : null}
+                    <DateField id="mil-sbp-date" label="Election date" value={sbp.electionDate} onChange={(v) => writeSbp({ electionDate: v })} />
+                    <NumberField id="mil-sbp-premium" label="Official premium per month (optional)" prefix="$" min={0} step={1} allowBlank placeholder="6.5% of base" value={sbp.officialPremiumMonthly ?? null} onCommit={(v) => writeSbp({ officialPremiumMonthly: v })} />
+                    <NumberField id="mil-sbp-annuity" label="Official survivor annuity per month (optional)" prefix="$" min={0} step={1} allowBlank placeholder="55% of base" value={sbp.officialAnnuityMonthly ?? null} onCommit={(v) => writeSbp({ officialAnnuityMonthly: v })} />
+                    <NumberField id="mil-sbp-paid" label="Premiums paid so far (months)" min={0} max={600} stepper value={sbp.premiumsPaidToDate ?? 0} onCommit={(v) => writeSbp({ premiumsPaidToDate: v })} hint="Paid up at age 70 with 360 payments." />
+                    <SelectField id="mil-sbp-prov" label="These figures are" value={sbp.provenance ?? 'user_estimate'} options={PROVENANCE_OPTIONS} onChange={(v) => writeSbp({ provenance: v })} />
+                  </>
+                ) : null}
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <CheckField id="mil-rcsbp" label="Reserve Component SBP (RCSBP) election in place" checked={Boolean(sbp.rcsbp?.elected)} onChange={(v) => writeSbp({ rcsbp: { ...(sbp.rcsbp ?? {}), elected: v } })} />
+                </div>
+                {sbp.rcsbp?.elected ? (
+                  <>
+                    <SelectField id="mil-rcsbp-option" label="RCSBP option" value={sbp.rcsbp.option ?? ''} options={RCSBP_OPTION_OPTIONS} onChange={(v) => writeSbp({ rcsbp: { ...sbp.rcsbp, option: v || null } })} />
+                    <NumberField id="mil-rcsbp-premium" label="Official RCSBP premium per month" prefix="$" min={0} step={1} allowBlank placeholder="—" value={sbp.rcsbp.officialPremiumMonthly ?? null} onCommit={(v) => writeSbp({ rcsbp: { ...sbp.rcsbp, officialPremiumMonthly: v } })} />
+                    <NumberField id="mil-rcsbp-annuity" label="Official RCSBP annuity per month" prefix="$" min={0} step={1} allowBlank placeholder="—" value={sbp.rcsbp.officialAnnuityMonthly ?? null} onCommit={(v) => writeSbp({ rcsbp: { ...sbp.rcsbp, officialAnnuityMonthly: v } })} />
+                    <SelectField id="mil-rcsbp-prov" label="These RCSBP figures are" value={sbp.rcsbp.provenance ?? 'user_estimate'} options={PROVENANCE_OPTIONS} onChange={(v) => writeSbp({ rcsbp: { ...sbp.rcsbp, provenance: v } })} />
+                  </>
+                ) : null}
+              </Grid>
+              <div className="mt-4">
+                <div className="label">Gross to net: official adjustments and withholding assumptions</div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">From your Retiree Account Statement and VA award letter. FireFed does not compute concurrent receipt.</p>
+                <Grid>
+                  <NumberField id="mil-net-va" label="VA waiver / offset per month" prefix="$" min={0} step={1} value={net.vaWaiverMonthly ?? 0} onCommit={(v) => writeNet({ vaWaiverMonthly: v })} />
+                  <NumberField id="mil-net-crdp" label="CRDP restored per month" prefix="$" min={0} step={1} value={net.crdpMonthly ?? 0} onCommit={(v) => writeNet({ crdpMonthly: v })} />
+                  <NumberField id="mil-net-crsc" label="CRSC per month" prefix="$" min={0} step={1} value={net.crscMonthly ?? 0} onCommit={(v) => writeNet({ crscMonthly: v })} />
+                  <NumberField id="mil-net-fed" label="Federal withholding assumption" suffix="%" min={0} max={50} step={0.5} value={(net.federalWithholdingRate ?? 0) * 100} onCommit={(v) => writeNet({ federalWithholdingRate: (v ?? 0) / 100 })} />
+                  <NumberField id="mil-net-state" label="State withholding assumption" suffix="%" min={0} max={20} step={0.5} value={(net.stateWithholdingRate ?? 0) * 100} onCommit={(v) => writeNet({ stateWithholdingRate: (v ?? 0) / 100 })} />
+                  <NumberField id="mil-net-other" label="Other official deductions per month" prefix="$" min={0} step={1} value={net.otherDeductionsMonthly ?? 0} onCommit={(v) => writeNet({ otherDeductionsMonthly: v })} />
+                  <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-x-6 gap-y-2">
+                    <CheckField id="mil-net-official" label="These adjustments are from official statements" checked={Boolean(net.adjustmentsOfficial)} onChange={(v) => writeNet({ adjustmentsOfficial: v })} />
+                    <CheckField id="mil-net-ras" label="This ledger matches my Retiree Account Statement" checked={Boolean(net.reconciledToRas)} onChange={(v) => writeNet({ reconciledToRas: v })} />
+                  </div>
+                </Grid>
+              </div>
+              {mil?.ledger ? (
+                <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 p-3 text-sm" data-testid="ledger-summary">
+                  {mil.ledger.label}: {money(mil.ledger.net)} per month from {money(mil.retiredPayMonthly)} gross{mil.sbp?.applies ? `; SBP premium ${money(mil.sbp.premiumMonthly)}, survivor annuity ${money(mil.sbp.annuityMonthly)}` : ''}. Details on the results page.
+                </div>
+              ) : null}
+              <MilitaryIssues issues={(mil?.issues ?? []).filter((i) => String(i.code).startsWith('MRT_SBP') || String(i.code).startsWith('MRT_RCSBP') || i.code === 'MRT_CONCURRENT_RECEIPT_MANUAL' || i.code === 'MRT_NET_NOT_RECONCILED')} className="mt-3" compact />
+            </div>
+          ) : null}
 
           {/* ------------------------------------------------ uniformed-services TSP */}
           <SubHeading hint="A second TSP account, kept apart from your civilian one. Your own contributions to both share one yearly limit; service and agency contributions do not. Balances from your TSP statement.">

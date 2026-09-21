@@ -35,6 +35,7 @@ import {
   computeReserveRetiredPayAge,
   resolveReservePoints,
 } from './reserve';
+import { MEDICAL_DISPOSITIONS, computeChapter61, computeTera } from './special';
 
 export const ENGINE_VERSION = '1.0.0';
 
@@ -125,6 +126,20 @@ export function normalizeRetirementInputs(raw = {}) {
           reducedAgePeriods: (raw.reserve.reducedAgePeriods ?? []).map((p) => ({ startDate: p.startDate ?? null, endDate: p.endDate ?? null, authority: p.authority ?? null, verified: Boolean(p.verified) })),
         }
       : null,
+    medical: raw.medical
+      ? {
+          disposition: raw.medical.disposition ?? MEDICAL_DISPOSITIONS.UNKNOWN,
+          dodDisabilityPercent: raw.medical.dodDisabilityPercent === null || raw.medical.dodDisabilityPercent === undefined || raw.medical.dodDisabilityPercent === '' ? null : num(raw.medical.dodDisabilityPercent),
+          vaRating: raw.medical.vaRating === null || raw.medical.vaRating === undefined || raw.medical.vaRating === '' ? null : num(raw.medical.vaRating),
+          tdrlPlacementDate: raw.medical.tdrlPlacementDate ?? null,
+          combatRelated: raw.medical.combatRelated === true ? true : raw.medical.combatRelated === false ? false : null,
+          monthlyBasicPay: raw.medical.monthlyBasicPay === null || raw.medical.monthlyBasicPay === undefined ? null : num(raw.medical.monthlyBasicPay),
+          provenance: raw.medical.provenance ?? INPUT_PROVENANCE.USER_ESTIMATE,
+        }
+      : null,
+    tera: raw.tera
+      ? { authorityName: raw.tera.authorityName ?? null, approvalDate: raw.tera.approvalDate ?? null, provenance: raw.tera.provenance ?? INPUT_PROVENANCE.USER_ESTIMATE }
+      : null,
     assumptions: {
       basicPayGrowth: a.basicPayGrowth === undefined ? 0.03 : num(a.basicPayGrowth),
       inflation: a.inflation === undefined ? 0.025 : num(a.inflation),
@@ -158,9 +173,27 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
     return finish(base, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
   }
   const isReserve = inputs.path === CALCULATION_PATHS.RESERVE_NONREGULAR;
-  if (inputs.path !== CALCULATION_PATHS.REGULAR && inputs.path !== CALCULATION_PATHS.ALREADY_RETIRED && !isReserve) {
+  const isMedical = inputs.path === CALCULATION_PATHS.MEDICAL;
+  const isTera = inputs.path === CALCULATION_PATHS.TERA;
+  if (!Object.values(CALCULATION_PATHS).includes(inputs.path)) {
     issues.push(raiseIssue(ISSUE_CODES.MRT_PATH_UNSUPPORTED, { detail: { path: inputs.path } }));
     return finish(base, MILITARY_RESULT_STATUS.NOT_SUPPORTED);
+  }
+  // The special paths need their official facts before anything is priced.
+  if (isMedical) {
+    const m = inputs.medical ?? {};
+    if (!m.disposition || m.disposition === MEDICAL_DISPOSITIONS.UNKNOWN) {
+      issues.push(raiseIssue(ISSUE_CODES.MRT_MEDICAL_DISPOSITION_REQUIRED));
+      return finish(base, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
+    }
+    if (m.dodDisabilityPercent === null) {
+      issues.push(raiseIssue(ISSUE_CODES.MRT_MEDICAL_DOD_PERCENT_REQUIRED));
+      return finish(base, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
+    }
+  }
+  if (isTera && !(inputs.tera && inputs.tera.authorityName)) {
+    issues.push(raiseIssue(ISSUE_CODES.MRT_TERA_AUTHORITY_REQUIRED));
+    return finish(base, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
   }
 
   // ---- system
@@ -276,10 +309,36 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
   if (!inputs.retiredGradeConfirmed && retiredGrade) issues.push(raiseIssue(ISSUE_CODES.MRT_RETIRED_GRADE_UNCONFIRMED, { detail: { grade: gradeLabel(retiredGrade) } }));
 
   // ---- multiplier
-  const mult = isReserve
+  let mult = isReserve
     ? reserveMultiplier({ system, equivalentYears: reserve.equivalent.equivalentYears, retirementDate: payStartIso })
     : computeLongevityMultiplier({ system, serviceMonths, retirementDate: inputs.retirementDate });
-  for (const s of mult.steps) step({ ...s, ruleId: s.id === 'redux_reduction' ? 'military.redux' : isReserve ? 'military.reserve_points' : 'military.retired_pay_formula' });
+  let special = null;
+  if (isMedical) {
+    const m = inputs.medical;
+    const ch61 = computeChapter61({ payBaseMonthly: payBase.monthlyUnrounded, system, serviceMonths, retirementDate: inputs.retirementDate, disposition: m.disposition, dodDisabilityPercent: m.dodDisabilityPercent, vaRating: m.vaRating, tdrlPlacementDate: m.tdrlPlacementDate, provenance: m.provenance, combatRelated: m.combatRelated, monthlyBasicPay: m.monthlyBasicPay });
+    issues.push(...ch61.issues);
+    for (const s of ch61.steps) step(s);
+    if (ch61.path === 'blocked') return finish({ ...base, suggestion, system, payBase, history: history ? { counts: history.counts, months: history.months } : null }, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
+    if (ch61.path === 'severance') {
+      return finish(
+        { ...base, suggestion, system, systemLabel: SYSTEM_LABELS[system], retiredGrade, retiredGradeLabel: retiredGrade ? gradeLabel(retiredGrade) : null, service: { months: serviceMonths, years: serviceMonths / 12, official: serviceOfficial }, payBase, history: history ? { counts: history.counts, months: history.months } : null, special: { kind: 'severance', ...ch61 }, grossMonthly: 0, grossAnnual: 0, projectedMonthly: 0, retiredPayStartDate: null, events: [{ type: 'MEDICAL_SEVERANCE', date: inputs.retirementDate, amount: ch61.severance.lumpSum }] },
+        ch61.official && serviceOfficial ? MILITARY_RESULT_STATUS.SUPPORTED : MILITARY_RESULT_STATUS.ESTIMATE_ONLY
+      );
+    }
+    special = { kind: 'chapter61', ...ch61 };
+    mult = { ...mult, multiplier: ch61.multiplier, method: ch61.method, options: ch61.options, uncapped: ch61.multiplier, capApplied: ch61.capApplied, reduxReduction: 0 };
+    if (!ch61.official) hypothetical = true;
+  } else if (isTera) {
+    const tera = computeTera({ payBaseMonthly: payBase.monthlyUnrounded, system, serviceMonths, retirementDate: inputs.retirementDate, authority: { name: inputs.tera.authorityName, approvalDate: inputs.tera.approvalDate, provenance: inputs.tera.provenance } });
+    issues.push(...tera.issues);
+    for (const s of tera.steps) step(s);
+    if (tera.blocked) return finish({ ...base, suggestion, system, payBase, history: history ? { counts: history.counts, months: history.months } : null }, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
+    special = { kind: 'tera', ...tera };
+    mult = { ...mult, multiplier: tera.multiplier, teraReductionFactor: tera.reductionFactor, monthsShort: tera.monthsShort, reduxReduction: 0 };
+    if (!tera.official) hypothetical = true;
+  } else {
+    for (const s of mult.steps) step({ ...s, ruleId: s.id === 'redux_reduction' ? 'military.redux' : isReserve ? 'military.reserve_points' : 'military.retired_pay_formula' });
+  }
 
   // ---- gross
   const grossUnrounded = payBase.monthlyUnrounded * mult.multiplier;
@@ -359,6 +418,7 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
       retiredGradeLabel: retiredGrade ? gradeLabel(retiredGrade) : null,
       service: { months: serviceMonths, years: serviceMonths / 12, official: serviceOfficial, ...(inputs.creditableService ?? {}) },
       reserve,
+      special,
       retiredPayStartDate: payStartIso,
       payBase,
       history: history ? { counts: history.counts, months: history.months } : null,

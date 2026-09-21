@@ -310,24 +310,35 @@ household projects each person separately.
 Goal: bounded Chapter 61, TERA, and SBP; reports; the verification record; and
 the release checklist with human items marked.
 
-- [ ] Chapter 61 bounded calculation from official disposition and DoD percentage,
-      both authorised methods where permitted, TDRL/PDRL floors and caps; medical
-      separation as its own path; TERA only with official authority (§20.10).
-- [ ] Supported SBP spouse category: elected base, versioned premium, 55%
-      annuity, paid-up rule; RCSBP official amounts only; gross-to-net ledger
-      (§20.11); post-2023 SBP and DIC concurrency in the death scenario.
-- [ ] Reports: military retirement report and Military + Federal PDF sections,
-      assumptions and sources pages, methodology page section, staleness banner
-      when `rulesVersion` is behind (§17).
-- [ ] `docs/ANNUAL-UPDATE.md` gains the §17 calendar; `docs/MILITARY-VERIFICATION.md`
-      records every golden case and approved variance.
-- [ ] Security and privacy checks: export and delete include the military block;
-      telemetry redaction tests; no values in URLs (§11, §20.19).
-- [ ] Codes: `MRT_AUTHORITY_UNCONFIRMED`, `MRT_MEDICAL_*`, `MRT_TERA_AUTHORITY_REQUIRED`,
-      `MRT_SBP_ELECTION_INCOMPLETE`, `MRT_RCSBP_OFFICIAL_AMOUNT_REQUIRED`,
-      `MRT_CONCURRENT_RECEIPT_MANUAL`, `MRT_RULES_STALE`.
-- [ ] Tests: §20.18 medical, TERA, SBP cases; §14.1 case 50 "rule update preserves
-      prior snapshot".
+- [x] Chapter 61 bounded calculation from official disposition and DoD percentage,
+      both authorised methods, 75% cap, pre-2017 TDRL floor; medical separation
+      with severance as its own path; TERA only with official authority and 15–19
+      years, 1% per year short prorated by month (`retirement/special.js`; §20.10).
+- [x] Supported SBP spouse and spouse-and-child categories: elected base, 6.5%
+      premium (1990 formula), 55% annuity, paid-up at 70 with 360 payments; other
+      categories and RCSBP official amounts only; gross-to-net ledger with the
+      §20.11 line order; effective-dated SBP-DIC offset (none from 2023) in the
+      death scenario; SBP premium as a timeline outflow (`sbp.js`).
+      `[-]` 6.5% premium, $300 minimum, and the pre-1990 threshold formula need
+      DFAS verification.
+- [x] Reports: Military Retirement Report PDF from the calculator
+      (`pdf/militaryReport.js`), Military + Federal PDF section extended with
+      linked calculations, TSP, coverage, ledger, versions; Methodology page lists
+      the military and healthcare rules from the registry; staleness banner on the
+      inputs section and the plan page when `rulesVersion` is behind (§17).
+- [x] `docs/ANNUAL-UPDATE.md` gains the §17 calendar and rules-change behaviour;
+      `docs/MILITARY-VERIFICATION.md` records the golden cases and the approved
+      variances; `docs/MILITARY-RELEASE-GATES.md` lists every §16/§20.21 gate.
+- [x] Security and privacy checks: telemetry allow-list redaction with tests; the
+      calculator never writes to the URL (e2e); the military block travels with the
+      scenario JSON for export/import/delete and has its own delete-all (§11, §20.19).
+      Account-level export/deletion and RLS re-run are infra gates.
+- [x] Codes: `MRT_AUTHORITY_UNCONFIRMED`, `MRT_MEDICAL_*` (8), `MRT_TERA_*` (3),
+      `MRT_SBP_*` (7), `MRT_RCSBP_OFFICIAL_AMOUNT_REQUIRED`,
+      `MRT_CONCURRENT_RECEIPT_MANUAL`, `MRT_NET_NOT_RECONCILED`,
+      `MRT_SCENARIO_RULES_STALE` (plus `MRT_RULES_STALE` per calculation from pass 8).
+- [x] Tests: §20.18 medical, TERA, SBP cases; §14.1 case 50 "rule update preserves
+      prior snapshot"; PDF parity; telemetry redaction.
 - [-] Human release gates (§16, §20.21): federal-retirement SME sign-off,
       military-benefits SME sign-off, counsel review of VA-claims boundary and
       non-affiliation copy, WCAG 2.2 AA review, de-identified DFAS statements for

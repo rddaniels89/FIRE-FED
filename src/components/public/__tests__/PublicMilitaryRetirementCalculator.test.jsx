@@ -120,12 +120,47 @@ describe('PublicMilitaryRetirementCalculator', () => {
     expect(screen.getByTestId('reconciliation')).toHaveTextContent('$3,300.00');
   });
 
-  it('medical and TERA paths show the notice and no figure', () => {
+  it('medical path: asks for the official disposition first, then shows both methods, the cap, and the severance path', () => {
     renderPage();
     fireEvent.click(screen.getByRole('radio', { name: /Official medical retirement/ }));
     expect(screen.getByTestId('medical-notice')).toHaveTextContent('does not evaluate medical fitness or disability');
     expect(screen.getByTestId('no-figure')).toBeInTheDocument();
-    expect(screen.getByText('Not modeled')).toBeInTheDocument();
+    expect(screen.getByText(/No official medical disposition is recorded/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Official disposition'), { target: { value: 'pdrl' } });
+    fill('DoD disability percentage', '60');
+    fill('VA rating (kept separate, optional)', '90');
+    fill('DIEMS (date you first entered service)', '2010-06-01');
+    fireEvent.click(screen.getByRole('button', { name: 'Use High-36' }));
+    fill('Pay entry base date (PEBD)', '2010-06-01');
+    fill('Years', '14');
+    fill('Retirement date', '2027-01-01');
+    fill('Held from', '2018-01-01');
+    expect(screen.getByTestId('card-multiplier')).toHaveTextContent('60.00%');
+    expect(screen.getByTestId('formula-audit')).toHaveTextContent('Greater of the two');
+    expect(screen.getByText(/The VA rating recorded here is kept separate/)).toBeInTheDocument();
+    expect(screen.getByText(/depends on an official classification/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Download this calculation (PDF)' })).toBeInTheDocument();
+    // Severance is its own result, not a zero pension.
+    fireEvent.change(screen.getByLabelText('Official disposition'), { target: { value: 'separation_severance' } });
+    fill('Monthly basic pay at separation', '4000');
+    expect(screen.getByTestId('card-severance')).toHaveTextContent('$112,000'); // 2 × 4,000 × 14 years
+    expect(screen.queryByTestId('result-cards')).not.toBeInTheDocument();
+  });
+
+  it('TERA path: blocked without an official authority, reduced formula with it', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('radio', { name: /Official TERA retirement/ }));
+    expect(screen.getByTestId('tera-fields')).toHaveTextContent('does not show TERA as a future option');
+    expect(screen.getByText(/TERA is calculated only under an official Temporary Early Retirement Authority approval/)).toBeInTheDocument();
+    fill('Authority on the approval', 'FY2012 NDAA §504 (Army)');
+    fill('DIEMS (date you first entered service)', '2010-06-01');
+    fireEvent.click(screen.getByRole('button', { name: 'Use High-36' }));
+    fill('Pay entry base date (PEBD)', '2010-06-01');
+    fill('Years', '16');
+    fill('Retirement date', '2027-01-01');
+    fill('Held from', '2018-01-01');
+    expect(screen.getByTestId('card-multiplier')).toHaveTextContent('38.40%');
+    expect(screen.getByTestId('formula-audit')).toHaveTextContent('TERA reduction: 1% per year short of 20');
   });
 
   it('signed out: a sign-up prompt; signed in: connects the result to the plan as a linked stream', async () => {

@@ -30,6 +30,22 @@ export function formToInputs(form) {
     retiredGradeConfirmed: form.mode !== 'quick' && form.retiredGradeConfirmed,
     assumptions: { inflation: num(form.inflationPct) / 100, basicPayGrowth: num(form.basicPayGrowthPct) / 100 },
     officialEstimate: form.mode === 'reconcile' && num(form.officialMonthlyGross) > 0 ? { monthlyGross: num(form.officialMonthlyGross), asOfDate: dateOrNull(form.officialAsOfDate) } : null,
+    medical:
+      form.path === CALCULATION_PATHS.MEDICAL
+        ? {
+            disposition: form.medical?.disposition ?? 'unknown',
+            dodDisabilityPercent: orNull(form.medical?.dodDisabilityPercent) === null ? null : num(form.medical.dodDisabilityPercent),
+            vaRating: orNull(form.medical?.vaRating) === null ? null : num(form.medical.vaRating),
+            tdrlPlacementDate: dateOrNull(form.medical?.tdrlPlacementDate),
+            combatRelated: form.medical?.combatRelated === 'yes' ? true : form.medical?.combatRelated === 'no' ? false : null,
+            monthlyBasicPay: orNull(form.medical?.monthlyBasicPay) === null ? null : num(form.medical.monthlyBasicPay),
+            provenance: form.mode === 'quick' ? INPUT_PROVENANCE.USER_ESTIMATE : form.medical?.provenance ?? INPUT_PROVENANCE.USER_ESTIMATE,
+          }
+        : null,
+    tera:
+      form.path === CALCULATION_PATHS.TERA
+        ? { authorityName: orNull(form.tera?.authorityName), approvalDate: dateOrNull(form.tera?.approvalDate), provenance: form.mode === 'quick' ? INPUT_PROVENANCE.USER_ESTIMATE : form.tera?.provenance ?? INPUT_PROVENANCE.USER_ESTIMATE }
+        : null,
     reserve: isReserve
       ? {
           officialTotalPoints: orNull(form.reserve.officialTotalPoints) === null ? null : num(form.reserve.officialTotalPoints),

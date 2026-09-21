@@ -53,5 +53,26 @@ test.describe('Military Retirement Calculator (public)', () => {
     await expect(cards.getByTestId('card-service')).toContainText('4,320 points = 12.0000 years');
     await expect(cards.getByTestId('card-start')).toContainText('2036-05-01');
     await expect(cards.getByTestId('card-multiplier')).toContainText('30.00%');
+    // Nothing the visitor typed is in the URL (spec §16, §20.19).
+    await expect(page).toHaveURL(/\/calculators\/military-retirement$/);
+    expect(new URL(page.url()).search).toBe('');
+  });
+
+  test('the medical path calculates only from the official disposition and shows both methods', async ({ page }) => {
+    await page.goto('/calculators/military-retirement');
+    await page.getByRole('radio', { name: /Official medical retirement/ }).check();
+    await expect(page.getByRole('heading', { name: 'What official disposition did your service provide?' })).toBeVisible();
+    await expect(page.getByTestId('no-figure')).toBeVisible();
+    await page.getByLabel('Official disposition').selectOption('pdrl');
+    await page.getByLabel('DoD disability percentage').fill('60');
+    await page.getByLabel('DIEMS (date you first entered service)').fill('2010-06-01');
+    await page.getByRole('button', { name: 'Use High-36' }).click();
+    await page.getByLabel('Pay entry base date (PEBD)').fill('2010-06-01');
+    await page.getByLabel('Years', { exact: true }).fill('14');
+    await page.getByLabel('Retirement date').fill('2027-01-01');
+    await page.getByLabel('Held from').fill('2018-01-01');
+    await expect(page.getByTestId('card-multiplier')).toContainText('60.00%');
+    await expect(page.getByTestId('formula-audit')).toContainText('Greater of the two');
+    await expect(page.getByText(/does not evaluate medical fitness or disability/)).toBeVisible();
   });
 });

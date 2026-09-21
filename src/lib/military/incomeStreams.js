@@ -40,6 +40,7 @@
  */
 
 import { INPUT_PROVENANCE, ISSUE_CODES, MILITARY_RULES_VERSION, raiseIssue } from './status';
+import { computeSbp, sbpDicOffsetShare } from './sbp';
 import { SERVICE_OWNERS, parseIsoDate } from './servicePeriods';
 import { estimateVaCompensation } from './vaCompensationRates';
 
@@ -218,6 +219,15 @@ export function resolveMilitaryIncomeStreams(military, { asOfDate = new Date() }
   const issues = [];
   const retiredPayTypes = [T.LONGEVITY_RETIRED_PAY, T.RESERVE_RETIRED_PAY];
   const linkedRetiredPay = list.filter((s) => s.sourceCalculationId && retiredPayTypes.includes(s.type));
+  // The primary's gross retired pay (entered or linked), the SBP full base.
+  const retiredPayMonthly = list
+    .filter((s) => retiredPayTypes.includes(s.type) && (s.ownerId ?? SERVICE_OWNERS.PRIMARY) === SERVICE_OWNERS.PRIMARY)
+    .reduce((sum, s) => {
+      const linked = s.sourceCalculationId ? findCalculation(military, s.sourceCalculationId) : null;
+      return sum + (linked ? num(linked.projectedMonthly ?? linked.grossMonthly, 0) : annualGross(createIncomeStream(s)) / 12);
+    }, 0);
+  const sbp = computeSbp({ election: military?.sbp, grossMonthly: retiredPayMonthly });
+  const sbpAnnuityMonthly = sbp.applies && !sbp.supported && sbp.annuitySource !== 'official' ? 0 : sbp.applies ? num(sbp.annuityMonthly) : 0;
   const streams = list.map((raw) => {
     const stream = createIncomeStream(raw);
     const entity = { type: 'incomeStream', id: stream.id };
@@ -244,6 +254,12 @@ export function resolveMilitaryIncomeStreams(military, { asOfDate = new Date() }
       // The same pension recorded by hand beside a linked calculation.
       own.push(raiseIssue(ISSUE_CODES.MRT_DUPLICATE_PLAN_INCOME, { entity, detail: { linkedStreamIds: linkedRetiredPay.filter((l) => l.ownerId === stream.ownerId).map((l) => l.id) } }));
       included = false;
+    }
+
+    // A supported SBP election supplies the survivor annuity when none was entered (55% of the elected base).
+    if (stream.type === T.SBP && gross <= 0 && sbpAnnuityMonthly > 0) {
+      gross = sbpAnnuityMonthly * 12;
+      own.push(raiseIssue(ISSUE_CODES.MIL_SBP_ANNUITY_FROM_ELECTION, { entity, detail: { monthly: sbpAnnuityMonthly } }));
     }
 
     // A VA table-assisted estimate stands in when no amount was entered.
@@ -370,8 +386,15 @@ export function projectMilitaryIncomeForYear({ resolved, yearsFromNow, asOfYear,
       if (deceasedAge === null || deceasedAge === undefined || deceasedAge <= num(deceasedDeath)) continue;
     }
 
-    const amount = s.resolved.annualGross * colaFactor(s, { years: yearsFromNow, inflation, asOfYear });
+    let amount = s.resolved.annualGross * colaFactor(s, { years: yearsFromNow, inflation, asOfYear });
     if (amount <= 0) continue;
+    // The repealed SBP-DIC offset, effective-dated for historical years only:
+    // from 2023 both are paid in full.
+    if ((s.type === T.SBP || s.type === T.RCSBP) && sbpDicOffsetShare(year) > 0) {
+      const dic = streams.filter((d) => d.type === T.VA_DIC && d.resolved.included && (d.ownerId ?? SERVICE_OWNERS.PRIMARY) === owner).reduce((sum, d) => sum + d.resolved.annualGross * colaFactor(d, { years: yearsFromNow, inflation, asOfYear }), 0);
+      amount = Math.max(0, amount - dic * sbpDicOffsetShare(year));
+      if (amount <= 0) continue;
+    }
     out.total += amount;
     if (s.resolved.isTaxExempt) out.taxExempt += amount;
     else if (s.resolved.federalTaxClass === F.TAXABLE_WAGES) out.taxableWages += amount;
@@ -380,7 +403,6 @@ export function projectMilitaryIncomeForYear({ resolved, yearsFromNow, asOfYear,
     if (s.resolved.isSurvivor) out.survivorIncome += amount;
     out.byStream.push({ id: s.id, type: s.type, label: s.label, ownerId: owner, amount, federalTaxClass: s.resolved.federalTaxClass, stateTreatment: s.resolved.stateTreatment });
   }
-  void year;
   return out;
 }
 

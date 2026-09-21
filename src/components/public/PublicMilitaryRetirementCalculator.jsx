@@ -9,6 +9,7 @@ import { GRADES, gradeLabel } from '../../lib/military/retirement/payTables';
 import { REDUCED_AGE_AUTHORITIES, RETIRED_RESERVE_STATUSES } from '../../lib/military/retirement/reserve';
 import { saveRetirementCalculation } from '../../lib/military/retirement/connect';
 import { formToInputs } from './militaryCalculatorForm';
+import { createMilitaryRetirementReportPdf } from '../../lib/pdf/militaryReport';
 import { INPUT_PROVENANCE, ISSUE_SEVERITY, MILITARY_RESULT_STATUS } from '../../lib/military/status';
 import { MILITARY_CONNECTIONS } from '../../lib/scenarios/schema';
 import MilitaryIssues, { StatusBadge } from '../plan/MilitaryIssues';
@@ -75,6 +76,8 @@ const defaultForm = () => ({
   basicPayGrowthPct: '3.0',
   officialMonthlyGross: '',
   officialAsOfDate: '',
+  medical: { disposition: 'unknown', dodDisabilityPercent: '', vaRating: '', tdrlPlacementDate: '', combatRelated: '', monthlyBasicPay: '', provenance: INPUT_PROVENANCE.USER_ESTIMATE },
+  tera: { authorityName: '', approvalDate: '', provenance: INPUT_PROVENANCE.USER_ESTIMATE },
   reserve: {
     officialTotalPoints: '',
     officialQualifyingYears: '',
@@ -139,6 +142,22 @@ export default function PublicMilitaryRetirementCalculator() {
   const result = useMemo(() => (calculable ? calculateMilitaryRetiredPay(inputs) : null), [inputs, calculable]);
 
   const canSave = isAuthenticated && currentScenario && result && result.grossMonthly !== null && result.status !== MILITARY_RESULT_STATUS.NOT_SUPPORTED && !result.issues.some((i) => i.severity === ISSUE_SEVERITY.BLOCK);
+
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const downloadPdf = async () => {
+    if (!result || pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      const { default: jsPDF } = await import('jspdf');
+      const pdf = createMilitaryRetirementReportPdf({ jsPDF, result });
+      pdf.save(`firefed-military-retirement-${today()}.pdf`);
+      trackEvent('pdf_export_succeeded', { calculator: 'military_retirement' });
+    } catch (e) {
+      trackEvent('pdf_export_failed', { calculator: 'military_retirement', message: e?.message || 'unknown' });
+    } finally {
+      setPdfBusy(false);
+    }
+  };
   const saveToPlan = async () => {
     const military = currentScenario.military ?? {};
     const out = saveRetirementCalculation(military, { result, inputs: result.inputs, name: `${result.systemLabel ?? 'Retired pay'} · ${isReserve ? 'Reserve' : 'Active'} · ${today()}` });
@@ -197,10 +216,75 @@ export default function PublicMilitaryRetirementCalculator() {
               </div>
             </fieldset>
 
-            {(form.path === CALCULATION_PATHS.MEDICAL || form.path === CALCULATION_PATHS.TERA) && (
-              <div className="card p-6 text-sm text-slate-700 dark:text-slate-200" data-testid="medical-notice">
-                <p>{form.path === CALCULATION_PATHS.MEDICAL ? MEDICAL_NOTICE : 'FireFed uses the figures on your TERA approval. It does not decide who is offered early retirement.'}</p>
-                <p className="mt-2 text-slate-500 dark:text-slate-400">These paths are not calculated yet. The other paths, and your Military + Federal Plan, are available now.</p>
+            {form.path === CALCULATION_PATHS.MEDICAL && (
+              <div className="card p-6 space-y-4" data-testid="medical-notice">
+                <h2 className="text-lg font-semibold navy-text">What official disposition did your service provide?</h2>
+                <p className="text-sm text-slate-700 dark:text-slate-200">{MEDICAL_NOTICE}</p>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field id="medDisposition" label="Official disposition">
+                    <select id="medDisposition" className="input-field w-full" value={form.medical.disposition} onChange={(e) => patch({ medical: { ...form.medical, disposition: e.target.value } })}>
+                      <option value="unknown">Not recorded yet</option>
+                      <option value="pdrl">Permanent disability retirement (PDRL)</option>
+                      <option value="tdrl">Temporary disability retirement (TDRL)</option>
+                      <option value="separation_severance">Separation with severance pay</option>
+                    </select>
+                  </Field>
+                  <Field id="medDodPct" label="DoD disability percentage" hint="From the orders. Not the VA rating.">
+                    <input id="medDodPct" inputMode="numeric" className="input-field w-full" value={form.medical.dodDisabilityPercent} onChange={(e) => patch({ medical: { ...form.medical, dodDisabilityPercent: e.target.value } })} />
+                  </Field>
+                  <Field id="medVaRating" label="VA rating (kept separate, optional)" hint="Recorded so the two are never confused; it does not enter this calculation.">
+                    <input id="medVaRating" inputMode="numeric" className="input-field w-full" value={form.medical.vaRating} onChange={(e) => patch({ medical: { ...form.medical, vaRating: e.target.value } })} />
+                  </Field>
+                  {form.medical.disposition === 'tdrl' && (
+                    <Field id="medTdrlDate" label="TDRL placement date" hint="Placements before 1 January 2017 carried a 50% floor.">
+                      <input id="medTdrlDate" type="date" className="input-field w-full" value={form.medical.tdrlPlacementDate} onChange={(e) => patch({ medical: { ...form.medical, tdrlPlacementDate: e.target.value } })} />
+                    </Field>
+                  )}
+                  {form.medical.disposition === 'separation_severance' && (
+                    <>
+                      <Field id="medBasicPay" label="Monthly basic pay at separation">
+                        <input id="medBasicPay" inputMode="decimal" className="input-field w-full" value={form.medical.monthlyBasicPay} onChange={(e) => patch({ medical: { ...form.medical, monthlyBasicPay: e.target.value } })} />
+                      </Field>
+                      <Field id="medCombat" label="Combat-related finding (official)">
+                        <select id="medCombat" className="input-field w-full" value={form.medical.combatRelated} onChange={(e) => patch({ medical: { ...form.medical, combatRelated: e.target.value } })}>
+                          <option value="">Not recorded</option>
+                          <option value="yes">Yes, per the orders</option>
+                          <option value="no">No</option>
+                        </select>
+                      </Field>
+                    </>
+                  )}
+                  {form.mode !== 'quick' && (
+                    <Field id="medProv" label="These figures are">
+                      <select id="medProv" className="input-field w-full" value={form.medical.provenance} onChange={(e) => patch({ medical: { ...form.medical, provenance: e.target.value } })}>
+                        <option value={INPUT_PROVENANCE.USER_ESTIMATE}>My estimate</option>
+                        <option value={INPUT_PROVENANCE.USER_ENTERED_OFFICIAL}>From my official orders</option>
+                      </select>
+                    </Field>
+                  )}
+                </div>
+              </div>
+            )}
+            {form.path === CALCULATION_PATHS.TERA && (
+              <div className="card p-6 space-y-4" data-testid="tera-fields">
+                <h2 className="text-lg font-semibold navy-text">Official TERA authority</h2>
+                <p className="text-sm text-slate-700 dark:text-slate-200">FireFed uses the figures on your TERA approval. It does not decide who is offered early retirement, and it does not show TERA as a future option.</p>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field id="teraAuthority" label="Authority on the approval" hint="For example the NDAA section and service program named on your orders.">
+                    <input id="teraAuthority" className="input-field w-full" value={form.tera.authorityName} onChange={(e) => patch({ tera: { ...form.tera, authorityName: e.target.value } })} />
+                  </Field>
+                  <Field id="teraApproval" label="Approval date">
+                    <input id="teraApproval" type="date" className="input-field w-full" value={form.tera.approvalDate} onChange={(e) => patch({ tera: { ...form.tera, approvalDate: e.target.value } })} />
+                  </Field>
+                  {form.mode !== 'quick' && (
+                    <Field id="teraProv" label="This authority is">
+                      <select id="teraProv" className="input-field w-full" value={form.tera.provenance} onChange={(e) => patch({ tera: { ...form.tera, provenance: e.target.value } })}>
+                        <option value={INPUT_PROVENANCE.USER_ESTIMATE}>My understanding</option>
+                        <option value={INPUT_PROVENANCE.USER_ENTERED_OFFICIAL}>From my official approval</option>
+                      </select>
+                    </Field>
+                  )}
+                </div>
               </div>
             )}
 
@@ -397,6 +481,14 @@ export default function PublicMilitaryRetirementCalculator() {
           {/* Results */}
           <div className="space-y-6" aria-live="polite">
             {result && <ResultPanel result={result} isReserve={isReserve} view={view} setView={setView} />}
+            {result && result.status !== MILITARY_RESULT_STATUS.NOT_SUPPORTED && (
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" className="btn-secondary btn-sm" onClick={downloadPdf} disabled={pdfBusy}>
+                  {pdfBusy ? 'Preparing PDF…' : 'Download this calculation (PDF)'}
+                </button>
+                <span className="text-xs text-slate-500 dark:text-slate-400">Same figures, status, warnings, sources, and rules version as this page. Generated in your browser; nothing is sent anywhere.</span>
+              </div>
+            )}
 
             {isAuthenticated ? (
               <div className="card p-6 bg-navy-50 dark:bg-slate-800" data-testid="connect-plan">
@@ -433,7 +525,8 @@ export default function PublicMilitaryRetirementCalculator() {
 }
 
 function ResultPanel({ result, isReserve, view, setView }) {
-  const noFigure = result.grossMonthly === null;
+  const severance = result.special?.kind === 'severance';
+  const noFigure = result.grossMonthly === null || severance;
   const startSource = isReserve
     ? result.reserve?.age?.method === 'official_date' ? 'official eligibility date' : result.reserve?.age?.method === 'reduced_age' ? 'reduced retired-pay age' : result.reserve ? 'age 60' : '—'
     : 'retirement date';
@@ -444,7 +537,18 @@ function ResultPanel({ result, isReserve, view, setView }) {
         <StatusBadge status={result.status} />
       </div>
 
-      {noFigure ? (
+      {severance ? (
+        <div className="grid sm:grid-cols-2 gap-4" data-testid="severance-cards">
+          <Card title="Medical separation with severance" testId="card-severance">
+            <span className="text-2xl font-bold tabular-nums">{money(result.special.severance.lumpSum)}</span>
+            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">One-time payment: 2 × {money2(result.special.severance.monthlyBasicPay)} × {result.special.severance.years} years. Not retired pay.</div>
+          </Card>
+          <Card title="Years of service counted" testId="card-severance-years">
+            <div className="text-lg font-semibold">{result.special.severance.yearsBeforeBounds} counted, {result.special.severance.years} used</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">At least 3 (6 if combat-related), at most 19.</div>
+          </Card>
+        </div>
+      ) : noFigure ? (
         <div className="card p-6" data-testid="no-figure">
           <p className="text-sm text-slate-700 dark:text-slate-200">No figure yet. The items below say what is missing or what needs an official answer.</p>
         </div>
