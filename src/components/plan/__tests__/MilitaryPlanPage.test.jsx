@@ -117,6 +117,36 @@ describe('MilitaryPlanPage', () => {
     expect(screen.getByText(/FireFed does not prepare or submit a waiver/)).toBeInTheDocument();
   });
 
+  it('shows the TSP coordination view with both accounts, the BRS value stack, and the coverage view per person', () => {
+    mocks.entitlements = { features: {} };
+    mocks.scenario = scenario({
+      connection: 'self',
+      servicePeriods: [PERIOD],
+      tsp: { uniformedServices: { enabled: true, coverageSystem: 'brs', monthsOfService: 96, contributing: true, monthlyBasicPay: 3000, employeePercent: 5, traditionalTaxableBalance: 40000, traditionalTaxExemptBasis: 10000, contributionEndAge: 55 } },
+      brs: { continuationPay: { offered: true, multiple: 2.5, monthlyBasicPay: 3000, paymentDate: '2027-06-01', provenance: 'user_entered_official' }, lumpSum: { electionPercent: 25 } },
+      coverage: [
+        { id: 'me', ownerId: 'primary', source: 'fehb', startDate: '2026-01-01', enrollmentConfirmed: true, monthlyPremium: 250 },
+        { id: 'sp', ownerId: 'spouse', source: 'trs', startDate: '2026-01-01', enrollmentConfirmed: true },
+      ],
+    });
+    renderPage();
+    const tsp = screen.getByRole('heading', { name: 'TSP coordination' }).closest('section');
+    const accounts = within(tsp).getByRole('table', { name: 'TSP accounts' });
+    expect(within(accounts).getByText('Civilian')).toBeInTheDocument();
+    expect(within(accounts).getByText('Uniformed services')).toBeInTheDocument();
+    expect(within(tsp).getByText(/tax-exempt basis/)).toBeInTheDocument();
+    const stack = screen.getByTestId('brs-value-stack');
+    expect(within(stack).getByText('$7,500')).toBeInTheDocument(); // continuation pay from the official offer
+    expect(within(stack).getByText('Blocked')).toBeInTheDocument(); // lump sum without the official rate
+    expect(within(stack).getByText(/discount rate for this year is missing or stale/)).toBeInTheDocument();
+    const cov = screen.getByRole('heading', { name: 'Health coverage by person' }).closest('section');
+    const periods = within(cov).getByRole('table', { name: 'Coverage periods' });
+    expect(within(periods).getByText('TRICARE Reserve Select')).toBeInTheDocument();
+    expect(within(cov).getByRole('table', { name: 'Expected health cost by year and person' })).toBeInTheDocument();
+    // Never one unlabeled retirement-benefit number.
+    expect(document.body.textContent).not.toMatch(/total retirement benefit/i);
+  });
+
   it('never uses recommendation language', () => {
     mocks.entitlements = { features: { [FEATURES.MILITARY_SCENARIOS]: true, [FEATURES.MILITARY_ANALYSIS]: true } };
     mocks.scenario = scenario({ connection: 'self', servicePeriods: [PERIOD], retiredPay: { receives: 'yes', type: 'regular_longevity' }, incomeStreams: [{ id: 'rp', type: 'longevity_retired_pay', grossAmount: 3000, amountStatus: 'official' }] });

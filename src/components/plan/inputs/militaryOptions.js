@@ -180,3 +180,53 @@ export const OFFICIAL_ONLY_TYPES = new Set(Object.entries(STREAM_TYPE_RULES).fil
 
 export const VA_DISABILITY_TYPE = STREAM_TYPES.VA_DISABILITY;
 export const DISABILITY_RETIRED_PAY_TYPE = STREAM_TYPES.DISABILITY_RETIRED_PAY;
+
+// ---- pass 9: TSP, BRS extras, coverage periods
+export const UNIFORMED_TSP_SYSTEM_OPTIONS = [
+  { value: 'neither', label: 'Not sure / no service contributions' },
+  { value: 'brs', label: 'Blended Retirement System (service automatic and matching)' },
+  { value: 'legacy', label: 'Legacy (High-36 or REDUX): no service contributions' },
+];
+
+export const TSP_CONTRIBUTION_KIND_OPTIONS = [
+  { value: 'traditional', label: 'Traditional' },
+  { value: 'roth', label: 'Roth' },
+];
+
+export const LUMP_SUM_OPTIONS = [
+  { value: '0', label: 'No lump sum' },
+  { value: '25', label: '25% lump sum' },
+  { value: '50', label: '50% lump sum' },
+];
+
+export const COVERAGE_SOURCE_OPTIONS = [
+  { value: 'fehb', label: 'FEHB' },
+  { value: 'pshb', label: 'PSHB (Postal)' },
+  { value: 'tricare_prime', label: 'TRICARE Prime' },
+  { value: 'tricare_select', label: 'TRICARE Select' },
+  { value: 'tricare_overseas', label: 'TRICARE Overseas' },
+  { value: 'trs', label: 'TRICARE Reserve Select' },
+  { value: 'trr', label: 'TRICARE Retired Reserve' },
+  { value: 'tfl', label: 'TRICARE For Life' },
+  { value: 'tamp', label: 'TAMP (180-day transitional)' },
+  { value: 'chcbp', label: 'CHCBP (continued health care)' },
+  { value: 'champva', label: 'CHAMPVA' },
+  { value: 'va_healthcare', label: 'VA health care (out-of-pocket only)' },
+  { value: 'medicare_advantage', label: 'Medicare Advantage' },
+  { value: 'medicare_only', label: 'Medicare A/B only' },
+  { value: 'other_employer', label: 'Other employer coverage' },
+  { value: 'marketplace', label: 'Marketplace plan' },
+];
+
+export const COVERAGE_ENROLLMENT_OPTIONS = [
+  { value: 'self', label: 'Self only' },
+  { value: 'selfPlusOne', label: 'Self plus one' },
+  { value: 'family', label: 'Family' },
+];
+
+export const COVERAGE_RELATIONSHIP_OPTIONS = [
+  { value: 'sponsor', label: 'Sponsor / member' },
+  { value: 'spouse', label: 'Spouse' },
+  { value: 'former_spouse', label: 'Former spouse' },
+  { value: 'survivor', label: 'Survivor' },
+];

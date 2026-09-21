@@ -56,6 +56,11 @@ const REQUIRED_IDS = [
   'military.retired_pay_cola',
   'military.reserve_points',
   'military.reserve_retired_pay_age',
+  'military.tsp_coordination',
+  'military.brs_tsp',
+  'military.brs_continuation_pay',
+  'military.brs_lump_sum',
+  'healthcare.coverage_periods',
 ];
 
 describe('rules registry', () => {

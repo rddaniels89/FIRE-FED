@@ -9,6 +9,7 @@ import { compareMilitaryDeposit } from '../../lib/military/depositComparison';
 import { compareRetiredPayWaiver } from '../../lib/military/retiredPayComparison';
 import { RETIRED_PAY_WAIVER_WARNING } from '../../lib/military/retiredPayWaiver';
 import { ISSUE_SEVERITY } from '../../lib/military/status';
+import { COVERAGE_LABELS } from '../../lib/military/coverage';
 import { listRulesByCategory } from '../../lib/rules/registry';
 import { trackEvent } from '../../lib/telemetry';
 import HowCalculated from '../HowCalculated';
@@ -369,6 +370,115 @@ export default function MilitaryPlanPage() {
           </div>
         )}
       </View>
+
+      {/* ------------------------------------------------ 4b. TSP coordination and BRS value stack */}
+      {mil.tsp ? (
+        <View id="mil-tsp" title="TSP coordination" lede="Two accounts, one elective-deferral limit. Matches and vesting are figured separately for each; nothing here says what to contribute.">
+          <div className="card p-6">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mb-4">
+              <Stat label={`Shared limit ${mil.tsp.year}`} ruleId="military.tsp_coordination">
+                {fmtMoney(mil.tsp.limits.total)}
+                {mil.tsp.limits.catchUpApplies ? <span className="block text-xs font-normal text-slate-500">incl. {fmtMoney(mil.tsp.limits.catchUpLimit)} catch-up</span> : null}
+              </Stat>
+              <Stat label="Planned deferrals this year">{fmtMoney(mil.tsp.sharedDeferrals.total)}</Stat>
+              <Stat label="Room left">{fmtMoney(mil.tsp.remainingRoom)}</Stat>
+              <Stat label="Over the limit">{mil.tsp.electiveExcess > 0 ? fmtMoney(mil.tsp.electiveExcess) : 'No'}</Stat>
+            </div>
+            <Table
+              caption="TSP accounts"
+              columns={['Account', 'System', 'Employee deferrals', 'Tax-exempt', 'Service / agency', 'Annual additions', 'Match at risk']}
+              rows={mil.tsp.byAccount.map((a) => [
+                a.context === 'civilian' ? 'Civilian' : 'Uniformed services',
+                a.system.toUpperCase(),
+                fmtMoney(a.employeeDeferrals),
+                fmtMoney(a.taxExemptDeferrals),
+                `${fmtMoney(a.employerContributions)} (${a.contributionPercents.automatic}% + ${a.contributionPercents.matching}%)`,
+                `${fmtMoney(a.annualAdditions)}${a.annualAdditionsExcess > 0 ? ` (over by ${fmtMoney(a.annualAdditionsExcess)})` : ''}`,
+                a.match.lost > 0 ? `${fmtMoney(a.match.lost)} over ${a.match.periodsWithoutMatch} period${a.match.periodsWithoutMatch === 1 ? '' : 's'}` : 'None',
+              ])}
+            />
+            {timeline.rows[0]?.uniformedTsp?.merged ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">The uniformed-services account has joined the household TSP pool for withdrawals; its tax-exempt basis is tracked there.</p>
+            ) : timeline.rows[0]?.balances?.uniformedTsp ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
+                Uniformed-services account at the end of this year: {fmtMoney(timeline.rows[0].balances.uniformedTsp.total)}
+                {timeline.rows[0].balances.uniformedTsp.traditionalTaxExemptBasis > 0 ? `, of which ${fmtMoney(timeline.rows[0].balances.uniformedTsp.traditionalTaxExemptBasis)} tax-exempt basis` : ''}
+                {timeline.rows[0].balances.uniformedTsp.unvestedAutomatic > 0 ? `; ${fmtMoney(timeline.rows[0].balances.uniformedTsp.unvestedAutomatic)} not yet vested` : ''}.
+              </p>
+            ) : null}
+            <MilitaryIssues issues={mil.issues.filter((i) => i.entity?.type === 'tspAccount' || String(i.code).startsWith('MIL_TSP') || String(i.code).startsWith('MIL_USERRA'))} className="mt-4" />
+          </div>
+          {mil.brs ? (
+            <div className="card p-6 mt-4" data-testid="brs-value-stack">
+              <h3 className="text-base font-semibold navy-text mb-2">BRS value stack</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Four components, shown apart. Different units are never added into one number.</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                <Stat label="Defined benefit (first-year retired pay)" ruleId="military.retired_pay_formula">
+                  {(() => {
+                    const linked = (military.retirementScenarios ?? []).map((sc) => (sc.calculations ?? []).find((c) => c.id === sc.currentCalculationId)).find((c) => c && c.system === 'brs');
+                    return linked ? fmtMoney(linked.projectedMonthly * 12) : 'No saved BRS calculation';
+                  })()}
+                </Stat>
+                <Stat label="Defined contribution (uniformed TSP today)" ruleId="military.brs_tsp">
+                  {timeline.rows[0]?.uniformedTsp?.merged ? 'In the household TSP pool' : fmtMoney(timeline.rows[0]?.balances?.uniformedTsp?.total ?? 0)}
+                </Stat>
+                <Stat label="Continuation pay (official offer)" ruleId="military.brs_continuation_pay">{mil.brs.continuationPay?.included ? fmtMoney(mil.brs.continuationPay.gross) : 'Not included'}</Stat>
+                <Stat label={`Lump sum (${mil.brs.lumpSum?.electionPercent ?? 0}%)`} ruleId="military.brs_lump_sum">
+                  {mil.brs.lumpSum && !mil.brs.lumpSum.blocked && mil.brs.lumpSum.elected ? fmtMoney(mil.brs.lumpSum.lumpSum) : mil.brs.lumpSum?.blocked ? 'Blocked' : 'Not elected'}
+                </Stat>
+              </div>
+              {mil.brs.lumpSum && !mil.brs.lumpSum.blocked && mil.brs.lumpSum.elected ? (
+                canAnalysis ? (
+                  <div className="mt-4 text-sm text-slate-700 dark:text-slate-300">
+                    <p>
+                      Reduced pension {fmtMoney(mil.brs.lumpSum.reducedMonthlyAtStart)} a month for {mil.brs.lumpSum.coveredMonths} months, restored in full from {mil.brs.lumpSum.restorationDate}. Nominal through the horizon:{' '}
+                      {fmtMoney(mil.brs.lumpSum.nominal.withLumpSum)} with the lump sum against {fmtMoney(mil.brs.lumpSum.nominal.withoutLumpSum)} without.
+                      {mil.brs.lumpSum.breakEvenMonthsFromStart !== null ? ` The cumulative totals cross ${Math.round(mil.brs.lumpSum.breakEvenMonthsFromStart / 12)} years after the start.` : ''}
+                    </p>
+                  </div>
+                ) : (
+                  <ProNotice reason="brs_lump_sum_pro">
+                    <span className="inline-flex items-center gap-2">The nominal and present-value comparison of the lump sum is Pro <ProBadge /></span>
+                  </ProNotice>
+                )
+              ) : null}
+              <MilitaryIssues issues={mil.issues.filter((i) => String(i.code).startsWith('MRT_BRS'))} className="mt-4" />
+            </div>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* ------------------------------------------------ 4c. health coverage by person */}
+      {(mil.coverage ?? []).length > 0 ? (
+        <View id="mil-coverage" title="Health coverage by person" lede="Each person's confirmed coverage, its cost by year, and any combination that breaks a current rule. Costs are compared, not ranked.">
+          <div className="card p-6">
+            <Table
+              caption="Coverage periods"
+              columns={['Who', 'Coverage', 'From', 'To', 'Monthly premium', 'Confirmed', 'Status']}
+              rows={mil.coverage.map((c) => [
+                c.ownerId === 'spouse' ? 'Spouse' : 'Me',
+                COVERAGE_LABELS[c.source] ?? c.source,
+                c.startDate ?? '—',
+                c.endDate ?? 'ongoing',
+                `${fmtMoney(c.resolved.premium.monthly)}${c.resolved.premium.source === 'table' ? ` (table ${c.resolved.premium.tableYear})` : ''}`,
+                c.enrollmentConfirmed ? 'Enrolled' : c.eligibilityConfirmed ? 'Eligible' : 'Not confirmed',
+                c.resolved.blocked ? 'Blocked' : c.resolved.issues.length > 0 ? 'Check' : 'OK',
+              ])}
+            />
+            <div className="mt-4">
+              <Table
+                caption="Expected health cost by year and person"
+                columns={['Age', 'Year', 'Me', 'Spouse', 'Household']}
+                rows={timeline.rows.filter((_, i) => i % 5 === 0).slice(0, 9).map((r) => [String(r.age), String(r.year), fmtMoney(r.healthcare.primaryTotal ?? r.healthcare.total), r.healthcare.spouse ? fmtMoney(r.healthcare.spouse.total) : '—', fmtMoney(r.healthcare.total)])}
+              />
+            </div>
+            <MilitaryIssues issues={mil.issues.filter((i) => i.entity?.type === 'coveragePeriod')} className="mt-4" />
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
+              <HowCalculated ruleId="healthcare.coverage_periods">How coverage periods are costed</HowCalculated>. FireFed does not declare eligibility; the program does.
+            </p>
+          </div>
+        </View>
+      ) : null}
 
       {/* ------------------------------------------------ 5. assumptions and sources */}
       <View id="mil-sources" title="Assumptions and sources" lede="Every military rule the plan applies, its source, and when it was last verified. Rules version in this scenario:">

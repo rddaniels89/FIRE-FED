@@ -13,7 +13,9 @@ Copy the most recent year's entry, rename it, update every figure, and set
 
 | Block | Figures | Source | Published |
 |---|---|---|---|
-| `tsp` | elective deferral, catch-up, super catch-up (60–63), Roth catch-up wage threshold | IRS notice on 402(g)/414(v); tsp.gov bulletins | November |
+| `tsp` | elective deferral, catch-up, super catch-up (60–63), Roth catch-up wage threshold, 415(c) annual-additions limit | IRS notice on 402(g)/414(v)/415(c); tsp.gov bulletins | November |
+| `src/lib/military/tricareCosts.js` | TRS, TRR, CHCBP premiums; Prime and Select retiree enrollment fees; set `TRICARE_COSTS_YEAR` and `TRICARE_COSTS_VERIFIED` | tricare.mil plan and cost pages | November–December |
+| `src/lib/military/brs.js` `BRS_LUMP_SUM_DISCOUNT_RATES` | the year's DoD lump-sum discount rate with its memorandum; the lump-sum scenario is blocked for any year without one | DoD (OUSD P&R) annual memorandum | December |
 | `ssaEarningsTest` | under-FRA and FRA-year exempt amounts | ssa.gov/oact/cola/rtea.html | October |
 | `fers` | refund and deposit interest rate | OPM service credit page | January |
 | `src/lib/military/depositRates.js` | the same rate appended to `FERS_DEPOSIT_INTEREST_RATES` with `verified: true`; a test checks it equals `fers.refundInterestRate` | the January BAL | January |

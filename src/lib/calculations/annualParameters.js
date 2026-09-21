@@ -56,6 +56,12 @@ export const ANNUAL_PARAMETERS = Object.freeze({
       superCatchUpLimit: 11250,
       /** SECURE 2.0 s.603 prior-year FICA wage threshold forcing Roth catch-up. */
       rothCatchUpWageThreshold: 150000,
+      /**
+       * IRC 415(c) annual-additions limit: employee (including tax-exempt
+       * combat-zone) plus agency/service automatic and matching contributions,
+       * per employer plan. IRS Notice 2025-67.
+       */
+      annualAdditionsLimit: 72000,
     }),
 
     fers: Object.freeze({

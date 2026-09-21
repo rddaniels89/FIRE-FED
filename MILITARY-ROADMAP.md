@@ -268,24 +268,39 @@ without retyping; Reserve golden cases pass.
 Goal: the savings and healthcare halves of the household reconcile (§4.7, §4.8,
 §6.9, §6.10, §20.8).
 
-- [ ] TSP account context (civilian / uniformed) with tax-exempt basis bucket,
+- [x] TSP account context (civilian / uniformed) with tax-exempt basis bucket,
       shared elective-deferral limit, age-50 and 60–63 catch-up from the existing
       registry, annual-additions limit, independent FERS and BRS match and
-      vesting, pay-period front-loading warning, USERRA make-up transactions.
-- [ ] BRS: `projectBrsTsp`, continuation-pay scenario from an official offer only,
-      25%/50% lump sum with the annual official discount rate (blocked when
-      missing or stale), value stack shown as four components.
-      `[-]` discount rate and continuation-pay policy need annual human load.
-- [ ] Coverage periods per person: FEHB/PSHB, TRICARE Prime/Select, TRS, TRR, TFL,
-      TAMP, CHCBP, CHAMPVA, VA, Medicare; effective-dated conflict rules (TRS and
-      TRR versus FEHB eligibility until the scheduled statutory change, TFL
-      requires Part B, CHAMPVA versus TRICARE); extend `healthcareCosts.js`.
-      `[-]` 2026 TRICARE costs need human verification.
-- [ ] Codes: `MIL_TSP_SHARED_LIMIT_EXCEEDED`, `MIL_TSP_MATCH_AT_RISK`,
-      `MIL_TSP_TAX_EXEMPT_BASIS_MISSING`, `MIL_TRS_FEHB_CONFLICT`,
-      `MIL_CHAMPVA_TRICARE_CONFLICT`, `MIL_TFL_PARTB_MISSING`, `MRT_BRS_*`.
-- [ ] Tests: §14.1 cases 33–47; integration "dual TSP contributions flow into
-      separate accounts and one limit validator".
+      vesting, pay-period front-loading warning, USERRA make-up transactions
+      (`src/lib/military/tspCoordination.js`; the uniformed account rides the
+      timeline as its own buckets and joins the pool after separation).
+- [x] BRS: uniformed TSP projection with BRS service contributions,
+      continuation-pay scenario from an official offer only, 25%/50% lump sum
+      with the annual official discount rate (blocked when missing or stale),
+      value stack shown as four components (`src/lib/military/brs.js`).
+      `[-]` discount rate needs annual human load (none ships); the lump-sum
+      COLA/timing/rounding conventions are pending verification against the DoD
+      technical reference.
+- [x] Coverage periods per person: FEHB/PSHB, TRICARE Prime/Select/Overseas, TRS,
+      TRR, TFL, TAMP, CHCBP, CHAMPVA, VA, Medicare, other; effective-dated
+      conflict rules (TRS versus FEHB eligibility until 2030-01-01, TRR versus
+      FEHB, TFL requires Part B, CHAMPVA versus TRICARE, TAMP 180 days, CHCBP
+      18/36 months); `healthcareCosts.js` takes a per-person coverage cost
+      (`src/lib/military/coverage.js`, `tricareCosts.js`).
+      `[-]` 2026 TRICARE costs need human verification (2025 table ships, flagged).
+- [x] Codes: `MIL_TSP_SHARED_LIMIT_EXCEEDED`, `MIL_TSP_ANNUAL_ADDITIONS_EXCEEDED`,
+      `MIL_TSP_MATCH_AT_RISK`, `MIL_TSP_TAX_EXEMPT_BASIS_MISSING`,
+      `MIL_TSP_VESTING_AT_RISK`, `MIL_USERRA_TRANSACTION_INCOMPLETE`,
+      `MIL_TRS_FEHB_CONFLICT`, `MIL_TRS_FEHB_RULE_CHANGED`, `MIL_TRR_FEHB_CONFLICT`,
+      `MIL_CHAMPVA_TRICARE_CONFLICT`, `MIL_CHAMPVA_MEDICARE_PARTS`,
+      `MIL_TFL_PARTB_MISSING`, `MIL_TAMP_DURATION`, `MIL_TAMP_UNCONFIRMED`,
+      `MIL_CHCBP_DURATION`, `MIL_COVERAGE_OVERLAP`, `MIL_COVERAGE_UNCONFIRMED`,
+      `MIL_TRICARE_COST_UNVERIFIED`, `MRT_BRS_CP_OFFER_REQUIRED`,
+      `MRT_BRS_CP_FORFEITURE`, `MRT_BRS_LSDR_MISSING`, `MRT_BRS_LUMP_SUM_VA_IMPACT`,
+      `MRT_BRS_LUMP_SUM_ALGORITHM_UNVERIFIED`.
+- [x] Tests: §14.1 cases 33–47; integration "dual TSP contributions flow into
+      separate accounts and one limit validator" and "a mixed
+      FEHB/TRICARE/Medicare household projects each person separately".
 
 Exit: shared-limit and coverage-conflict tests pass; a mixed FEHB/TRICARE/Medicare
 household projects each person separately.

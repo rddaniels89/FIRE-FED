@@ -32,6 +32,8 @@ import {
 } from '../calculations/socialSecurity';
 import { projectHealthcareCostForYear } from '../calculations/healthcareCosts';
 import { birthYearFromAgeAndMonths, minimumRetirementAge } from '../calculations/mra';
+import { TSP_SYSTEMS, createTspBalances, isAutomaticVested, projectTspAccountYear, serviceContributionPercents, splitTraditionalWithdrawal, tspAccountTotal } from '../military/tspCoordination';
+import { projectCoverageCostForYear } from '../military/coverage';
 import {
   EARLY_WITHDRAWAL_PENALTY_RATE,
   PENALTY_FREE_AGE,
@@ -186,6 +188,36 @@ export function buildTimeline(scenario, options = {}) {
   const conversions = []; // { age, amount, remaining }
   let firstRothContributionAge = roth > 0 ? Math.min(currentAge, 40) : null;
 
+  // Uniformed-services TSP: a second account with its own buckets, service
+  // contributions, and vesting. It is held apart while it is being funded and
+  // joins the withdrawal pool once contributions have ended and the primary
+  // has separated. Tax-exempt combat-zone basis is tracked through the pool so
+  // withdrawals return it tax-free, pro rata.
+  const uni = scenario.military?.tsp?.uniformedServices ?? {};
+  let uniBalances = uni.enabled
+    ? createTspBalances({
+        traditionalTaxable: nonNeg(uni.traditionalTaxableBalance),
+        traditionalTaxExemptBasis: nonNeg(uni.traditionalTaxExemptBasis),
+        roth: nonNeg(uni.rothBalance),
+        rothBasis: Math.min(nonNeg(uni.rothBalance), nonNeg(uni.rothContributionBasis)),
+        unvestedAutomatic: nonNeg(uni.unvestedAutomaticBalance),
+      })
+    : null;
+  const uniSystem = uni.coverageSystem === 'brs' ? TSP_SYSTEMS.BRS : TSP_SYSTEMS.NEITHER;
+  // Contributions run to the recorded age, else to federal separation; a
+  // member already separated who says they are contributing gets this year.
+  const uniContributionEndAge = uni.contributing
+    ? uni.contributionEndAge === null || uni.contributionEndAge === undefined || uni.contributionEndAge === ''
+      ? Math.max(separationAge, currentAge + 1)
+      : num(uni.contributionEndAge)
+    : currentAge;
+  let uniMonths = nonNeg(uni.monthsOfService);
+  let uniMerged = false;
+  let taxExemptBasis = 0;
+  if (uniBalances && uniBalances.roth > 0 && firstRothContributionAge === null) firstRothContributionAge = Math.min(currentAge, 40);
+  const coveragePeriods = plan.military?.coverage ?? [];
+  const coverageGrowth = 1 + num(healthcareConfig.premiumGrowthPercent, 5) / 100;
+
   const fersRate = getFersContributionRate(profile.hireCohort);
   const salary0 = nonNeg(tsp.annualSalary);
   const salaryPath = plan.high3.salaryPath;
@@ -316,13 +348,51 @@ export function buildTimeline(scenario, options = {}) {
       asOfDate: streamAsOfDate,
     });
 
+    // Uniformed-services TSP contributions for the year (applied to the account below).
+    let uniContrib = { employeeTraditional: 0, employeeTaxExempt: 0, employeeRoth: 0, automatic: 0, matching: 0 };
+    let uniContributing = false;
+    if (uniBalances && !uniMerged) {
+      uniContributing = Boolean(uni.contributing) && age < uniContributionEndAge;
+      if (uniContributing) {
+        const basicPayAnnual = nonNeg(uni.monthlyBasicPay) * 12 * Math.pow(1 + salaryGrowth, i);
+        const pcts = serviceContributionPercents({ system: uniSystem, employeePercent: uni.employeePercent, monthsOfService: uniMonths, optedIn: Boolean(uni.brsOptedIn) });
+        const employeeTotal = basicPayAnnual * (nonNeg(uni.employeePercent) / 100);
+        const isRoth = uni.contributionType === 'roth';
+        const taxExempt = isRoth ? 0 : Math.min(employeeTotal, nonNeg(uni.combatZoneTaxExemptAnnual));
+        uniContrib = {
+          employeeTraditional: isRoth ? 0 : employeeTotal - taxExempt,
+          employeeTaxExempt: taxExempt,
+          employeeRoth: isRoth ? employeeTotal : 0,
+          automatic: basicPayAnnual * (pcts.automatic / 100),
+          matching: basicPayAnnual * (pcts.matching / 100),
+        };
+        if (isRoth && employeeTotal > 0 && firstRothContributionAge === null) firstRothContributionAge = age;
+      } else if (age >= separationAge) {
+        // Contributions are over and the primary has separated: the account
+        // joins the pool. Unvested automatic money is forfeited.
+        const vestedNow = isAutomaticVested({ system: uniSystem, yearsOfServiceInSystem: uniMonths / 12 });
+        traditional += uniBalances.traditionalTaxable + uniBalances.traditionalTaxExemptBasis + (vestedNow ? uniBalances.unvestedAutomatic : 0);
+        taxExemptBasis += uniBalances.traditionalTaxExemptBasis;
+        roth += uniBalances.roth;
+        rothBasis += uniBalances.rothBasis;
+        uniBalances = createTspBalances();
+        uniMerged = true;
+      }
+    }
+    const uniEmployeeOutflow = uniContrib.employeeTraditional + uniContrib.employeeTaxExempt + uniContrib.employeeRoth;
+
     // ---------- Outflows ----------
     const oneTimeOutflow = nonNeg(oneTimeOutflowsByAge[age]);
     const spendingBase = isWorking ? nonNeg(summary.monthlyExpenses) : nonNeg(fire.monthlyFireIncomeGoal);
     const spending = spendingBase * 12 * Math.pow(1 + spendingInflation, i) * spendingMultiplier;
 
     const fehbOutcome = isWorking ? 'continues' : plan.fehb.outcome;
-    const health = projectHealthcareCostForYear({
+    // Confirmed coverage periods replace the default coverage for the years
+    // they touch, per person. Each person is costed separately.
+    const coverageFactor = Math.pow(coverageGrowth, i);
+    const primaryCoverage = coveragePeriods.length > 0 ? projectCoverageCostForYear({ periods: coveragePeriods, ownerId: 'primary', year, growthFactor: coverageFactor }) : null;
+    const spouseCoverage = coveragePeriods.length > 0 && spouse?.enabled ? projectCoverageCostForYear({ periods: coveragePeriods, ownerId: 'spouse', year, growthFactor: coverageFactor }) : null;
+    const healthPrimary = projectHealthcareCostForYear({
       age,
       yearsFromNow: i,
       healthcare: healthcareConfig,
@@ -332,7 +402,14 @@ export function buildTimeline(scenario, options = {}) {
       magiTwoYearsPrior: magiByAge[age - 2] ?? 0,
       filingStatus,
       includeIrmaa: Boolean(healthcare.includeIrmaa),
+      coverageCost: primaryCoverage,
     });
+    const health = {
+      ...healthPrimary,
+      primaryTotal: healthPrimary.total,
+      spouse: spouseCoverage,
+      total: healthPrimary.total + (spouseCoverage?.total ?? 0),
+    };
     const healthcareCost = health.total;
 
     const taxableSavings = isWorking ? nonNeg(fire.annualTaxableSavings) : 0;
@@ -363,8 +440,11 @@ export function buildTimeline(scenario, options = {}) {
     let shortfall = 0;
 
     // Fixed-point iteration: withdrawals change taxes, taxes change the gap.
+    let exemptDraw = 0;
     for (let iter = 0; iter < 4; iter++) {
       const nonQualifiedRoth = isRothQualified({ age, firstRothContributionAge }) ? 0 : w.rothEarnings;
+      // Tax-exempt combat-zone basis comes back pro rata with every traditional withdrawal.
+      exemptDraw = taxExemptBasis > 0 ? splitTraditionalWithdrawal({ amount: w.traditional, traditionalTaxable: Math.max(0, traditional - taxExemptBasis), traditionalTaxExemptBasis: taxExemptBasis }).taxExempt : 0;
       fica = estimateFicaTax({ wages: salary }).totalTax + (spouseIncome > 0 ? estimateFicaTax({ wages: spouseIncome }).totalTax : 0);
       taxResult = calculateHouseholdTaxes({
         year: CURRENT_PARAMETER_YEAR,
@@ -374,21 +454,21 @@ export function buildTimeline(scenario, options = {}) {
           wages: Math.max(0, wages - (employeeIsRoth ? 0 : employeeContribution) - fersContribution),
           federalPension: pension + spousePension,
           srs,
-          traditionalWithdrawals: w.traditional + conversionThisYear,
+          traditionalWithdrawals: Math.max(0, w.traditional - exemptDraw) + conversionThisYear,
           rothWithdrawals: w.rothBasis + w.conversions + (w.rothEarnings - nonQualifiedRoth),
           longTermCapitalGains: w.taxableGains,
           socialSecurity: socialSecurity + spouseSocialSecurity,
           otherTaxable:
-            sideHustle + nonQualifiedRoth + militaryIncome.taxableWages + (age === separationAge ? nonNeg(plan.annualLeave.grossPayment) + nonNeg(plan.refund?.refundAmount) : 0),
+            sideHustle + nonQualifiedRoth + Math.max(0, militaryIncome.taxableWages - uniContrib.employeeTraditional) + (age === separationAge ? nonNeg(plan.annualLeave.grossPayment) + nonNeg(plan.refund?.refundAmount) : 0),
           otherPension: militaryIncome.taxablePension,
           militaryRetiredPay: militaryIncome.militaryRetiredPay,
-          taxExemptIncome: militaryIncome.taxExempt,
+          taxExemptIncome: militaryIncome.taxExempt + exemptDraw,
         },
         state,
       });
 
       const incomeTax = taxResult.totalTax + fica + penalties;
-      const outflows = spending + healthcareCost + incomeTax + oneTimeOutflow + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
+      const outflows = spending + healthcareCost + incomeTax + oneTimeOutflow + uniEmployeeOutflow + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
       const inflows = salary + guaranteedIncome + lumpSums + seppDraw;
       let need = outflows - inflows;
 
@@ -445,7 +525,7 @@ export function buildTimeline(scenario, options = {}) {
 
     // Excess when income exceeds outflows in retirement is kept as cash.
     const totalTax = (taxResult?.totalTax ?? 0) + fica + penalties;
-    const totalOutflow = spending + healthcareCost + totalTax + oneTimeOutflow + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
+    const totalOutflow = spending + healthcareCost + totalTax + oneTimeOutflow + uniEmployeeOutflow + (isWorking ? fersContribution + employeeContribution + taxableSavings : 0);
     const totalInflow = salary + guaranteedIncome + lumpSums;
     const totalWithdrawals = w.cash + w.taxable + w.rothBasis + w.conversions + w.traditional + w.rothEarnings;
     const surplus = totalInflow + totalWithdrawals - totalOutflow - shortfall;
@@ -463,6 +543,7 @@ export function buildTimeline(scenario, options = {}) {
       c.remaining -= t; toTake -= t;
     }
     traditional -= w.traditional;
+    taxExemptBasis = Math.max(0, taxExemptBasis - exemptDraw);
 
     if (conversionThisYear > 0) {
       traditional -= conversionThisYear;
@@ -491,7 +572,22 @@ export function buildTimeline(scenario, options = {}) {
     taxable = Math.max(0, taxable * growth);
     cash = Math.max(0, cash * (1 + cashReturn));
 
-    const totalBalance = traditional + roth + taxable + cash;
+    let uniForfeited = 0;
+    if (uniBalances && !uniMerged) {
+      const stepResult = projectTspAccountYear({
+        balances: uniBalances,
+        contributions: uniContrib,
+        returnRate: r,
+        vested: isAutomaticVested({ system: uniSystem, yearsOfServiceInSystem: (uniMonths + (uniContributing ? 12 : 0)) / 12 }),
+        forfeitUnvested: uniContributing && age + 1 >= uniContributionEndAge && !isAutomaticVested({ system: uniSystem, yearsOfServiceInSystem: (uniMonths + 12) / 12 }),
+      });
+      uniBalances = stepResult.balances;
+      uniForfeited = stepResult.forfeited;
+      if (uniContributing) uniMonths += 12;
+    }
+    const uniTotal = uniBalances ? tspAccountTotal(uniBalances) : 0;
+
+    const totalBalance = traditional + roth + taxable + cash + uniTotal;
     cumulativePenalties += penalties;
     cumulativeTaxes += totalTax;
     cumulativeShortfall += shortfall;
@@ -534,7 +630,17 @@ export function buildTimeline(scenario, options = {}) {
       shortfall,
       surplus: Math.max(0, surplus),
       returnRate: r,
-      balances: { traditional, roth, rothBasis, taxable, cash, total: totalBalance },
+      uniformedTsp: uniBalances || uniMerged ? { contributions: { ...uniContrib, employee: uniEmployeeOutflow }, forfeited: uniForfeited, merged: uniMerged, taxExemptWithdrawn: exemptDraw } : null,
+      balances: {
+        traditional,
+        roth,
+        rothBasis,
+        taxable,
+        cash,
+        taxExemptBasis,
+        uniformedTsp: uniBalances ? { ...uniBalances, total: uniTotal } : null,
+        total: totalBalance,
+      },
       real: {
         deflator,
         spending: spending / deflator,

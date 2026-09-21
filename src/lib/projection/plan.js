@@ -40,6 +40,9 @@ import { ISSUE_CODES, raiseIssue } from '../military/status';
 import { SERVICE_OWNERS } from '../military/servicePeriods';
 import { STATE_TREATMENTS, resolveMilitaryIncomeStreams } from '../military/incomeStreams';
 import { stateMilitaryRetiredPayExclusion } from '../taxes/stateMilitaryRetiredPay';
+import { ACCOUNT_CONTEXTS, TSP_SYSTEMS, isAutomaticVested, normalizeUserraMakeUp, validateTspCoordination } from '../military/tspCoordination';
+import { validateCoveragePeriods } from '../military/coverage';
+import { continuationPayScenario, lumpSumScenario } from '../military/brs';
 
 const num = (v, fallback = 0) => {
   const n = Number(v);
@@ -382,6 +385,100 @@ export function resolveRetirementPlan(scenario, options = {}) {
     }
   }
 
+  // ---- TSP coordination: the civilian and uniformed-services accounts share
+  // one elective-deferral limit; matches and vesting stay separate.
+  const milTsp = scenario.military?.tsp ?? {};
+  const uni = milTsp.uniformedServices ?? {};
+  const userra = normalizeUserraMakeUp(milTsp.userraMakeUp ?? []);
+  let tspCoordination = null;
+  if (uni.enabled) {
+    militaryIssues.push(...userra.issues);
+    const fractionLeft = (12 - asOfDate.getMonth()) / 12;
+    const civPeriods = Math.max(1, num(milTsp.civilian?.payPeriodsPerYear, 26));
+    const uniPeriods = Math.max(1, num(uni.payPeriodsPerYear, 12));
+    const civSalary = currentAge < separationAge ? num(scenario.tsp?.annualSalary) : 0;
+    const civPct = num(scenario.tsp?.monthlyContributionPercent);
+    const uniAnnualPay = uni.contributing ? num(uni.monthlyBasicPay) * 12 : 0;
+    const uniTraditional = uni.contributionType !== 'roth';
+    const czAnnual = uniTraditional ? Math.min(uniAnnualPay, num(uni.combatZoneTaxExemptAnnual)) : 0;
+    const uniSystem = uni.coverageSystem === 'brs' ? TSP_SYSTEMS.BRS : TSP_SYSTEMS.NEITHER;
+    tspCoordination = validateTspCoordination({
+      year: asOfYear,
+      age: currentAge,
+      accounts: [
+        {
+          context: ACCOUNT_CONTEXTS.CIVILIAN,
+          system: TSP_SYSTEMS.FERS,
+          employeeDeferralsYtd: num(milTsp.civilian?.ytdEmployeeDeferrals),
+          plannedPerPeriod: (civSalary / civPeriods) * (civPct / 100),
+          payPeriodsRemaining: civSalary > 0 ? Math.round(civPeriods * fractionLeft) : 0,
+          payPerPeriod: civSalary / civPeriods,
+          employeePercent: civPct,
+          monthsOfService: num(fers.yearsOfService) * 12 + num(fers.monthsOfService),
+        },
+        {
+          context: ACCOUNT_CONTEXTS.UNIFORMED,
+          system: uniSystem,
+          employeeDeferralsYtd: num(uni.ytdEmployeeDeferrals),
+          plannedPerPeriod: Math.max(0, (uniAnnualPay * (num(uni.employeePercent) / 100) - czAnnual) / uniPeriods),
+          payPeriodsRemaining: uniAnnualPay > 0 ? Math.round(uniPeriods * fractionLeft) : 0,
+          payPerPeriod: uniAnnualPay / uniPeriods,
+          employeePercent: num(uni.employeePercent),
+          monthsOfService: num(uni.monthsOfService),
+          optedIn: Boolean(uni.brsOptedIn),
+          taxExemptPlannedPerPeriod: czAnnual / uniPeriods,
+          hasCombatZoneContributions: Boolean(uni.hasCombatZoneContributions),
+          traditionalTaxExemptBasis: uni.traditionalTaxExemptBasis,
+        },
+      ],
+      otherSharedPlanDeferrals: num(milTsp.otherSharedPlanDeferrals),
+      userraMakeUp: userra.transactions,
+    });
+    militaryIssues.push(...tspCoordination.issues);
+    if (uniSystem === TSP_SYSTEMS.BRS && num(uni.unvestedAutomaticBalance) > 0 && !isAutomaticVested({ system: TSP_SYSTEMS.BRS, yearsOfServiceInSystem: num(uni.monthsOfService) / 12 })) {
+      militaryIssues.push(raiseIssue(ISSUE_CODES.MIL_TSP_VESTING_AT_RISK, { entity: { type: 'tspAccount', id: ACCOUNT_CONTEXTS.UNIFORMED } }));
+    }
+  }
+
+  // ---- Health coverage periods, one row per person; conflicts block.
+  const coverage = validateCoveragePeriods(scenario.military?.coverage ?? [], {
+    fehbEligibility: {
+      primary: currentAge < separationAge || (Boolean(scenario.healthcare?.fehbEnrolled) && fehb.outcome === 'continues'),
+      spouse: Boolean(scenario.household?.spouse?.enabled && scenario.household?.spouse?.isFederal),
+    },
+    asOfDate: `${asOfDate.getFullYear()}-${String(asOfDate.getMonth() + 1).padStart(2, '0')}-01`,
+  });
+  militaryIssues.push(...coverage.issues);
+
+  // ---- BRS extras: continuation pay from an official offer, and the lump sum
+  // against the linked BRS retired-pay calculation.
+  const brsCfg = scenario.military?.brs ?? {};
+  let brs = null;
+  if (uni.coverageSystem === 'brs' || brsCfg.continuationPay?.offered || num(brsCfg.lumpSum?.electionPercent) > 0) {
+    const continuationPay = brsCfg.continuationPay?.offered ? continuationPayScenario({ offer: brsCfg.continuationPay }) : null;
+    let lumpSum = null;
+    if (num(brsCfg.lumpSum?.electionPercent) > 0) {
+      const linked = (scenario.military?.retirementScenarios ?? [])
+        .map((sc) => (sc.calculations ?? []).find((c) => c.id === sc.currentCalculationId))
+        .find((c) => c && c.system === 'brs' && c.projectedMonthly > 0);
+      const fra = fullRetirementAge({ birthYear });
+      const fraDate = `${birthYear + fra.years}-${String(1 + fra.months).padStart(2, '0')}-01`;
+      lumpSum = lumpSumScenario({
+        electionPercent: num(brsCfg.lumpSum.electionPercent),
+        grossMonthly: linked?.projectedMonthly ?? 0,
+        retiredPayStartDate: linked?.retiredPayStartDate ?? null,
+        fullRetirementDate: fraDate,
+        officialDiscountRate: brsCfg.lumpSum.officialDiscountRate === null || brsCfg.lumpSum.officialDiscountRate === undefined ? null : { rate: num(brsCfg.lumpSum.officialDiscountRate), year: brsCfg.lumpSum.discountRateYear, source: brsCfg.lumpSum.discountRateSource },
+        asOfYear,
+        colaAssumption: num(scenario.tsp?.inflationRate, 2.5) / 100,
+        vaOffsetKnown: Boolean(brsCfg.lumpSum.vaOffsetKnown),
+      });
+      lumpSum = { ...lumpSum, linkedCalculationId: linked?.id ?? null };
+    }
+    brs = { continuationPay, lumpSum };
+    militaryIssues.push(...(continuationPay?.issues ?? []), ...(lumpSum?.issues ?? []));
+  }
+
   return {
     path,
     pathLabel: pathEval?.label ?? (special?.isEligible ? 'Special provision, immediate' : 'No annuity'),
@@ -456,6 +553,12 @@ export function resolveRetirementPlan(scenario, options = {}) {
       stateMilitaryRetiredPay: stateMilitaryRule
         ? { state: stateCode, applied: stateMilitaryRule.applied, verified: stateMilitaryRule.verified, treatment: stateMilitaryRule.treatment, reason: stateMilitaryRule.reason }
         : null,
+      /** Shared-limit validation across the civilian and uniformed-services accounts; null when no uniformed account. */
+      tsp: tspCoordination,
+      userra: { transactions: userra.transactions, totals: userra.totals },
+      /** Validated coverage periods, one per person per period, with their issues. */
+      coverage: coverage.periods,
+      brs,
       issues: militaryIssues,
     },
     high3: high3,

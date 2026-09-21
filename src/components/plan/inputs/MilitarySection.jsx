@@ -12,6 +12,12 @@ import {
   COLA_OPTIONS,
   COMPONENT_OPTIONS,
   CONNECTION_OPTIONS,
+  COVERAGE_ENROLLMENT_OPTIONS,
+  COVERAGE_RELATIONSHIP_OPTIONS,
+  COVERAGE_SOURCE_OPTIONS,
+  LUMP_SUM_OPTIONS,
+  TSP_CONTRIBUTION_KIND_OPTIONS,
+  UNIFORMED_TSP_SYSTEM_OPTIONS,
   DEPOSIT_MODE_OPTIONS,
   DEPOSIT_STATUS_OPTIONS,
   DETERMINATION_OPTIONS,
@@ -34,6 +40,7 @@ import {
 import { MILITARY_CONNECTIONS, createDefaultMilitary } from '../../../lib/scenarios/schema';
 import { DUTY_STATUS, createServicePeriod, parseIsoDate } from '../../../lib/military/servicePeriods';
 import { COLA_POLICIES, createIncomeStream } from '../../../lib/military/incomeStreams';
+import { createCoveragePeriod } from '../../../lib/military/coverage';
 import { RETIRED_PAY_RECEIPT, RETIRED_PAY_TYPES, WAIVER_MODES } from '../../../lib/military/retiredPayWaiver';
 import { resolveRetirementPlan } from '../../../lib/projection/plan';
 import { trackEvent } from '../../../lib/telemetry';
@@ -130,7 +137,13 @@ export default function MilitarySection({ scenario, write, open, onToggle, canUs
   const mil = plan?.military ?? null;
   const periodIssues = (id) => (mil?.issues ?? []).filter((i) => i.entity?.type === 'servicePeriod' && i.entity?.id === id);
   const streamIssues = (id) => (mil?.issues ?? []).filter((i) => i.entity?.type === 'incomeStream' && i.entity?.id === id);
-  const generalIssues = (mil?.issues ?? []).filter((i) => !i.entity || (i.entity.type !== 'servicePeriod' && i.entity.type !== 'incomeStream'));
+  const generalIssues = (mil?.issues ?? []).filter(
+    (i) =>
+      (!i.entity || (i.entity.type !== 'servicePeriod' && i.entity.type !== 'incomeStream' && i.entity.type !== 'coveragePeriod' && i.entity.type !== 'tspAccount')) &&
+      !String(i.code).startsWith('MIL_TSP') &&
+      !String(i.code).startsWith('MIL_USERRA') &&
+      !String(i.code).startsWith('MRT_BRS')
+  );
   const classificationFor = (id) => mil?.normalizedPeriods?.find((p) => p.id === id)?.classification ?? null;
 
   const setConnection = (value) => {
@@ -171,6 +184,18 @@ export default function MilitarySection({ scenario, write, open, onToggle, canUs
     writeStreams([...streams, s]);
   };
   const removeStream = (id) => writeStreams(streams.filter((s) => s.id !== id));
+
+  // ---- uniformed-services TSP, BRS extras, coverage periods (pass 9)
+  const uts = m.tsp?.uniformedServices ?? {};
+  const writeUts = (patch) => writeMil({ tsp: { uniformedServices: patch } });
+  const brs = m.brs ?? { continuationPay: {}, lumpSum: {} };
+  const writeBrs = (patch) => writeMil({ brs: patch });
+  const coverage = m.coverage ?? [];
+  const writeCoverage = (next) => writeMil({ coverage: next });
+  const updateCoverage = (id, patch) => writeCoverage(coverage.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  const addCoverage = () => writeCoverage([...coverage, createCoveragePeriod({ source: 'fehb', ownerId: 'primary' })]);
+  const removeCoverage = (id) => writeCoverage(coverage.filter((c) => c.id !== id));
+  const coverageIssues = (id) => (mil?.issues ?? []).filter((i) => i.entity?.type === 'coveragePeriod' && i.entity?.id === id);
 
   const deleteAll = () => {
     writeMil(createDefaultMilitary());
@@ -480,6 +505,137 @@ export default function MilitarySection({ scenario, write, open, onToggle, canUs
             <button type="button" className="btn-secondary btn-sm inline-flex items-center gap-1" onClick={addStream}>
               <Plus className="h-4 w-4" aria-hidden="true" />
               Add
+            </button>
+          </div>
+
+          {/* ------------------------------------------------ uniformed-services TSP */}
+          <SubHeading hint="A second TSP account, kept apart from your civilian one. Your own contributions to both share one yearly limit; service and agency contributions do not. Balances from your TSP statement.">
+            Uniformed-services TSP
+          </SubHeading>
+          <div data-testid="uniformed-tsp">
+            <CheckField id="mil-utsp-enabled" label="I have a uniformed-services TSP account" checked={Boolean(uts.enabled)} onChange={(v) => writeUts({ enabled: v })} />
+            {uts.enabled ? (
+              <>
+                <Grid className="mt-3">
+                  <SelectField id="mil-utsp-system" label="Retirement system for this account" value={uts.coverageSystem ?? 'neither'} options={UNIFORMED_TSP_SYSTEM_OPTIONS} onChange={(v) => writeUts({ coverageSystem: v })} hint="Read from your record. BRS members receive service automatic and matching contributions; legacy members do not." />
+                  <NumberField id="mil-utsp-months" label="Months of uniformed service" min={0} max={600} allowBlank placeholder="—" value={uts.monthsOfService ?? null} onCommit={(v) => writeUts({ monthsOfService: v })} hint="Decides when BRS contributions start and when the 1% vests. Civilian service never counts here." />
+                  <NumberField id="mil-utsp-trad" label="Traditional balance (taxable)" prefix="$" min={0} step={100} value={uts.traditionalTaxableBalance ?? 0} onCommit={(v) => writeUts({ traditionalTaxableBalance: v })} />
+                  <NumberField id="mil-utsp-exempt" label="Tax-exempt (combat-zone) balance" prefix="$" min={0} step={100} allowBlank placeholder="None" value={uts.traditionalTaxExemptBasis ?? null} onCommit={(v) => writeUts({ traditionalTaxExemptBasis: v })} hint="Shown separately on the TSP statement. Returned tax-free, pro rata, on withdrawal." />
+                  <NumberField id="mil-utsp-roth" label="Roth balance" prefix="$" min={0} step={100} value={uts.rothBalance ?? 0} onCommit={(v) => writeUts({ rothBalance: v })} />
+                  <NumberField id="mil-utsp-unvested" label="Unvested automatic (1%) balance" prefix="$" min={0} step={100} value={uts.unvestedAutomaticBalance ?? 0} onCommit={(v) => writeUts({ unvestedAutomaticBalance: v })} hint="Forfeited if service ends before it vests." />
+                  <div className="sm:col-span-2 lg:col-span-3">
+                    <CheckField id="mil-utsp-cz" label="This account has received tax-exempt combat-zone contributions" checked={Boolean(uts.hasCombatZoneContributions)} onChange={(v) => writeUts({ hasCombatZoneContributions: v })} />
+                  </div>
+                  {uts.coverageSystem === 'brs' ? (
+                    <div className="sm:col-span-2 lg:col-span-3">
+                      <CheckField id="mil-utsp-optin" label="I opted into BRS in 2018 (rather than being enrolled on entry)" checked={Boolean(uts.brsOptedIn)} onChange={(v) => writeUts({ brsOptedIn: v })} />
+                    </div>
+                  ) : null}
+                  <div className="sm:col-span-2 lg:col-span-3">
+                    <CheckField id="mil-utsp-contributing" label="I am contributing from military pay now" checked={Boolean(uts.contributing)} onChange={(v) => writeUts({ contributing: v })} />
+                  </div>
+                  {uts.contributing ? (
+                    <>
+                      <NumberField id="mil-utsp-basicpay" label="Monthly basic pay" prefix="$" min={0} step={50} value={uts.monthlyBasicPay ?? 0} onCommit={(v) => writeUts({ monthlyBasicPay: v })} hint="Drill pay for Guard and Reserve; the monthly rate for active orders." />
+                      <NumberField id="mil-utsp-pct" label="My contribution" suffix="%" min={0} max={100} step={1} value={uts.employeePercent ?? 0} onCommit={(v) => writeUts({ employeePercent: v })} />
+                      <SelectField id="mil-utsp-kind" label="Contribution type" value={uts.contributionType ?? 'traditional'} options={TSP_CONTRIBUTION_KIND_OPTIONS} onChange={(v) => writeUts({ contributionType: v })} />
+                      <NumberField id="mil-utsp-end" label="Contributing until age" min={18} max={75} allowBlank placeholder="Federal separation" value={uts.contributionEndAge ?? null} onCommit={(v) => writeUts({ contributionEndAge: v })} hint="Blank runs to your federal separation, or through this year if you have already separated. Guard and Reserve members often use 60." />
+                      <NumberField id="mil-utsp-czannual" label="Of which from tax-exempt combat-zone pay, per year" prefix="$" min={0} step={100} value={uts.combatZoneTaxExemptAnnual ?? 0} onCommit={(v) => writeUts({ combatZoneTaxExemptAnnual: v })} hint="Outside the elective-deferral limit, inside the annual-additions limit." />
+                      <NumberField id="mil-utsp-ytd" label="Contributed so far this year (this account)" prefix="$" min={0} step={100} value={uts.ytdEmployeeDeferrals ?? 0} onCommit={(v) => writeUts({ ytdEmployeeDeferrals: v })} />
+                      <NumberField id="mil-utsp-periods" label="Pay periods per year (this account)" min={1} max={53} stepper value={uts.payPeriodsPerYear ?? 12} onCommit={(v) => writeUts({ payPeriodsPerYear: v })} />
+                    </>
+                  ) : null}
+                  <NumberField id="mil-ctsp-ytd" label="Contributed so far this year (civilian account)" prefix="$" min={0} step={100} value={m.tsp?.civilian?.ytdEmployeeDeferrals ?? 0} onCommit={(v) => writeMil({ tsp: { civilian: { ...(m.tsp?.civilian ?? {}), ytdEmployeeDeferrals: v } } })} />
+                  <NumberField id="mil-tsp-other" label="Other plans sharing the limit this year" prefix="$" min={0} step={100} value={m.tsp?.otherSharedPlanDeferrals ?? 0} onCommit={(v) => writeMil({ tsp: { otherSharedPlanDeferrals: v } })} hint="A 401(k) or 403(b) from another employer counts against the same limit." />
+                </Grid>
+                {mil?.tsp ? (
+                  <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 p-3 text-sm" data-testid="tsp-coordination-summary">
+                    <div className="flex flex-wrap gap-x-6 gap-y-1">
+                      <span>Shared limit {money(mil.tsp.limits.total)}{mil.tsp.limits.catchUpApplies ? ' (with catch-up)' : ''}</span>
+                      <span>Planned this year {money(mil.tsp.sharedDeferrals.total)}</span>
+                      <span>Room left {money(mil.tsp.remainingRoom)}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Matches are computed separately for each account. Details on the results page.</p>
+                  </div>
+                ) : null}
+                <MilitaryIssues issues={(mil?.issues ?? []).filter((i) => i.entity?.type === 'tspAccount' || String(i.code).startsWith('MIL_TSP') || String(i.code).startsWith('MIL_USERRA'))} className="mt-3" compact />
+              </>
+            ) : null}
+          </div>
+
+          {/* ------------------------------------------------ BRS extras */}
+          {uts.coverageSystem === 'brs' ? (
+            <div data-testid="brs-extras">
+              <SubHeading hint="Continuation pay is modeled only from your service's official offer; there is no standard multiple. The lump sum needs the DoD discount rate for the year, entered from the memorandum.">
+                BRS: continuation pay and lump sum
+              </SubHeading>
+              <CheckField id="mil-brs-cp" label="I have an official continuation-pay offer" checked={Boolean(brs.continuationPay?.offered)} onChange={(v) => writeBrs({ continuationPay: { ...brs.continuationPay, offered: v } })} />
+              {brs.continuationPay?.offered ? (
+                <Grid className="mt-3">
+                  <NumberField id="mil-brs-cp-mult" label="Multiple of monthly basic pay" min={0} max={13} step={0.5} allowBlank placeholder="—" value={brs.continuationPay.multiple ?? null} onCommit={(v) => writeBrs({ continuationPay: { ...brs.continuationPay, multiple: v } })} />
+                  <NumberField id="mil-brs-cp-pay" label="Monthly basic pay on the offer" prefix="$" min={0} step={50} allowBlank placeholder="—" value={brs.continuationPay.monthlyBasicPay ?? null} onCommit={(v) => writeBrs({ continuationPay: { ...brs.continuationPay, monthlyBasicPay: v } })} />
+                  <DateField id="mil-brs-cp-date" label="Payment date" value={brs.continuationPay.paymentDate} onChange={(v) => writeBrs({ continuationPay: { ...brs.continuationPay, paymentDate: v } })} />
+                  <NumberField id="mil-brs-cp-inst" label="Installments" min={1} max={4} stepper value={brs.continuationPay.installments ?? 1} onCommit={(v) => writeBrs({ continuationPay: { ...brs.continuationPay, installments: v } })} />
+                  <NumberField id="mil-brs-cp-oblig" label="Additional service owed (years)" min={0} max={10} stepper value={brs.continuationPay.obligationYears ?? 4} onCommit={(v) => writeBrs({ continuationPay: { ...brs.continuationPay, obligationYears: v } })} />
+                  <SelectField id="mil-brs-cp-prov" label="These figures are" value={brs.continuationPay.provenance ?? 'user_estimate'} options={PROVENANCE_OPTIONS} onChange={(v) => writeBrs({ continuationPay: { ...brs.continuationPay, provenance: v } })} hint="Only an official offer is included in the total." />
+                </Grid>
+              ) : null}
+              <Grid className="mt-3">
+                <SelectField id="mil-brs-ls" label="Lump-sum scenario" value={String(brs.lumpSum?.electionPercent ?? 0)} options={LUMP_SUM_OPTIONS} onChange={(v) => writeBrs({ lumpSum: { ...brs.lumpSum, electionPercent: Number(v) } })} hint="Uses the current BRS calculation saved from the Military Retirement Calculator." />
+                {Number(brs.lumpSum?.electionPercent) > 0 ? (
+                  <>
+                    <NumberField id="mil-brs-ls-rate" label="DoD lump-sum discount rate" suffix="%" min={0} max={20} step={0.01} allowBlank placeholder="—" value={brs.lumpSum.officialDiscountRate === null || brs.lumpSum.officialDiscountRate === undefined ? null : brs.lumpSum.officialDiscountRate * 100} onCommit={(v) => writeBrs({ lumpSum: { ...brs.lumpSum, officialDiscountRate: v === null ? null : v / 100 } })} hint="From the annual DoD memorandum. FireFed does not substitute a rate." />
+                    <NumberField id="mil-brs-ls-year" label="Rate year" min={2018} max={2100} allowBlank placeholder="—" value={brs.lumpSum.discountRateYear ?? null} onCommit={(v) => writeBrs({ lumpSum: { ...brs.lumpSum, discountRateYear: v } })} />
+                    <div className="sm:col-span-2 lg:col-span-3">
+                      <CheckField id="mil-brs-ls-va" label="My VA waiver / offset facts are recorded (otherwise the scenario is gross only)" checked={Boolean(brs.lumpSum.vaOffsetKnown)} onChange={(v) => writeBrs({ lumpSum: { ...brs.lumpSum, vaOffsetKnown: v } })} />
+                    </div>
+                  </>
+                ) : null}
+              </Grid>
+              <MilitaryIssues issues={(mil?.issues ?? []).filter((i) => String(i.code).startsWith('MRT_BRS'))} className="mt-3" compact />
+            </div>
+          ) : null}
+
+          {/* ------------------------------------------------ health coverage periods */}
+          <SubHeading hint="One row per person per period of coverage. FireFed costs the coverage you confirm; it does not decide who is eligible. A combination that breaks a current rule is flagged, never silently replaced.">
+            Health coverage by person
+          </SubHeading>
+          <div className="space-y-4" data-testid="coverage-periods">
+            {coverage.map((c, index) => {
+              const cIssues = coverageIssues(c.id);
+              const isTricareTable = ['trs', 'trr', 'chcbp', 'tricare_prime', 'tricare_select'].includes(c.source);
+              return (
+                <fieldset key={c.id} className="rounded-lg border border-slate-200 dark:border-slate-700 p-4" data-testid={`coverage-period-${index}`}>
+                  <legend className="px-1 text-sm font-medium text-slate-800 dark:text-slate-200">Coverage {index + 1}</legend>
+                  <Grid>
+                    <SelectField id={`cov-${c.id}-owner`} label="Who is covered" value={c.ownerId ?? 'primary'} options={OWNER_OPTIONS} onChange={(v) => updateCoverage(c.id, { ownerId: v })} />
+                    <SelectField id={`cov-${c.id}-source`} label="Coverage" value={c.source} options={COVERAGE_SOURCE_OPTIONS} onChange={(v) => updateCoverage(c.id, { source: v })} />
+                    <SelectField id={`cov-${c.id}-rel`} label="Relationship to the sponsor" value={c.relationship ?? 'sponsor'} options={COVERAGE_RELATIONSHIP_OPTIONS} onChange={(v) => updateCoverage(c.id, { relationship: v })} />
+                    <SelectField id={`cov-${c.id}-enroll`} label="Enrollment type" value={c.enrollmentType ?? 'self'} options={COVERAGE_ENROLLMENT_OPTIONS} onChange={(v) => updateCoverage(c.id, { enrollmentType: v })} />
+                    <DateField id={`cov-${c.id}-start`} label="Coverage starts" value={c.startDate} onChange={(v) => updateCoverage(c.id, { startDate: v })} />
+                    <DateField id={`cov-${c.id}-end`} label="Coverage ends (blank = ongoing)" value={c.endDate} onChange={(v) => updateCoverage(c.id, { endDate: v })} />
+                    <NumberField id={`cov-${c.id}-prem`} label="Monthly premium" prefix="$" min={0} step={5} allowBlank placeholder={isTricareTable ? 'Program table' : '0'} value={c.monthlyPremium ?? null} onCommit={(v) => updateCoverage(c.id, { monthlyPremium: v })} hint={isTricareTable ? 'Blank uses the TRICARE table for the last verified year.' : undefined} />
+                    <NumberField id={`cov-${c.id}-oop`} label="Expected out-of-pocket per year" prefix="$" min={0} step={100} value={c.outOfPocketAnnual?.base ?? 0} onCommit={(v) => updateCoverage(c.id, { outOfPocketAnnual: { ...(c.outOfPocketAnnual ?? {}), base: v } })} />
+                    <DateField id={`cov-${c.id}-pa`} label="Medicare Part A from" value={c.medicare?.partADate} onChange={(v) => updateCoverage(c.id, { medicare: { ...(c.medicare ?? {}), partADate: v } })} />
+                    <DateField id={`cov-${c.id}-pb`} label="Medicare Part B from" value={c.medicare?.partBDate} onChange={(v) => updateCoverage(c.id, { medicare: { ...(c.medicare ?? {}), partBDate: v } })} hint="TRICARE For Life and CHAMPVA at 65 need Part B; its premium stays in the projection." />
+                    <NumberField id={`cov-${c.id}-pbprem`} label="Part B premium per month" prefix="$" min={0} step={1} allowBlank placeholder="Standard" value={c.medicare?.partBPremiumMonthly ?? null} onCommit={(v) => updateCoverage(c.id, { medicare: { ...(c.medicare ?? {}), partBPremiumMonthly: v } })} />
+                    <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-x-6 gap-y-2">
+                      <CheckField id={`cov-${c.id}-enr`} label="Enrollment confirmed" checked={Boolean(c.enrollmentConfirmed)} onChange={(v) => updateCoverage(c.id, { enrollmentConfirmed: v })} />
+                      <CheckField id={`cov-${c.id}-elig`} label="Eligibility confirmed by the program" checked={Boolean(c.eligibilityConfirmed)} onChange={(v) => updateCoverage(c.id, { eligibilityConfirmed: v })} />
+                    </div>
+                  </Grid>
+                  <MilitaryIssues issues={cIssues} className="mt-3" compact />
+                  <div className="mt-3 flex justify-end">
+                    <RemoveButton label={`Remove coverage ${index + 1}`} onClick={() => removeCoverage(c.id)} />
+                  </div>
+                </fieldset>
+              );
+            })}
+          </div>
+          <div className="mt-3">
+            <button type="button" className="btn-secondary btn-sm inline-flex items-center gap-1" onClick={addCoverage}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Add coverage period
             </button>
           </div>
 

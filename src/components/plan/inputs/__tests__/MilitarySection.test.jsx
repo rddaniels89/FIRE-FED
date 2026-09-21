@@ -163,6 +163,46 @@ describe('MilitarySection', () => {
     renderSection(withMilitary({ connection: 'self' }));
     expect(screen.getByRole('link', { name: 'See the military results' })).toHaveAttribute('href', '/plan/military');
   });
+
+  it('uniformed TSP: hidden until enabled, then shows the buckets, the shared-limit summary, and the BRS extras only for BRS', () => {
+    const write = renderSection(withMilitary({ connection: 'self' }));
+    const panel = screen.getByTestId('uniformed-tsp');
+    expect(within(panel).queryByLabelText('Traditional balance (taxable)')).not.toBeInTheDocument();
+    fireEvent.click(within(panel).getByLabelText('I have a uniformed-services TSP account'));
+    expect(write).toHaveBeenCalledWith({ military: { tsp: { uniformedServices: { enabled: true } } } });
+    cleanupRender();
+    renderSection(withMilitary({ connection: 'self', tsp: { uniformedServices: { enabled: true, coverageSystem: 'brs', monthsOfService: 96, contributing: true, monthlyBasicPay: 3000, employeePercent: 5 } } }));
+    expect(screen.getByLabelText('Tax-exempt (combat-zone) balance')).toBeInTheDocument();
+    expect(screen.getByLabelText('Of which from tax-exempt combat-zone pay, per year')).toBeInTheDocument();
+    expect(screen.getByTestId('tsp-coordination-summary')).toHaveTextContent('Shared limit $32,500 (with catch-up)'); // age 50 in the base scenario
+    expect(screen.getByTestId('brs-extras')).toBeInTheDocument();
+    expect(screen.getByLabelText('Lump-sum scenario')).toBeInTheDocument();
+    cleanupRender();
+    renderSection(withMilitary({ connection: 'self', tsp: { uniformedServices: { enabled: true, coverageSystem: 'legacy' } } }));
+    expect(screen.queryByTestId('brs-extras')).not.toBeInTheDocument();
+  });
+
+  it('flags a shared-limit overrun on the section itself', () => {
+    renderSection(withMilitary({ connection: 'self', tsp: { uniformedServices: { enabled: true, coverageSystem: 'brs', monthsOfService: 96, contributing: true, monthlyBasicPay: 8000, employeePercent: 60, ytdEmployeeDeferrals: 20000 } } }));
+    expect(screen.getByText(/exceed this year’s elective-deferral limit/)).toBeInTheDocument();
+  });
+
+  it('coverage periods: adds a row per person, and a TRS row for a current fed is blocked in place', () => {
+    const write = renderSection(withMilitary({ connection: 'self' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add coverage period' }));
+    expect(write).toHaveBeenCalledTimes(1);
+    const added = write.mock.calls[0][0].military.coverage;
+    expect(added).toHaveLength(1);
+    expect(added[0]).toMatchObject({ source: 'fehb', ownerId: 'primary', enrollmentConfirmed: false });
+    cleanupRender();
+    renderSection(withMilitary({ connection: 'self', coverage: [{ id: 'c1', ownerId: 'primary', source: 'trs', startDate: '2026-01-01', enrollmentConfirmed: true }] }));
+    const row = screen.getByTestId('coverage-period-0');
+    expect(within(row).getByLabelText('Coverage')).toHaveValue('trs');
+    expect(within(row).getByText(/cannot purchase TRICARE Reserve Select/)).toBeInTheDocument();
+    expect(within(row).getByLabelText('Monthly premium')).toHaveAttribute('placeholder', 'Program table');
+    // Nothing medical is asked anywhere in the coverage row.
+    expect(within(row).queryByLabelText(/diagnos|condition|claim number/i)).not.toBeInTheDocument();
+  });
 });
 
 function cleanupRender() {

@@ -23,6 +23,12 @@ more than an estimate.
 | Reduced-age aggregation dates | `src/lib/military/retirement/reserve.js` | qualifying days aggregate within one fiscal year for duty before 1 October 2014 and across fiscal years since; the authority list for qualifying orders | 10 U.S.C. 12731(f)(2); Pub. L. 113-291 §512 |
 | Inactive-duty point ceilings by date | `src/lib/military/retirement/reserve.js` `INACTIVE_POINT_CAPS` | 60 before 1996-09-23, 75 through 2000-10-29, 90 through 2007-10-29, 130 since; membership points count toward the ceiling | 10 U.S.C. 12733(3) |
 | Reserve retired-pay goldens | `src/lib/military/retirement/__tests__/reserve.test.js` | reconcile the points-based fixtures against a de-identified Reserve retirement estimate | service retirement estimate (ARPC/HRC/NPC) |
+| TRICARE costs 2026 | `src/lib/military/tricareCosts.js` | replace the 2025 TRS, TRR, CHCBP premiums and the Prime/Select Group A retiree fees with the 2026 published amounts (add Group B if needed); set `TRICARE_COSTS_YEAR = 2026`, `TRICARE_COSTS_VERIFIED = true` | tricare.mil/Costs and the TRS, TRR, CHCBP plan pages |
+| BRS lump-sum discount rate | `src/lib/military/brs.js` `BRS_LUMP_SUM_DISCOUNT_RATES` | load the current calendar year's rate and memorandum; the scenario is blocked until then | OUSD (P&R) annual memorandum on the BRS lump-sum discount rate |
+| BRS lump-sum algorithm | `src/lib/military/brs.js` `lumpSumScenario` | the COLA assumption inside the discounting, month-of-payment timing, installment rules, and rounding against the DoD technical reference; the code discounts the elected share month by month at the annual rate with the user's COLA assumption | DoD FMR Vol. 7B; 10 U.S.C. 1415 implementing guidance |
+| TRR versus FEHB restriction | `src/lib/military/coverage.js` `COVERAGE_RULES.trrFehbConflict` | whether the 2030 TRS change (Pub. L. 116-92 §701) also reaches TRICARE Retired Reserve; the code keeps the TRR restriction open-ended | 10 U.S.C. 1076e; tricare.mil TRR page |
+| BRS opt-in matching start | `src/lib/military/tspCoordination.js` `serviceContributionPercents` | 2018 opt-ins with two or more years of service received matching from the first pay period after opting in; those with less waited for the 25th month | DoD BRS implementation guidance; TSP bulletin for uniformed services |
+| FERS TSP vesting for two-year positions | `src/lib/military/tspCoordination.js` `TSP_CONTRIBUTION_RULES.fers.vestingYearsAutomatic` | the default is three years; the two-year positions (congressional, certain noncareer) use the per-account override | 5 U.S.C. 8432(g) |
 
 ## Verified
 
@@ -57,6 +63,11 @@ more than an estimate.
 | Qualifying year = 50 or more points; 20 qualifying years required | 10 U.S.C. 12731(a), 12732(a) | build; pinned by `reserve.test.js` | 2026-09-20 |
 | Equivalent service for the multiplier = points ÷ 360 | 10 U.S.C. 12733 | build; pinned by `reserve.test.js` | 2026-09-20 |
 | Reduced retired-pay age: three months per aggregate 90 days of qualifying duty since 28 January 2008, floor age 50; retiree health coverage unchanged at 60 | 10 U.S.C. 12731(f); Pub. L. 110-181 §647 | build; pinned by `reserve.test.js` | 2026-09-20 |
+| 2026 elective deferral $24,500, catch-up $8,000, ages 60–63 $11,250, annual additions $72,000 | IRS Notice 2025-67 | build; pinned by `tspCoordination.test.js` | 2026-09-20 |
+| Elective-deferral limit shared across civilian and uniformed-services TSP; tax-exempt combat-zone traditional contributions outside 402(g) and inside 415(c); agency/service contributions outside 402(g) | TSP fact sheet 07; IRS Pub. 3 | build; pinned by `tspCoordination.test.js` cases 33 and 36 | 2026-09-20 |
+| BRS: 1% automatic after 60 days, matching from the 25th month, both through 26 years; automatic vests at two years; FERS automatic vests at three | 37 U.S.C. 8440e; 5 U.S.C. 8432b; DoD BRS page; tsp.gov contribution types | build; pinned by cases 38–39 | 2026-09-20 |
+| TRS unavailable to FEHB-eligible members until 1 January 2030 | 10 U.S.C. 1076d(a)(1) as amended by Pub. L. 116-92 §701 | build; pinned by `coverage.test.js` case 41 | 2026-09-20 |
+| TFL requires Medicare Parts A and B; CHAMPVA excluded for TRICARE-eligible persons; TAMP 180 days; CHCBP 18 months (members) / 36 months (others) | 10 U.S.C. 1086(d), 1145, 1078a; 38 U.S.C. 1781; TRICARE plan pages | build; pinned by cases 43–46 | 2026-09-20 |
 
 ## Corrections made during verification
 
