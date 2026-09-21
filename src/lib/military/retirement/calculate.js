@@ -24,7 +24,7 @@
 import { INPUT_PROVENANCE, ISSUE_CODES, ISSUE_SEVERITY, MILITARY_RESULT_STATUS, MILITARY_RULES_VERSION, raiseIssue } from '../status';
 import { CALCULATION_PATHS, RETIREMENT_SYSTEMS, SYSTEM_CONFIRMATION, SYSTEM_LABELS, suggestMilitaryRetirementSystem, validateSystemSelection } from './system';
 import { computeLongevityMultiplier, serviceToMultiplierMonths } from './multiplier';
-import { buildBasicPayHistory, finalPayBase, selectHigh36PayBase } from './payBase';
+import { HIGH_36_MONTHS, buildBasicPayHistory, finalPayBase, selectHigh36PayBase } from './payBase';
 import { FIRST_COLA_SHARE_BY_QUARTER, projectRetiredPayCola } from './cola';
 import { gradeLabel } from './payTables';
 import { parseIsoDate } from '../servicePeriods';
@@ -240,7 +240,13 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
   }
 
   // ---- dates
-  const payStartIso = isReserve ? (inputs.retiredPayStartDate ?? reserve.age.date ?? inputs.retirementDate) : (inputs.retiredPayStartDate ?? inputs.retirementDate);
+  // A Reserve retirement pays from the computed age or an official date, never
+  // from the transfer or discharge date; without either there is no start.
+  if (isReserve && !inputs.retiredPayStartDate && !reserve.age.date) {
+    issues.push(raiseIssue(ISSUE_CODES.MRT_RESERVE_PAY_DATE_REQUIRED));
+    return finish({ ...base, suggestion, system, reserve }, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
+  }
+  const payStartIso = isReserve ? (inputs.retiredPayStartDate ?? reserve.age.date) : (inputs.retiredPayStartDate ?? inputs.retirementDate);
   // The pay base is built as of the retirement for a regular retirement, and
   // as of the day pay begins for a non-regular one.
   const payBaseDateIso = isReserve ? payStartIso : inputs.retirementDate;
@@ -271,7 +277,10 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
   }
 
   // ---- pay base
-  const retiredGrade = inputs.gradePeriods.length > 0 ? inputs.gradePeriods[inputs.gradePeriods.length - 1].grade : null;
+  // The grade held on the retirement date, whatever order the periods were
+  // entered in (the form lists the current grade first and earlier grades after).
+  const retiredPeriod = gradePeriodAt(inputs.gradePeriods, payBaseDateIso);
+  const retiredGrade = retiredPeriod?.grade ?? null;
   let payBase = null;
   let history = null;
   if (inputs.payBaseOverride && inputs.payBaseOverride.monthly > 0) {
@@ -281,7 +290,7 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
     issues.push(raiseIssue(ISSUE_CODES.MRT_PAY_TABLE_MISSING, { detail: { reason: 'grade_missing' } }));
     return finish({ ...base, suggestion, system, service: { months: serviceMonths } }, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
   } else if (system === RETIREMENT_SYSTEMS.FINAL_PAY) {
-    payBase = finalPayBase({ grade: retiredGrade, payEntryBaseDate: inputs.payEntryBaseDate, retirementDate: payBaseDateIso, growthAssumption: inputs.assumptions.basicPayGrowth, seniorEnlisted: inputs.gradePeriods[inputs.gradePeriods.length - 1].seniorEnlisted });
+    payBase = finalPayBase({ grade: retiredGrade, payEntryBaseDate: inputs.payEntryBaseDate, retirementDate: payBaseDateIso, growthAssumption: inputs.assumptions.basicPayGrowth, seniorEnlisted: Boolean(retiredPeriod?.seniorEnlisted) });
     if (!payBase) {
       issues.push(raiseIssue(ISSUE_CODES.MRT_PAY_TABLE_MISSING, { detail: { grade: retiredGrade, date: payBaseDateIso } }));
       return finish({ ...base, suggestion, system, service: { months: serviceMonths } }, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
@@ -294,7 +303,9 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
     // A Reserve former member's years of service freeze at separation; a
     // Retired Reserve member's keep accruing until pay begins (10 U.S.C. 1407(f)).
     const yosFreezeDate = isReserve && reserve.retiredReserveStatus === RETIRED_RESERVE_STATUSES.FORMER_MEMBER ? reserve.separationDate : null;
-    history = buildBasicPayHistory({ gradePeriods: inputs.gradePeriods, payEntryBaseDate: inputs.payEntryBaseDate, retirementDate: payBaseDateIso, growthAssumption: inputs.assumptions.basicPayGrowth, yosFreezeDate });
+    // The window runs back to the earliest grade period entered, so a higher
+    // grade held before a reduction can still make the 36 highest months.
+    history = buildBasicPayHistory({ gradePeriods: inputs.gradePeriods, payEntryBaseDate: inputs.payEntryBaseDate, retirementDate: payBaseDateIso, growthAssumption: inputs.assumptions.basicPayGrowth, yosFreezeDate, monthsBack: historyWindowMonths(inputs.gradePeriods, payBaseDateIso) });
     payBase = selectHigh36PayBase(history);
     if (!payBase) {
       issues.push(raiseIssue(ISSUE_CODES.MRT_PAY_TABLE_MISSING, { detail: { grade: retiredGrade, date: payBaseDateIso } }));
@@ -443,6 +454,24 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
     },
     status
   );
+}
+
+/** The grade period covering a date: the latest-starting one that contains it, else the latest-starting one, else the last entered. */
+export function gradePeriodAt(periods = [], isoDate = null) {
+  if (!periods.length) return null;
+  const latest = (list) => list.reduce((best, p) => (!best || (p.startDate ?? '') > (best.startDate ?? '') ? p : best), null);
+  const covering = isoDate ? periods.filter((p) => (!p.startDate || p.startDate <= isoDate) && (!p.endDate || p.endDate >= isoDate)) : [];
+  return latest(covering) ?? latest(periods) ?? periods[periods.length - 1];
+}
+
+/** Months of history to price: at least 36, and back to the earliest grade period entered (capped at 40 years). */
+export function historyWindowMonths(periods = [], retirementIso = null) {
+  const starts = periods.map((p) => p.startDate).filter(Boolean).sort();
+  const retire = parseIsoDate(retirementIso);
+  const earliest = parseIsoDate(starts[0]);
+  if (!retire || !earliest) return HIGH_36_MONTHS;
+  const months = (retire.getUTCFullYear() - earliest.getUTCFullYear()) * 12 + (retire.getUTCMonth() - earliest.getUTCMonth());
+  return Math.min(480, Math.max(HIGH_36_MONTHS, months));
 }
 
 /** Reserve: the legacy or BRS rate applied to points ÷ 360 at full precision; the cap rule is the same. */

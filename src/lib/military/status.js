@@ -649,6 +649,12 @@ export const ISSUE_CATALOG = Object.freeze({
     remediation: 'Apply the current rules to the scenario when ready. Earlier calculations stay in the history.',
     source: 'https://militarypay.defense.gov/Pay/Retirement/',
   }),
+  MRT_RESERVE_PAY_DATE_REQUIRED: Object.freeze({
+    severity: ISSUE_SEVERITY.BLOCK,
+    message: 'The date Reserve retired pay begins cannot be set: there is no birth month to turn age 60 into a date and no official eligibility date. The transfer or discharge date is not the pay start.',
+    remediation: 'Enter your birth month, or the eligibility date from your service, and the pay base is priced as of the right date.',
+    source: 'https://militarypay.defense.gov/Pay/Retirement/Reserve/',
+  }),
   MRT_RESERVE_POINTS_OFFICIAL_REQUIRED: Object.freeze({
     severity: ISSUE_SEVERITY.WARNING,
     message: 'The retirement points used are an estimate. An actual entitlement needs the totals from your official point statement.',

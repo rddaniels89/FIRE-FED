@@ -36,8 +36,10 @@ test.describe('Onboarding: who the plan is for', () => {
     await page.goto('/plan/inputs');
     await expect(page.getByRole('button', { name: /^Service and pay/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Military retired pay, VA, and survivor income/ })).toBeVisible();
-    // The signed-in nav has a Military entry.
-    await expect(page.getByRole('link', { name: 'Military', exact: true }).first()).toBeVisible();
+    // The signed-in nav has a Military entry (behind the menu button on phones).
+    const militaryLink = page.getByRole('link', { name: 'Military', exact: true }).first();
+    if (!(await militaryLink.isVisible())) await page.locator('button[aria-controls="mobile-menu"]').click();
+    await expect(militaryLink).toBeVisible();
   });
 
   test('a veteran in federal service keeps the federal goals and lands with the military connection recorded', async ({ page }) => {

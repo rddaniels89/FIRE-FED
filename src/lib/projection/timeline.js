@@ -345,8 +345,16 @@ export function buildTimeline(scenario, options = {}) {
       inflation,
       deathAges,
       profile: streamProfile,
+      spouseProfile: spouse?.enabled ? { currentAge: num(spouse.currentAge), currentAgeMonths: 0 } : null,
       asOfDate: streamAsOfDate,
     });
+    // Active and drill pay are FICA wages for the person who earns them.
+    const militaryFicaWages = (owner) =>
+      (militaryIncome.byStream ?? [])
+        .filter((s) => (s.type === 'active_pay' || s.type === 'drill_pay') && (s.ownerId ?? 'primary') === owner)
+        .reduce((t, s) => t + s.amount, 0);
+    const primaryFicaWages = salary + militaryFicaWages('primary');
+    const spouseFicaWages = spouseIncome + militaryFicaWages('spouse');
     // SBP and RCSBP premiums come out of retired pay while it is paid, until
     // the plan is paid up (age 70 and 360 payments) or the member dies.
     let sbpPremiumOutflow = 0;
@@ -456,7 +464,7 @@ export function buildTimeline(scenario, options = {}) {
       const nonQualifiedRoth = isRothQualified({ age, firstRothContributionAge }) ? 0 : w.rothEarnings;
       // Tax-exempt combat-zone basis comes back pro rata with every traditional withdrawal.
       exemptDraw = taxExemptBasis > 0 ? splitTraditionalWithdrawal({ amount: w.traditional, traditionalTaxable: Math.max(0, traditional - taxExemptBasis), traditionalTaxExemptBasis: taxExemptBasis }).taxExempt : 0;
-      fica = estimateFicaTax({ wages: salary }).totalTax + (spouseIncome > 0 ? estimateFicaTax({ wages: spouseIncome }).totalTax : 0);
+      fica = (primaryFicaWages > 0 ? estimateFicaTax({ wages: primaryFicaWages }).totalTax : 0) + (spouseFicaWages > 0 ? estimateFicaTax({ wages: spouseFicaWages }).totalTax : 0);
       taxResult = calculateHouseholdTaxes({
         year: CURRENT_PARAMETER_YEAR,
         filingStatus,

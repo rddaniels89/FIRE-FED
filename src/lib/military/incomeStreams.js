@@ -237,6 +237,9 @@ export function resolveMilitaryIncomeStreams(military, { asOfDate = new Date() }
     let gross = annualGross(stream);
     let estimate = null;
     let linkedCalculation = null;
+    // A linked calculation's amount is in first-payment dollars, so its COLAs
+    // start at the payment year, not today.
+    let colaAnchorYear = null;
 
     // A linked calculation supplies the amount and the start; the stream never carries a copy.
     if (stream.sourceCalculationId) {
@@ -244,6 +247,7 @@ export function resolveMilitaryIncomeStreams(military, { asOfDate = new Date() }
       if (linkedCalculation) {
         gross = num(linkedCalculation.projectedMonthly ?? linkedCalculation.grossMonthly, 0) * 12;
         if (!stream.startDate && linkedCalculation.retiredPayStartDate) stream.startDate = linkedCalculation.retiredPayStartDate;
+        if (linkedCalculation.retiredPayStartDate) colaAnchorYear = Number(String(linkedCalculation.retiredPayStartDate).slice(0, 4)) || null;
         if (linkedCalculation.rulesVersion && linkedCalculation.rulesVersion !== MILITARY_RULES_VERSION) {
           own.push(raiseIssue(ISSUE_CODES.MRT_RULES_STALE, { entity, detail: { savedRulesVersion: linkedCalculation.rulesVersion, currentRulesVersion: MILITARY_RULES_VERSION } }));
         }
@@ -307,6 +311,7 @@ export function resolveMilitaryIncomeStreams(military, { asOfDate = new Date() }
         isSurvivor: Boolean(stream.startsOnDeathOf),
         estimate,
         linkedCalculation: linkedCalculation ? { id: linkedCalculation.id, rulesVersion: linkedCalculation.rulesVersion, engineVersion: linkedCalculation.engineVersion, status: linkedCalculation.status } : null,
+        colaAnchorYear,
         issues: own,
       },
     };
@@ -361,7 +366,7 @@ export function colaFactor(stream, { years, inflation, asOfYear }) {
  * Returns totals by tax bucket for the tax engine and the row, plus each
  * stream's amount for the display.
  */
-export function projectMilitaryIncomeForYear({ resolved, yearsFromNow, asOfYear, year, ages, inflation, deathAges = null, profile = null, asOfDate = null }) {
+export function projectMilitaryIncomeForYear({ resolved, yearsFromNow, asOfYear, year, ages, inflation, deathAges = null, profile = null, spouseProfile = null, asOfDate = null }) {
   const out = { total: 0, taxableWages: 0, militaryRetiredPay: 0, taxablePension: 0, taxExempt: 0, survivorIncome: 0, byStream: [] };
   const streams = resolved?.streams ?? [];
   for (const s of streams) {
@@ -370,11 +375,21 @@ export function projectMilitaryIncomeForYear({ resolved, yearsFromNow, asOfYear,
     const ownerAge = owner === SERVICE_OWNERS.SPOUSE ? ages?.spouse : ages?.primary;
     if (ownerAge === null || ownerAge === undefined) continue;
 
-    // Window on the owner's age, from dates when given.
-    const startAge = s.startDate && profile ? ageAtIsoDate({ isoDate: s.startDate, ...profile, asOfDate }) : s.startAge;
-    const endAge = s.endDate && profile ? ageAtIsoDate({ isoDate: s.endDate, ...profile, asOfDate }) : s.endAge;
-    if (startAge !== null && startAge !== undefined && ownerAge < num(startAge)) continue;
-    if (endAge !== null && endAge !== undefined && ownerAge > num(endAge)) continue;
+    // Window on the owner's own age when their profile is known; otherwise on
+    // the calendar year, never on the other person's age.
+    const ownerProfile = owner === SERVICE_OWNERS.SPOUSE ? spouseProfile : profile;
+    const calendarYear = year === null || year === undefined ? null : num(year);
+    if (ownerProfile) {
+      const startAge = s.startDate ? ageAtIsoDate({ isoDate: s.startDate, ...ownerProfile, asOfDate }) : s.startAge;
+      const endAge = s.endDate ? ageAtIsoDate({ isoDate: s.endDate, ...ownerProfile, asOfDate }) : s.endAge;
+      if (startAge !== null && startAge !== undefined && ownerAge < num(startAge)) continue;
+      if (endAge !== null && endAge !== undefined && ownerAge > num(endAge)) continue;
+    } else {
+      if (s.startDate && calendarYear !== null && calendarYear < Number(String(s.startDate).slice(0, 4))) continue;
+      if (s.endDate && calendarYear !== null && calendarYear > Number(String(s.endDate).slice(0, 4))) continue;
+      if (!s.startDate && s.startAge !== null && s.startAge !== undefined && ownerAge < num(s.startAge)) continue;
+      if (!s.endDate && s.endAge !== null && s.endAge !== undefined && ownerAge > num(s.endAge)) continue;
+    }
 
     // Death: the owner's ends it; a survivor stream needs the named death first.
     const ownerDeath = deathAges?.[owner];
@@ -386,7 +401,10 @@ export function projectMilitaryIncomeForYear({ resolved, yearsFromNow, asOfYear,
       if (deceasedAge === null || deceasedAge === undefined || deceasedAge <= num(deceasedDeath)) continue;
     }
 
-    let amount = s.resolved.annualGross * colaFactor(s, { years: yearsFromNow, inflation, asOfYear });
+    // A linked calculation is already in first-payment dollars: its COLAs count
+    // from the payment year. Entered amounts are today's and adjust from now.
+    const colaYears = s.resolved.colaAnchorYear && calendarYear !== null ? Math.max(0, calendarYear - s.resolved.colaAnchorYear) : yearsFromNow;
+    let amount = s.resolved.annualGross * colaFactor(s, { years: colaYears, inflation, asOfYear });
     if (amount <= 0) continue;
     // The repealed SBP-DIC offset, effective-dated for historical years only:
     // from 2023 both are paid in full.
