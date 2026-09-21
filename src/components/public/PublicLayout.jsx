@@ -43,6 +43,9 @@ export default function PublicLayout() {
               <NavLink to="/calculators/special-retirement-supplement" className={navLinkClass}>
                 SRS Calculator
               </NavLink>
+              <NavLink to="/calculators/military-retirement" className={navLinkClass}>
+                Military Calculator
+              </NavLink>
               <NavLink to="/methodology" className={navLinkClass}>
                 Methodology
               </NavLink>
@@ -96,6 +99,9 @@ export default function PublicLayout() {
             </NavLink>
             <NavLink to="/calculators/special-retirement-supplement" className={navLinkClass} onClick={() => setIsMenuOpen(false)}>
               SRS Calculator
+            </NavLink>
+            <NavLink to="/calculators/military-retirement" className={navLinkClass} onClick={() => setIsMenuOpen(false)}>
+              Military Calculator
             </NavLink>
             <NavLink to="/methodology" className={navLinkClass} onClick={() => setIsMenuOpen(false)}>
               Methodology

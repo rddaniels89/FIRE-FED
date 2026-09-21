@@ -19,6 +19,10 @@ more than an estimate.
 | First retired-pay COLA proration by quarter of retirement | `src/lib/military/retirement/cola.js` `FIRST_COLA_SHARE_BY_QUARTER` | Q1 half, Q2 quarter, Q3 none then full, Q4 three quarters next December | DoD FMR Vol. 7B ch. 8 |
 | Years-of-service band boundary | `src/lib/military/retirement/payTables.js` `yosBandIndex` | the "over N" rate starts on the anniversary of the pay entry base date (exactly N years is "over N") | DoD FMR Vol. 7A ch. 1 |
 | Regular retirement goldens | `src/lib/military/retirement/__tests__/retirement.test.js` | reconcile Final Pay, High-36, REDUX, and BRS fixtures against the MyArmyBenefits calculator and a de-identified DFAS estimate | MyArmyBenefits; DFAS |
+| Reserve former-member pay base | `src/lib/military/retirement/calculate.js` (`yosFreezeDate`) | a member discharged rather than transferred to the Retired Reserve is paid at the years of service held at discharge, priced from the table in force when pay begins; a Retired Reserve member's years keep accruing until pay begins | 10 U.S.C. 1407(f); DoD FMR Vol. 7B ch. 1 |
+| Reduced-age aggregation dates | `src/lib/military/retirement/reserve.js` | qualifying days aggregate within one fiscal year for duty before 1 October 2014 and across fiscal years since; the authority list for qualifying orders | 10 U.S.C. 12731(f)(2); Pub. L. 113-291 §512 |
+| Inactive-duty point ceilings by date | `src/lib/military/retirement/reserve.js` `INACTIVE_POINT_CAPS` | 60 before 1996-09-23, 75 through 2000-10-29, 90 through 2007-10-29, 130 since; membership points count toward the ceiling | 10 U.S.C. 12733(3) |
+| Reserve retired-pay goldens | `src/lib/military/retirement/__tests__/reserve.test.js` | reconcile the points-based fixtures against a de-identified Reserve retirement estimate | service retirement estimate (ARPC/HRC/NPC) |
 
 ## Verified
 
@@ -50,6 +54,9 @@ more than an estimate.
 | Multiplier service in whole years and full months, days disregarded | 10 U.S.C. 1405(b) | build | 2026-09-20 |
 | 75% cap only for retirements before 1 January 2007 | 10 U.S.C. 1409(b)(3) as amended by Pub. L. 109-364 §642 | build | 2026-09-20 |
 | High-36 is the highest 36 months whether or not consecutive | 10 U.S.C. 1407; DoD FMR Vol. 7B ch. 3 | build; pinned by `retirement.test.js` | 2026-09-20 |
+| Qualifying year = 50 or more points; 20 qualifying years required | 10 U.S.C. 12731(a), 12732(a) | build; pinned by `reserve.test.js` | 2026-09-20 |
+| Equivalent service for the multiplier = points ÷ 360 | 10 U.S.C. 12733 | build; pinned by `reserve.test.js` | 2026-09-20 |
+| Reduced retired-pay age: three months per aggregate 90 days of qualifying duty since 28 January 2008, floor age 50; retiree health coverage unchanged at 60 | 10 U.S.C. 12731(f); Pub. L. 110-181 §647 | build; pinned by `reserve.test.js` | 2026-09-20 |
 
 ## Corrections made during verification
 

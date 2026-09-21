@@ -288,7 +288,7 @@ describe('the whole calculation (spec §20.5, §20.13)', () => {
     expect(calculateMilitaryRetiredPay({}).issues[0].code).toBe(ISSUE_CODES.MRT_PATH_UNKNOWN);
     expect(calculateMilitaryRetiredPay(e7({ system: null })).issues.map((i) => i.code)).toContain(ISSUE_CODES.MRT_SYSTEM_UNCONFIRMED);
     expect(calculateMilitaryRetiredPay(e7({ creditableService: null })).issues.map((i) => i.code)).toContain(ISSUE_CODES.MRT_1405_SERVICE_UNKNOWN);
-    expect(calculateMilitaryRetiredPay(e7({ path: 'reserve_nonregular' })).status).toBe(MILITARY_RESULT_STATUS.NOT_SUPPORTED);
+    expect(calculateMilitaryRetiredPay(e7({ path: 'medical' })).status).toBe(MILITARY_RESULT_STATUS.NOT_SUPPORTED);
   });
 
   it('under 20 years is a hypothetical comparison, never an available retirement', () => {

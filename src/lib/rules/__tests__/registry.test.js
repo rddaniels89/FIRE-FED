@@ -54,6 +54,8 @@ const REQUIRED_IDS = [
   'military.high36',
   'military.redux',
   'military.retired_pay_cola',
+  'military.reserve_points',
+  'military.reserve_retired_pay_age',
 ];
 
 describe('rules registry', () => {

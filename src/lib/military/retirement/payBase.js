@@ -64,7 +64,7 @@ function gradeOn(gradePeriods, date) {
  *
  * Returns { months: [{ month, grade, yearsOfService, monthly, tableDate, verified, derived, assumed, missing }], counts }.
  */
-export function buildBasicPayHistory({ gradePeriods = [], payEntryBaseDate = null, retirementDate, growthAssumption = 0, monthsBack = HIGH_36_MONTHS } = {}) {
+export function buildBasicPayHistory({ gradePeriods = [], payEntryBaseDate = null, retirementDate, growthAssumption = 0, monthsBack = HIGH_36_MONTHS, yosFreezeDate = null } = {}) {
   const retire = parseIsoDate(retirementDate);
   if (!retire) return { months: [], counts: empty() };
   const lastMonth = retire.getUTCDate() === 1 ? addMonths(firstOfMonth(retire), -1) : firstOfMonth(retire);
@@ -75,7 +75,9 @@ export function buildBasicPayHistory({ gradePeriods = [], payEntryBaseDate = nul
     // A grade change inside a month: price the month by days at each grade.
     const nextMonth = addMonths(start, 1);
     const changes = (gradePeriods ?? []).filter((p) => p.startDate && p.startDate > toIsoDate(start) && p.startDate < toIsoDate(nextMonth));
-    const yos = yearsOfServiceOn({ payEntryBaseDate, isoDate: toIsoDate(start) });
+    // A former Reserve member's years of service stop accruing at discharge.
+    const yosDate = yosFreezeDate && yosFreezeDate < toIsoDate(start) ? yosFreezeDate : toIsoDate(start);
+    const yos = yearsOfServiceOn({ payEntryBaseDate, isoDate: yosDate });
     const slices = [];
     let cursor = start;
     const boundaries = [...changes.map((p) => parseIsoDate(p.startDate)).sort((a, b) => a - b), nextMonth];

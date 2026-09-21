@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { ScenarioProvider } from './contexts/ScenarioContext';
@@ -41,6 +41,7 @@ const PricingPage = lazy(() => import('./components/public/PricingPage'));
 const MethodologyPage = lazy(() => import('./components/public/MethodologyPage'));
 const PublicFersCalculator = lazy(() => import('./components/public/PublicFersCalculator'));
 const PublicSrsCalculator = lazy(() => import('./components/public/PublicSrsCalculator'));
+const PublicMilitaryRetirementCalculator = lazy(() => import('./components/public/PublicMilitaryRetirementCalculator'));
 const PlanDashboard = lazy(() => import('./components/plan/PlanDashboard'));
 const PlanInputs = lazy(() => import('./components/plan/PlanInputs'));
 const CareerSimulator = lazy(() => import('./components/plan/CareerSimulator'));
@@ -274,6 +275,8 @@ function AuthenticatedApp() {
             <Route path="/plan/inputs" element={<PlanInputs />} />
             <Route path="/plan/career" element={<CareerSimulator />} />
             <Route path="/plan/military" element={<MilitaryPlanPage />} />
+            <Route path="/calculators/military-retirement" element={<PublicMilitaryRetirementCalculator />} />
+            <Route path="/military-retirement-calculator" element={<Navigate to="/calculators/military-retirement" replace />} />
             <Route path="/assumptions" element={<AssumptionsPage />} />
             <Route path="/tsp-forecast" element={<TSPForecast />} />
             <Route path="/fers-pension" element={<FERSPensionCalc />} />
@@ -332,6 +335,8 @@ function AppContent() {
                 path="/calculators/special-retirement-supplement"
                 element={<PublicSrsCalculator />}
               />
+              <Route path="/calculators/military-retirement" element={<PublicMilitaryRetirementCalculator />} />
+              <Route path="/military-retirement-calculator" element={<Navigate to="/calculators/military-retirement" replace />} />
               <Route path="/legal/terms" element={<LegalTerms />} />
               <Route path="/legal/privacy" element={<LegalPrivacy />} />
               <Route path="/legal/disclaimer" element={<LegalDisclaimer />} />

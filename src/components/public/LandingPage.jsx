@@ -113,6 +113,16 @@ export default function LandingPage() {
                 <ArrowRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
               </span>
             </Link>
+            <Link to="/calculators/military-retirement" className="card p-6 block hover:border-navy-400 dark:hover:border-navy-500">
+              <h3 className="font-semibold text-lg text-slate-900 dark:text-white mb-1">Military Retirement Calculator</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Active-duty and Guard/Reserve retired pay under Final Pay, High-36, REDUX, and BRS, with every step shown.
+              </p>
+              <span className="inline-flex items-center gap-1.5 mt-4 text-sm font-medium navy-text">
+                Open the calculator
+                <ArrowRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              </span>
+            </Link>
           </div>
         </div>
       </section>

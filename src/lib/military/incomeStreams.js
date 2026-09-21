@@ -39,7 +39,7 @@
  * all is the scenario's choice (household.deathAges); nothing is assumed.
  */
 
-import { INPUT_PROVENANCE, ISSUE_CODES, raiseIssue } from './status';
+import { INPUT_PROVENANCE, ISSUE_CODES, MILITARY_RULES_VERSION, raiseIssue } from './status';
 import { SERVICE_OWNERS, parseIsoDate } from './servicePeriods';
 import { estimateVaCompensation } from './vaCompensationRates';
 
@@ -158,8 +158,9 @@ export function createIncomeStream(overrides = {}) {
     /** Retired-pay facts the waiver rules read (later pass). */
     retiredPayType: null,
     waiverStatus: null,
-    /** A saved retirement calculation this stream mirrors (later pass). */
+    /** A saved retirement calculation this stream mirrors: the amount is read from it, never copied. */
     sourceCalculationId: null,
+    sourceScenarioId: null,
     ...overrides,
   };
 }
@@ -215,6 +216,8 @@ export function ageAtIsoDate({ isoDate, currentAge, currentAgeMonths = 0, asOfDa
 export function resolveMilitaryIncomeStreams(military, { asOfDate = new Date() } = {}) {
   const list = Array.isArray(military?.incomeStreams) ? military.incomeStreams : [];
   const issues = [];
+  const retiredPayTypes = [T.LONGEVITY_RETIRED_PAY, T.RESERVE_RETIRED_PAY];
+  const linkedRetiredPay = list.filter((s) => s.sourceCalculationId && retiredPayTypes.includes(s.type));
   const streams = list.map((raw) => {
     const stream = createIncomeStream(raw);
     const entity = { type: 'incomeStream', id: stream.id };
@@ -223,6 +226,25 @@ export function resolveMilitaryIncomeStreams(military, { asOfDate = new Date() }
     let included = true;
     let gross = annualGross(stream);
     let estimate = null;
+    let linkedCalculation = null;
+
+    // A linked calculation supplies the amount and the start; the stream never carries a copy.
+    if (stream.sourceCalculationId) {
+      linkedCalculation = findCalculation(military, stream.sourceCalculationId);
+      if (linkedCalculation) {
+        gross = num(linkedCalculation.projectedMonthly ?? linkedCalculation.grossMonthly, 0) * 12;
+        if (!stream.startDate && linkedCalculation.retiredPayStartDate) stream.startDate = linkedCalculation.retiredPayStartDate;
+        if (linkedCalculation.rulesVersion && linkedCalculation.rulesVersion !== MILITARY_RULES_VERSION) {
+          own.push(raiseIssue(ISSUE_CODES.MRT_RULES_STALE, { entity, detail: { savedRulesVersion: linkedCalculation.rulesVersion, currentRulesVersion: MILITARY_RULES_VERSION } }));
+        }
+      } else {
+        gross = 0;
+      }
+    } else if (retiredPayTypes.includes(stream.type) && linkedRetiredPay.some((l) => l.ownerId === stream.ownerId)) {
+      // The same pension recorded by hand beside a linked calculation.
+      own.push(raiseIssue(ISSUE_CODES.MRT_DUPLICATE_PLAN_INCOME, { entity, detail: { linkedStreamIds: linkedRetiredPay.filter((l) => l.ownerId === stream.ownerId).map((l) => l.id) } }));
+      included = false;
+    }
 
     // A VA table-assisted estimate stands in when no amount was entered.
     if (stream.type === T.VA_DISABILITY && gross <= 0 && stream.vaEstimate?.rating) {
@@ -268,11 +290,21 @@ export function resolveMilitaryIncomeStreams(military, { asOfDate = new Date() }
         isTaxExempt: tax.isTaxExempt,
         isSurvivor: Boolean(stream.startsOnDeathOf),
         estimate,
+        linkedCalculation: linkedCalculation ? { id: linkedCalculation.id, rulesVersion: linkedCalculation.rulesVersion, engineVersion: linkedCalculation.engineVersion, status: linkedCalculation.status } : null,
         issues: own,
       },
     };
   });
   return { streams, issues };
+}
+
+/** A saved calculation by id across the block's retirement scenarios. */
+function findCalculation(military, id) {
+  for (const sc of military?.retirementScenarios ?? []) {
+    const c = (sc.calculations ?? []).find((x) => x.id === id);
+    if (c) return c;
+  }
+  return null;
 }
 
 /** Cumulative COLA factor for a stream over `years` future years from the as-of year. */

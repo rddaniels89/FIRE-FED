@@ -236,26 +236,27 @@ pay base, service, multiplier, reductions, rounding, and rule version.
 Goal: nonregular retirement from points, the public surface, and the
 calculation-id link into the household timeline.
 
-- [ ] Reserve engine: retirement-year audit (qualifying-year threshold, membership
+- [x] Reserve engine: retirement-year audit (qualifying-year threshold, membership
       points, inactive caps 60/75/90/130 by retirement-year end date, 365/366
       ceiling, active points never capped), points ÷ 360, retired-pay date from
       age 60, official date, or verified reduced-age periods in three-month units
       with the age-50 floor; Retired Reserve vs former-member pay base at pay
       start (§20.7, §4.4).
-- [ ] Public route `/calculators/military-retirement` with entry choice, Quick /
+- [x] Public route `/calculators/military-retirement` with entry choice, Quick /
       Detailed / Reconcile modes, data-quality panel, formula audit, first-result
       cards (§20.13, §20.14); anonymous and client-side; sign-in to save.
-- [ ] Saved scenarios in `military.retirementScenarios[]` with immutable
+- [x] Saved scenarios in `military.retirementScenarios[]` with immutable
       calculations, `supersedes`, `currentCalculationId`.
-- [ ] Connection: an income stream references `sourceCalculationId`; no copied
+- [x] Connection: an income stream references `sourceCalculationId`; no copied
       amount; stale flag when the source changes; duplicate-source block (§20.16).
-- [ ] Reconciliation against an official estimate or RAS at gross, deductions,
-      withholding, and net with diagnostics (§20.12).
-- [ ] Codes: `MRT_RESERVE_*`, `MRT_QUALIFYING_YEARS_INSUFFICIENT`,
+- [-] Reconciliation against an official estimate or RAS at gross with
+      diagnostics (§20.12); deductions, withholding, and net wait for SBP and
+      the VA/concurrent-receipt adjustments in pass 10.
+- [x] Codes: `MRT_RESERVE_*`, `MRT_QUALIFYING_YEARS_INSUFFICIENT`,
       `MRT_INACTIVE_POINT_CAP_APPLIED`, `MRT_RETIRED_RESERVE_STATUS_UNKNOWN`,
       `MRT_REDUCED_AGE_UNVERIFIED`, `MRT_HEALTH_AGE_DIFFERS`,
       `MRT_OFFICIAL_RECONCILIATION_MISMATCH`, `MRT_DUPLICATE_PLAN_INCOME`.
-- [ ] Tests: §20.18 Reserve cases (49/50/51 points, leap year, each cap boundary,
+- [x] Tests: §20.18 Reserve cases (49/50/51 points, leap year, each cap boundary,
       reduced-age aggregation); property "linking creates exactly one pension
       stream"; browser tests for the public flow and the connect step.
 

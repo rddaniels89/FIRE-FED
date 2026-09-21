@@ -28,6 +28,13 @@ import { buildBasicPayHistory, finalPayBase, selectHigh36PayBase } from './payBa
 import { FIRST_COLA_SHARE_BY_QUARTER, projectRetiredPayCola } from './cola';
 import { gradeLabel } from './payTables';
 import { parseIsoDate } from '../servicePeriods';
+import {
+  REQUIRED_QUALIFYING_YEARS,
+  RETIRED_RESERVE_STATUSES,
+  computeReserveEquivalentService,
+  computeReserveRetiredPayAge,
+  resolveReservePoints,
+} from './reserve';
 
 export const ENGINE_VERSION = '1.0.0';
 
@@ -76,7 +83,8 @@ export function normalizeRetirementInputs(raw = {}) {
     cbsElected: raw.cbsElected ?? null,
     brsOptIn: raw.brsOptIn ?? null,
     retirementDate: raw.retirementDate ?? null,
-    retiredPayStartDate: raw.retiredPayStartDate ?? raw.retirementDate ?? null,
+    /** When pay begins later than the retirement itself (Reserve). Null = the retirement date, or the computed retired-pay age. */
+    retiredPayStartDate: raw.retiredPayStartDate ?? null,
     payEntryBaseDate: raw.payEntryBaseDate ?? null,
     ageAtRetirement: raw.ageAtRetirement ?? null,
     creditableService: raw.creditableService
@@ -93,6 +101,30 @@ export function normalizeRetirementInputs(raw = {}) {
     retiredGradeConfirmed: Boolean(raw.retiredGradeConfirmed),
     payBaseOverride: raw.payBaseOverride ? { monthly: num(raw.payBaseOverride.monthly), provenance: raw.payBaseOverride.provenance ?? INPUT_PROVENANCE.USER_ENTERED_OFFICIAL, asOfDate: raw.payBaseOverride.asOfDate ?? null } : null,
     officialEstimate: raw.officialEstimate ? { monthlyGross: num(raw.officialEstimate.monthlyGross), asOfDate: raw.officialEstimate.asOfDate ?? null, source: raw.officialEstimate.source ?? 'service_estimate' } : null,
+    reserve: raw.reserve
+      ? {
+          retirementYears: (raw.reserve.retirementYears ?? []).map((r, i) => ({
+            id: r.id ?? String(i),
+            retirementYearEnd: r.retirementYearEnd ?? null,
+            activePoints: num(r.activePoints),
+            inactivePoints: num(r.inactivePoints),
+            membershipPoints: num(r.membershipPoints),
+            funeralHonorsPoints: num(r.funeralHonorsPoints),
+            otherPoints: num(r.otherPoints),
+            officialTotal: r.officialTotal === null || r.officialTotal === undefined ? null : num(r.officialTotal),
+            provenance: r.provenance ?? INPUT_PROVENANCE.USER_ESTIMATE,
+          })),
+          officialTotalPoints: raw.reserve.officialTotalPoints === null || raw.reserve.officialTotalPoints === undefined ? null : num(raw.reserve.officialTotalPoints),
+          officialQualifyingYears: raw.reserve.officialQualifyingYears === null || raw.reserve.officialQualifyingYears === undefined ? null : num(raw.reserve.officialQualifyingYears),
+          pointsProvenance: raw.reserve.pointsProvenance ?? INPUT_PROVENANCE.USER_ESTIMATE,
+          noticeOfEligibilityDate: raw.reserve.noticeOfEligibilityDate ?? null,
+          retiredReserveStatus: raw.reserve.retiredReserveStatus ?? RETIRED_RESERVE_STATUSES.UNKNOWN,
+          separationDate: raw.reserve.separationDate ?? null,
+          officialEligibilityDate: raw.reserve.officialEligibilityDate ?? null,
+          birthDate: raw.reserve.birthDate ?? null,
+          reducedAgePeriods: (raw.reserve.reducedAgePeriods ?? []).map((p) => ({ startDate: p.startDate ?? null, endDate: p.endDate ?? null, authority: p.authority ?? null, verified: Boolean(p.verified) })),
+        }
+      : null,
     assumptions: {
       basicPayGrowth: a.basicPayGrowth === undefined ? 0.03 : num(a.basicPayGrowth),
       inflation: a.inflation === undefined ? 0.025 : num(a.inflation),
@@ -125,7 +157,8 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
     issues.push(raiseIssue(ISSUE_CODES.MRT_PATH_UNKNOWN));
     return finish(base, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
   }
-  if (inputs.path !== CALCULATION_PATHS.REGULAR && inputs.path !== CALCULATION_PATHS.ALREADY_RETIRED) {
+  const isReserve = inputs.path === CALCULATION_PATHS.RESERVE_NONREGULAR;
+  if (inputs.path !== CALCULATION_PATHS.REGULAR && inputs.path !== CALCULATION_PATHS.ALREADY_RETIRED && !isReserve) {
     issues.push(raiseIssue(ISSUE_CODES.MRT_PATH_UNSUPPORTED, { detail: { path: inputs.path } }));
     return finish(base, MILITARY_RESULT_STATUS.NOT_SUPPORTED);
   }
@@ -143,26 +176,66 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
   }
   step({ id: 'system', label: 'Retirement system', ruleId: 'military.retirement_system', value: SYSTEM_LABELS[system], note: validation.confirmed ? 'Confirmed from the record.' : `Suggested: ${suggestion.reasons.join(' ')}` });
 
+  // ---- Reserve: points, qualifying years, and the retired-pay date decide
+  // the service basis and the date the pay base is built for.
+  let reserve = null;
+  let hypothetical = false;
+  if (isReserve) {
+    const r = inputs.reserve ?? {};
+    const points = resolveReservePoints(r);
+    issues.push(...points.issues);
+    if (points.totalPoints === null) {
+      issues.push(raiseIssue(ISSUE_CODES.MRT_RESERVE_POINTS_OFFICIAL_REQUIRED, { detail: { reason: 'points_missing' } }));
+      return finish({ ...base, suggestion, system }, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
+    }
+    if (!points.official) {
+      issues.push(raiseIssue(ISSUE_CODES.MRT_RESERVE_POINTS_OFFICIAL_REQUIRED, { detail: { reason: 'points_estimated' } }));
+      hypothetical = true;
+    }
+    if (points.qualifyingYears !== null && points.qualifyingYears < REQUIRED_QUALIFYING_YEARS) {
+      issues.push(raiseIssue(ISSUE_CODES.MRT_QUALIFYING_YEARS_INSUFFICIENT, { detail: { qualifyingYears: points.qualifyingYears } }));
+      hypothetical = true;
+    }
+    const equivalent = computeReserveEquivalentService({ totalPoints: points.totalPoints });
+    const age = computeReserveRetiredPayAge({ officialEligibilityDate: r.officialEligibilityDate, birthDate: r.birthDate, reducedAgePeriods: r.reducedAgePeriods });
+    issues.push(...age.issues);
+    if (r.retiredReserveStatus === RETIRED_RESERVE_STATUSES.UNKNOWN) issues.push(raiseIssue(ISSUE_CODES.MRT_RETIRED_RESERVE_STATUS_UNKNOWN));
+    reserve = { points, equivalent, age, retiredReserveStatus: r.retiredReserveStatus, separationDate: r.separationDate ?? null };
+    step({ id: 'reserve_points', label: 'Creditable retirement points', ruleId: 'military.reserve_points', value: points.totalPoints, unit: 'points', note: `${points.qualifyingYears ?? '?'} qualifying years (50+ points). ${points.official ? 'Official point statement.' : 'Estimated points.'}` });
+    step({ id: 'reserve_equivalent', label: 'Equivalent years of service: points ÷ 360', ruleId: 'military.reserve_points', value: Math.round(equivalent.equivalentYears * 10000) / 10000, unrounded: equivalent.equivalentYears, unit: 'years' });
+    step({ id: 'reserve_pay_age', label: age.method === 'official_date' ? 'Retired-pay start: official eligibility date' : age.method === 'reduced_age' ? `Retired-pay age reduced by ${age.reductionMonths} months (${age.units} × 90 days)` : 'Retired-pay age 60', ruleId: 'military.reserve_retired_pay_age', value: age.date ?? age.age, note: age.method === 'reduced_age' ? 'Three-month units of verified qualifying duty since 28 January 2008; never below 50.' : undefined });
+  }
+
   // ---- dates
-  const retire = parseIsoDate(inputs.retirementDate);
+  const payStartIso = isReserve ? (inputs.retiredPayStartDate ?? reserve.age.date ?? inputs.retirementDate) : (inputs.retiredPayStartDate ?? inputs.retirementDate);
+  // The pay base is built as of the retirement for a regular retirement, and
+  // as of the day pay begins for a non-regular one.
+  const payBaseDateIso = isReserve ? payStartIso : inputs.retirementDate;
+  const retire = parseIsoDate(payBaseDateIso);
   if (!retire) {
-    issues.push(raiseIssue(ISSUE_CODES.MRT_PATH_UNKNOWN, { detail: { reason: 'retirement_date_missing' } }));
-    return finish({ ...base, suggestion, system }, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
+    issues.push(raiseIssue(ISSUE_CODES.MRT_PATH_UNKNOWN, { detail: { reason: isReserve ? 'retired_pay_start_date_missing' : 'retirement_date_missing' } }));
+    return finish({ ...base, suggestion, system, reserve }, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
   }
 
   // ---- service
-  if (!inputs.creditableService) {
-    issues.push(raiseIssue(ISSUE_CODES.MRT_1405_SERVICE_UNKNOWN));
-    return finish({ ...base, suggestion, system }, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
+  let serviceMonths;
+  let serviceOfficial;
+  if (isReserve) {
+    serviceMonths = reserve.equivalent.equivalentYears * 12; // fractional; the multiplier keeps raw point precision
+    serviceOfficial = reserve.points.official;
+  } else {
+    if (!inputs.creditableService) {
+      issues.push(raiseIssue(ISSUE_CODES.MRT_1405_SERVICE_UNKNOWN));
+      return finish({ ...base, suggestion, system }, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
+    }
+    serviceMonths = serviceToMultiplierMonths(inputs.creditableService);
+    serviceOfficial = inputs.creditableService.provenance === INPUT_PROVENANCE.USER_ENTERED_OFFICIAL;
+    if (serviceMonths < REGULAR_RETIREMENT_MINIMUM_YEARS * 12 && inputs.path === CALCULATION_PATHS.REGULAR) {
+      issues.push(raiseIssue(ISSUE_CODES.MRT_ACTIVE_SERVICE_BELOW_THRESHOLD, { detail: { serviceMonths } }));
+      hypothetical = true;
+    }
+    step({ id: 'service', label: 'Creditable service (10 U.S.C. 1405)', ruleId: 'military.retired_pay_formula', value: `${inputs.creditableService.years}y ${inputs.creditableService.months}m ${inputs.creditableService.days}d`, unrounded: serviceMonths / 12, note: `${serviceMonths} whole months; days disregarded. ${serviceOfficial ? 'Official figure.' : 'User estimate.'}` });
   }
-  const serviceMonths = serviceToMultiplierMonths(inputs.creditableService);
-  const serviceOfficial = inputs.creditableService.provenance === INPUT_PROVENANCE.USER_ENTERED_OFFICIAL;
-  let hypothetical = false;
-  if (serviceMonths < REGULAR_RETIREMENT_MINIMUM_YEARS * 12 && inputs.path === CALCULATION_PATHS.REGULAR) {
-    issues.push(raiseIssue(ISSUE_CODES.MRT_ACTIVE_SERVICE_BELOW_THRESHOLD, { detail: { serviceMonths } }));
-    hypothetical = true;
-  }
-  step({ id: 'service', label: 'Creditable service (10 U.S.C. 1405)', ruleId: 'military.retired_pay_formula', value: `${inputs.creditableService.years}y ${inputs.creditableService.months}m ${inputs.creditableService.days}d`, unrounded: serviceMonths / 12, note: `${serviceMonths} whole months; days disregarded. ${serviceOfficial ? 'Official figure.' : 'User estimate.'}` });
 
   // ---- pay base
   const retiredGrade = inputs.gradePeriods.length > 0 ? inputs.gradePeriods[inputs.gradePeriods.length - 1].grade : null;
@@ -175,9 +248,9 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
     issues.push(raiseIssue(ISSUE_CODES.MRT_PAY_TABLE_MISSING, { detail: { reason: 'grade_missing' } }));
     return finish({ ...base, suggestion, system, service: { months: serviceMonths } }, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
   } else if (system === RETIREMENT_SYSTEMS.FINAL_PAY) {
-    payBase = finalPayBase({ grade: retiredGrade, payEntryBaseDate: inputs.payEntryBaseDate, retirementDate: inputs.retirementDate, growthAssumption: inputs.assumptions.basicPayGrowth, seniorEnlisted: inputs.gradePeriods[inputs.gradePeriods.length - 1].seniorEnlisted });
+    payBase = finalPayBase({ grade: retiredGrade, payEntryBaseDate: inputs.payEntryBaseDate, retirementDate: payBaseDateIso, growthAssumption: inputs.assumptions.basicPayGrowth, seniorEnlisted: inputs.gradePeriods[inputs.gradePeriods.length - 1].seniorEnlisted });
     if (!payBase) {
-      issues.push(raiseIssue(ISSUE_CODES.MRT_PAY_TABLE_MISSING, { detail: { grade: retiredGrade, date: inputs.retirementDate } }));
+      issues.push(raiseIssue(ISSUE_CODES.MRT_PAY_TABLE_MISSING, { detail: { grade: retiredGrade, date: payBaseDateIso } }));
       return finish({ ...base, suggestion, system, service: { months: serviceMonths } }, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
     }
     if (payBase.yosUnknown) issues.push(raiseIssue(ISSUE_CODES.MRT_PAY_ENTRY_DATE_UNKNOWN));
@@ -185,10 +258,13 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
     if (payBase.derived) issues.push(raiseIssue(ISSUE_CODES.MRT_DERIVED_PAY_TABLE));
     step({ id: 'pay_base', label: `Final Pay: ${payBase.gradeLabel}, ${payBase.band}, table of ${payBase.tableDate}`, ruleId: 'military.retired_pay_formula', value: payBase.monthly, unit: 'monthly', note: `Rate on ${payBase.asOf}, the day before retirement.` });
   } else {
-    history = buildBasicPayHistory({ gradePeriods: inputs.gradePeriods, payEntryBaseDate: inputs.payEntryBaseDate, retirementDate: inputs.retirementDate, growthAssumption: inputs.assumptions.basicPayGrowth });
+    // A Reserve former member's years of service freeze at separation; a
+    // Retired Reserve member's keep accruing until pay begins (10 U.S.C. 1407(f)).
+    const yosFreezeDate = isReserve && reserve.retiredReserveStatus === RETIRED_RESERVE_STATUSES.FORMER_MEMBER ? reserve.separationDate : null;
+    history = buildBasicPayHistory({ gradePeriods: inputs.gradePeriods, payEntryBaseDate: inputs.payEntryBaseDate, retirementDate: payBaseDateIso, growthAssumption: inputs.assumptions.basicPayGrowth, yosFreezeDate });
     payBase = selectHigh36PayBase(history);
     if (!payBase) {
-      issues.push(raiseIssue(ISSUE_CODES.MRT_PAY_TABLE_MISSING, { detail: { grade: retiredGrade, date: inputs.retirementDate } }));
+      issues.push(raiseIssue(ISSUE_CODES.MRT_PAY_TABLE_MISSING, { detail: { grade: retiredGrade, date: payBaseDateIso } }));
       return finish({ ...base, suggestion, system, service: { months: serviceMonths }, history }, MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED);
     }
     if (history.counts.yosUnknown > 0) issues.push(raiseIssue(ISSUE_CODES.MRT_PAY_ENTRY_DATE_UNKNOWN));
@@ -200,8 +276,10 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
   if (!inputs.retiredGradeConfirmed && retiredGrade) issues.push(raiseIssue(ISSUE_CODES.MRT_RETIRED_GRADE_UNCONFIRMED, { detail: { grade: gradeLabel(retiredGrade) } }));
 
   // ---- multiplier
-  const mult = computeLongevityMultiplier({ system, serviceMonths, retirementDate: inputs.retirementDate });
-  for (const s of mult.steps) step({ ...s, ruleId: s.id === 'redux_reduction' ? 'military.redux' : 'military.retired_pay_formula' });
+  const mult = isReserve
+    ? reserveMultiplier({ system, equivalentYears: reserve.equivalent.equivalentYears, retirementDate: payStartIso })
+    : computeLongevityMultiplier({ system, serviceMonths, retirementDate: inputs.retirementDate });
+  for (const s of mult.steps) step({ ...s, ruleId: s.id === 'redux_reduction' ? 'military.redux' : isReserve ? 'military.reserve_points' : 'military.retired_pay_formula' });
 
   // ---- gross
   const grossUnrounded = payBase.monthlyUnrounded * mult.multiplier;
@@ -211,7 +289,7 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
 
   // REDUX: what the full multiplier would pay, for the age-62 recomputation.
   let fullMonthly = grossMonthly;
-  if (system === RETIREMENT_SYSTEMS.REDUX) {
+  if (system === RETIREMENT_SYSTEMS.REDUX && !isReserve) {
     const full = computeLongevityMultiplier({ system, serviceMonths, retirementDate: inputs.retirementDate, applyRedux: false });
     fullMonthly = roundDownToDollar(payBase.monthlyUnrounded * full.multiplier);
     step({ id: 'redux_full', label: 'REDUX: amount under the full multiplier, restored at 62', ruleId: 'military.redux', value: fullMonthly, unit: 'monthly' });
@@ -220,10 +298,10 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
   // ---- COLA
   const cola = projectRetiredPayCola({
     system,
-    retirementDate: inputs.retiredPayStartDate ?? inputs.retirementDate,
+    retirementDate: payStartIso,
     grossMonthly,
     fullMonthly,
-    ageAtRetirement: inputs.ageAtRetirement ?? 0,
+    ageAtRetirement: isReserve && reserve.age.age != null ? reserve.age.age : inputs.ageAtRetirement ?? 0,
     inflation: inputs.assumptions.inflation,
     publishedColas: inputs.assumptions.publishedColas,
     horizonYears: inputs.assumptions.horizonYears,
@@ -258,7 +336,8 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
     !payBase.verified ||
     (payBase.method === 'high_36' && payBase.reliableMonths < 36) ||
     Boolean(payBase.assumed) ||
-    (payBase.method !== 'official_override' && inputs.payEntryBaseDate === null);
+    (payBase.method !== 'official_override' && inputs.payEntryBaseDate === null) ||
+    (isReserve && (!reserve.age.verifiedOnly || reserve.retiredReserveStatus === RETIRED_RESERVE_STATUSES.UNKNOWN));
   const status = blocking
     ? MILITARY_RESULT_STATUS.OFFICIAL_DETERMINATION_REQUIRED
     : reconciliation
@@ -278,7 +357,9 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
       hypothetical,
       retiredGrade,
       retiredGradeLabel: retiredGrade ? gradeLabel(retiredGrade) : null,
-      service: { months: serviceMonths, years: serviceMonths / 12, official: serviceOfficial, ...inputs.creditableService },
+      service: { months: serviceMonths, years: serviceMonths / 12, official: serviceOfficial, ...(inputs.creditableService ?? {}) },
+      reserve,
+      retiredPayStartDate: payStartIso,
       payBase,
       history: history ? { counts: history.counts, months: history.months } : null,
       multiplier: mult,
@@ -290,7 +371,7 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
       cola,
       reconciliation,
       events: [
-        { type: 'MILITARY_RETIRED_PAY_START', date: inputs.retiredPayStartDate ?? inputs.retirementDate, monthly: projectedMonthly },
+        { type: isReserve ? 'RESERVE_RETIRED_PAY_START' : 'MILITARY_RETIRED_PAY_START', date: payStartIso, monthly: projectedMonthly },
         ...cola.filter((r) => r.event).map((r) => ({ type: 'MILITARY_RETIRED_PAY_RECOMPUTATION', year: r.year, monthly: r.monthly, reason: r.event })),
       ],
       dataQuality: {
@@ -302,6 +383,30 @@ export function calculateMilitaryRetiredPay(rawInputs = {}) {
     },
     status
   );
+}
+
+/** Reserve: the legacy or BRS rate applied to points ÷ 360 at full precision; the cap rule is the same. */
+function reserveMultiplier({ system, equivalentYears, retirementDate }) {
+  const base = computeLongevityMultiplier({ system, serviceMonths: 0, retirementDate });
+  const rate = base.rate;
+  const uncapped = rate * equivalentYears;
+  const capApplied = uncapped > base.capRate;
+  const multiplier = capApplied ? base.capRate : uncapped;
+  return {
+    ...base,
+    serviceMonths: equivalentYears * 12,
+    serviceYears: equivalentYears,
+    uncapped,
+    reduxReduction: 0,
+    afterRedux: uncapped,
+    capApplied,
+    multiplier,
+    steps: [
+      { id: 'rate', label: 'Rate per equivalent year of service', value: rate, unit: 'fraction' },
+      { id: 'uncapped', label: 'Rate × (points ÷ 360)', value: uncapped, unit: 'fraction' },
+      { id: 'cap', label: capApplied ? `Capped at ${(base.capRate * 100).toFixed(0)}%` : `Below the ${(base.capRate * 100).toFixed(0)}% cap`, value: multiplier, unit: 'fraction' },
+    ],
+  };
 }
 
 function diagnose({ diff, payBase, mult, inputs }) {
