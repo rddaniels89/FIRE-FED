@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { FEATURES } from '../../../lib/entitlements';
+import { FEATURES, militaryLaunchGatesActive } from '../../../lib/entitlements';
 import { CheckField, Field, Grid, NumberField, ProBadge, ProNotice, RadioField, Section, SelectField } from './fields';
 import { militarySummary } from './summaries';
 import {
@@ -143,6 +143,8 @@ function useMilitary({ scenario, write, canUse }) {
   const m = scenario.military;
   const writeMil = (patch) => write({ military: patch });
   const householdAllowed = canUse(FEATURES.HOUSEHOLD);
+  // Launch-gated: open to everyone until VITE_MILITARY_LAUNCH_GATES is on, Pro after.
+  const brsAllowed = !militaryLaunchGatesActive() || canUse(FEATURES.MILITARY_BRS);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const active = m.connection !== MILITARY_CONNECTIONS.NONE;
 
@@ -237,7 +239,7 @@ function useMilitary({ scenario, write, canUse }) {
     writeMil(createDefaultMilitary());
     setConfirmDelete(false);
   };
-  return { confirmDelete, setConfirmDelete, newStreamType, setNewStreamType, m, writeMil, householdAllowed, active, plan, mil, periodIssues, streamIssues, generalIssues, retiredPayIssues, classificationFor, setConnection, periods, writePeriods, updatePeriod, addPeriod, removePeriod, d, writeDeposit, payments, writePayments, rp, writeRp, needsWaiver, isReserve, isCh61, streams, writeStreams, updateStream, addStream, removeStream, sbp, writeSbp, net, writeNet, uts, writeUts, brs, writeBrs, coverage, writeCoverage, updateCoverage, addCoverage, removeCoverage, coverageIssues, deleteAll };
+  return { confirmDelete, setConfirmDelete, newStreamType, setNewStreamType, m, writeMil, householdAllowed, brsAllowed, active, plan, mil, periodIssues, streamIssues, generalIssues, retiredPayIssues, classificationFor, setConnection, periods, writePeriods, updatePeriod, addPeriod, removePeriod, d, writeDeposit, payments, writePayments, rp, writeRp, needsWaiver, isReserve, isCh61, streams, writeStreams, updateStream, addStream, removeStream, sbp, writeSbp, net, writeNet, uts, writeUts, brs, writeBrs, coverage, writeCoverage, updateCoverage, addCoverage, removeCoverage, coverageIssues, deleteAll };
 }
 
 /**
@@ -683,7 +685,7 @@ export function MilitaryIncomeSection({ scenario, write, open, onToggle, canUse 
 }
 
 export function MilitaryTspSection({ scenario, write, open, onToggle, canUse }) {
-  const { m, writeMil, mil, uts, writeUts, brs, writeBrs, active } = useMilitary({ scenario, write, canUse });
+  const { m, writeMil, mil, uts, writeUts, brs, writeBrs, brsAllowed, active } = useMilitary({ scenario, write, canUse });
   if (!active) return null;
   return (
     <Section id="military-tsp" title="Uniformed-services TSP and BRS" summary={tspSummary(m)} open={open} onToggle={onToggle}>
@@ -743,7 +745,14 @@ export function MilitaryTspSection({ scenario, write, open, onToggle, canUse }) 
           </div>
 
           {/* ------------------------------------------------ BRS extras */}
-          {uts.coverageSystem === 'brs' ? (
+          {uts.coverageSystem === 'brs' && !brsAllowed ? (
+            <div data-testid="brs-extras-pro">
+              <SubHeading hint="Continuation pay and the lump-sum scenario are part of Pro. The BRS pension itself, the service contributions above, and every BRS warning stay free.">
+                <span className="inline-flex items-center gap-2">BRS: continuation pay and lump sum <ProBadge /></span>
+              </SubHeading>
+              <ProNotice reason="military_brs_pro">Model an official continuation-pay offer and the 25% or 50% lump sum against the pension with Pro.</ProNotice>
+            </div>
+          ) : uts.coverageSystem === 'brs' ? (
             <div data-testid="brs-extras">
               <SubHeading hint="Continuation pay is modeled only from your service's official offer; there is no standard multiple. The lump sum needs the DoD discount rate for the year, entered from the memorandum.">
                 BRS: continuation pay and lump sum

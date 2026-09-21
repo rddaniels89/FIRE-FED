@@ -12,6 +12,7 @@ import { formToInputs } from './militaryCalculatorForm';
 import { createMilitaryRetirementReportPdf } from '../../lib/pdf/militaryReport';
 import MilitaryPathWizard from './MilitaryPathWizard';
 import { INPUT_PROVENANCE, ISSUE_SEVERITY, MILITARY_RESULT_STATUS } from '../../lib/military/status';
+import { FEATURES, hasEntitlement } from '../../lib/entitlements';
 import { MILITARY_CONNECTIONS } from '../../lib/scenarios/schema';
 import MilitaryIssues, { StatusBadge } from '../plan/MilitaryIssues';
 import HowCalculated from '../HowCalculated';
@@ -118,7 +119,9 @@ export default function PublicMilitaryRetirementCalculator() {
   const [form, setForm] = useState(defaultForm);
   const [view, setView] = useState('audit');
   const [saved, setSaved] = useState(null);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, entitlements } = useAuth();
+  // Launch-gated: open to everyone until VITE_MILITARY_LAUNCH_GATES is on, Pro after.
+  const canPdf = hasEntitlement(entitlements, FEATURES.MILITARY_PDF);
   const { currentScenario, updateCurrentScenario } = useScenario();
 
   const hasEngaged = useRef(false);
@@ -474,13 +477,19 @@ export default function PublicMilitaryRetirementCalculator() {
           {/* Results */}
           <div className="space-y-6" aria-live="polite">
             {result && <ResultPanel result={result} isReserve={isReserve} view={view} setView={setView} />}
-            {result && result.status !== MILITARY_RESULT_STATUS.NOT_SUPPORTED && (
+            {result && result.status !== MILITARY_RESULT_STATUS.NOT_SUPPORTED && canPdf && (
               <div className="flex flex-wrap items-center gap-3">
                 <button type="button" className="btn-secondary btn-sm" onClick={downloadPdf} disabled={pdfBusy}>
                   {pdfBusy ? 'Preparing PDF…' : 'Download this calculation (PDF)'}
                 </button>
                 <span className="text-xs text-slate-500 dark:text-slate-400">Same figures, status, warnings, sources, and rules version as this page. Generated in your browser; nothing is sent anywhere.</span>
               </div>
+            )}
+            {result && result.status !== MILITARY_RESULT_STATUS.NOT_SUPPORTED && !canPdf && (
+              <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="pdf-pro-notice">
+                The Military Retirement Report (PDF) is part of Pro. Everything on this page, including every warning and source, stays free.{' '}
+                <Link to={isAuthenticated ? '/pro-features' : '/signin?mode=signup'} className="underline underline-offset-2 navy-text">{isAuthenticated ? 'See Pro' : 'Create a free account'}</Link>
+              </p>
             )}
 
             {isAuthenticated ? (

@@ -88,6 +88,8 @@ export default function MilitaryPlanPage() {
   const { entitlements } = useAuth();
   const canScenarios = hasEntitlement(entitlements, FEATURES.MILITARY_SCENARIOS);
   const canAnalysis = hasEntitlement(entitlements, FEATURES.MILITARY_ANALYSIS);
+  // Launch-gated: open to everyone until VITE_MILITARY_LAUNCH_GATES is on, Pro after.
+  const canBrs = hasEntitlement(entitlements, FEATURES.MILITARY_BRS);
 
   const derived = useMemo(() => {
     if (!currentScenario) return null;
@@ -444,7 +446,13 @@ export default function MilitaryPlanPage() {
             ) : null}
             <MilitaryIssues issues={mil.issues.filter((i) => i.entity?.type === 'tspAccount' || String(i.code).startsWith('MIL_TSP') || String(i.code).startsWith('MIL_USERRA'))} className="mt-4" />
           </div>
-          {mil.brs ? (
+          {mil.brs && !canBrs ? (
+            <div className="card p-6 mt-4" data-testid="brs-value-stack-pro">
+              <h3 className="text-base font-semibold navy-text mb-2 inline-flex items-center gap-2">BRS value stack <ProBadge /></h3>
+              <ProNotice reason="military_brs_pro">Continuation pay, the lump-sum scenario, and the four-part value stack are part of Pro. The BRS pension and its warnings are shown above and stay free.</ProNotice>
+              <MilitaryIssues issues={mil.issues.filter((i) => String(i.code).startsWith('MRT_BRS'))} className="mt-4" />
+            </div>
+          ) : mil.brs ? (
             <div className="card p-6 mt-4" data-testid="brs-value-stack">
               <h3 className="text-base font-semibold navy-text mb-2">BRS value stack</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Four components, shown apart. Different units are never added into one number.</p>

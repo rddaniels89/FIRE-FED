@@ -169,6 +169,32 @@ describe('MilitaryPlanPage', () => {
     expect(within(view).getByText(/FireFed does not compute concurrent receipt/)).toBeInTheDocument();
   });
 
+  it('after launch the BRS value stack is Pro while the BRS warnings stay free', () => {
+    vi.stubEnv('VITE_MILITARY_LAUNCH_GATES', 'true');
+    try {
+      mocks.entitlements = { features: {} };
+      mocks.scenario = scenario({
+        connection: 'self',
+        tsp: { uniformedServices: { enabled: true, coverageSystem: 'brs', monthsOfService: 96, contributing: true, monthlyBasicPay: 3000, employeePercent: 5 } },
+        brs: { continuationPay: { offered: true, multiple: 2.5, monthlyBasicPay: 3000, paymentDate: '2027-06-01', provenance: 'user_estimate' }, lumpSum: { electionPercent: 25 } },
+      });
+      renderPage();
+      expect(screen.queryByTestId('brs-value-stack')).not.toBeInTheDocument();
+      const pro = screen.getByTestId('brs-value-stack-pro');
+      expect(pro).toHaveTextContent('part of Pro');
+      // The offer-required block and the missing-rate block are still shown.
+      expect(pro.querySelector('[data-issue-code="MRT_BRS_CP_OFFER_REQUIRED"]')).not.toBeNull();
+      expect(pro.querySelector('[data-issue-code="MRT_BRS_LSDR_MISSING"]')).not.toBeNull();
+      // Pro sees the stack.
+      document.body.innerHTML = '';
+      mocks.entitlements = { features: { [FEATURES.MILITARY_BRS]: true } };
+      renderPage();
+      expect(screen.getByTestId('brs-value-stack')).toBeInTheDocument();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('never uses recommendation language', () => {
     mocks.entitlements = { features: { [FEATURES.MILITARY_SCENARIOS]: true, [FEATURES.MILITARY_ANALYSIS]: true } };
     mocks.scenario = scenario({ connection: 'self', servicePeriods: [PERIOD], retiredPay: { receives: 'yes', type: 'regular_longevity' }, incomeStreams: [{ id: 'rp', type: 'longevity_retired_pay', grossAmount: 3000, amountStatus: 'official' }] });

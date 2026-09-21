@@ -754,7 +754,15 @@ export function createRetirementReportPdf({
   // ---------------- Military service and income (when recorded) ----------------
   const mil = plan.military;
   const milStreams = mil?.incomeStreams ?? [];
-  if (mil && (mil.hasRecordedService || milStreams.length > 0 || mil.retiredPay?.receives === 'yes')) {
+  const militaryRecorded = Boolean(mil && (mil.hasRecordedService || milStreams.length > 0 || mil.retiredPay?.receives === 'yes'));
+  if (militaryRecorded && computed?.militaryPdfAllowed === false) {
+    // Launch-gated: the military pages are Pro. Say what is missing rather than
+    // let the report read as complete.
+    doc.section(null, 'Military service and income');
+    doc.paragraph(
+      'This scenario records military service or military-connected income. The military pages of this report (service credit, deposit, retired pay, income streams, TSP coordination, coverage, and the gross-to-net ledger) are part of Pro and are omitted here. The Military + Federal Plan page in the app shows all of it, with every warning and source, at no charge. The household figures in the other sections already include the military income the plan projects.'
+    );
+  } else if (militaryRecorded) {
     doc.section(null, 'Military service and income');
     doc.keyValues([
       { label: 'Service FireFed modeled', value: mil.creditYears > 0 ? `${years(mil.creditYears)}${mil.status === 'estimate_only' ? ' (estimate)' : ''}` : `None credited${mil.reason ? ` (${String(mil.reason).replace(/_/g, ' ')})` : ''}` },

@@ -454,6 +454,8 @@ function SummaryDashboard() {
         chartImages,
         computed: {
           generatedAt: new Date().toLocaleString(),
+          // Launch-gated: the military pages of the report are Pro once the switch is on.
+          militaryPdfAllowed: hasEntitlement(entitlements, FEATURES.MILITARY_PDF),
           swr: swrLocal,
           pensionEndAge: pensionEndAgeLocal,
           mra: mraLocal,

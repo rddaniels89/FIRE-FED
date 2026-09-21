@@ -211,6 +211,25 @@ describe('PublicMilitaryRetirementCalculator', () => {
     expect(mocks.track).toHaveBeenCalledWith('military_calculation_saved', expect.objectContaining({ path: 'regular' }));
   });
 
+  it('after launch the PDF is Pro for an anonymous visitor, and the page itself is untouched', () => {
+    vi.stubEnv('VITE_MILITARY_LAUNCH_GATES', 'true');
+    try {
+      renderPage();
+      fireEvent.click(screen.getByRole('radio', { name: /Active or regular retirement/ }));
+      fill('DIEMS (date you first entered service)', '2006-06-01');
+      fireEvent.click(screen.getByRole('button', { name: 'Use High-36' }));
+      fill('Pay entry base date (PEBD)', '2006-06-01');
+      fill('Retirement date', '2027-01-01');
+      fill('Held from', '2018-01-01');
+      expect(screen.getByTestId('result-cards')).toBeInTheDocument();
+      expect(screen.getByTestId('formula-audit')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Download this calculation (PDF)' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('pdf-pro-notice')).toHaveTextContent('every warning and source, stays free');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('formToInputs: quick mode never claims official provenance and the reserve block only exists on the reserve path', () => {
     const base = { path: 'regular', mode: 'quick', system: 'high_36', systemConfirmation: 'official', diems: '2006-06-01', cbsElected: false, brsOptIn: false, payEntryBaseDate: '2006-06-01', retirementDate: '2026-07-01', ageAtRetirement: '38', serviceYears: '20', serviceMonths: '3', serviceDays: '9', serviceProvenance: 'user_entered_official', gradePeriods: [{ id: 'g', grade: 'E7', startDate: '2018-01-01', endDate: '' }], retiredGradeConfirmed: true, inflationPct: '2.5', basicPayGrowthPct: '3', officialMonthlyGross: '3000', officialAsOfDate: '', reserve: { officialTotalPoints: '', officialQualifyingYears: '', pointsProvenance: 'user_estimate', birthDate: '', retiredReserveStatus: 'unknown', separationDate: '', officialEligibilityDate: '', reducedAgePeriods: [], retirementYears: [] } };
     const quick = formToInputs(base);

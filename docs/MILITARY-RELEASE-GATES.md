@@ -51,6 +51,21 @@ See "Data that needs a human eye before release" in `MILITARY-ROADMAP.md` and th
 pending table in `docs/MILITARY-VERIFICATION.md`. None of it is used silently:
 each item carries an issue code on the result it affects.
 
+## Free and Pro boundary (decided 2026-09-20)
+
+Keep the beta split; gate the PDF and the BRS suite at public launch.
+
+| Always free | Pro today (beta) | Pro at launch (`VITE_MILITARY_LAUNCH_GATES=true`) |
+|---|---|---|
+| Onboarding and the persona question; service periods; deposit estimate and official balance; the one whole-plan service-credit comparison; every income stream and its tax character; SBP election facts and the gross-to-net ledger; dual TSP coordination and the match-at-risk warning; coverage periods and their conflicts; the anonymous calculator with formula audit and pay-base table; every warning, status, and source | Retired-pay waiver comparison (`MILITARY_SCENARIOS`); deposit present value, break-even, sensitivity, and the lump-sum comparison (`MILITARY_ANALYSIS`); survivor death ages (`HOUSEHOLD`) | Military Retirement Report PDF and the military pages of the household report (`MILITARY_PDF`); continuation pay, lump-sum scenario, and the value stack (`MILITARY_BRS`) |
+
+The launch switch is one environment variable. Before it is set, every user,
+including an anonymous calculator visitor, has both launch-gated features;
+after it, only Pro. `entitlementsLaunchGates.test.js` pins both states. The
+BRS defined benefit (the pension itself) and all BRS warnings stay free in
+both states; a free user who entered BRS facts before launch keeps the
+warnings and loses only the comparison views.
+
 ## Feature flags
 
 Material rules can be turned off without disabling manual official-income entry:

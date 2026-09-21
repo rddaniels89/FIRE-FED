@@ -186,6 +186,21 @@ describe('MilitarySection', () => {
     expect(screen.queryByTestId('brs-extras')).not.toBeInTheDocument();
   });
 
+  it('after launch the BRS extras panel is Pro; the TSP account and its warnings stay free', () => {
+    vi.stubEnv('VITE_MILITARY_LAUNCH_GATES', 'true');
+    try {
+      renderTsp(withMilitary({ connection: 'self', tsp: { uniformedServices: { enabled: true, coverageSystem: 'brs', monthsOfService: 96, contributing: true, monthlyBasicPay: 3000, employeePercent: 5 } } }));
+      expect(screen.queryByTestId('brs-extras')).not.toBeInTheDocument();
+      expect(screen.getByTestId('brs-extras-pro')).toHaveTextContent('part of Pro');
+      expect(screen.getByTestId('tsp-coordination-summary')).toBeInTheDocument();
+      cleanupRender();
+      renderTsp(withMilitary({ connection: 'self', tsp: { uniformedServices: { enabled: true, coverageSystem: 'brs', monthsOfService: 96 } } }), { canUse: () => true });
+      expect(screen.getByTestId('brs-extras')).toBeInTheDocument();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('flags a shared-limit overrun on the section itself', () => {
     renderTsp(withMilitary({ connection: 'self', tsp: { uniformedServices: { enabled: true, coverageSystem: 'brs', monthsOfService: 96, contributing: true, monthlyBasicPay: 8000, employeePercent: 60, ytdEmployeeDeferrals: 20000 } } }));
     expect(screen.getByText(/exceed this year’s elective-deferral limit/)).toBeInTheDocument();

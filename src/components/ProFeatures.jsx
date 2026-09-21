@@ -33,6 +33,8 @@ const FEATURE_NOTES = Object.freeze({
   [FEATURES.IRMAA]: 'The Medicare surcharge your income triggers',
   [FEATURES.MILITARY_SCENARIOS]: 'Keep, waive, or exception: the whole plan three ways',
   [FEATURES.MILITARY_ANALYSIS]: 'What the military deposit is worth, year by year',
+  [FEATURES.MILITARY_PDF]: 'The calculation and the plan, on paper, with every source',
+  [FEATURES.MILITARY_BRS]: 'Continuation pay and the 25%/50% lump sum against the pension',
 });
 
 const PRO_FEATURE_KEYS = Object.values(FEATURES);
