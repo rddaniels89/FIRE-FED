@@ -218,26 +218,45 @@ export function calculateMra10ReductionPercent({ annuityStartAge, mra = DEFAULT_
   return Math.max(0, fullMonthsUnder62 * MRA10_REDUCTION_PER_MONTH);
 }
 
+/**
+ * Every FERS annuity, immediate or deferred, requires five years of *civilian*
+ * service. Credited military service counts toward the age-and-service doors
+ * but cannot supply those five years. 5 U.S.C. 8410.
+ */
+export const FERS_MINIMUM_CIVILIAN_YEARS = 5;
+
+/**
+ * `totalYearsOfService` is creditable service for the age-and-service tests,
+ * including any credited military service. `civilianYearsOfService` is the
+ * civilian part alone; it defaults to the total for callers with no military
+ * credit, and it gates the five-year minimum when supplied.
+ */
 export function evaluateFersRegularEligibility({
   age,
   totalYearsOfService,
+  civilianYearsOfService,
   mra = DEFAULT_MRA,
 }) {
   const a = Number(age ?? 0);
   const y = Number(totalYearsOfService ?? 0);
+  const civilian = civilianYearsOfService === undefined || civilianYearsOfService === null ? y : Number(civilianYearsOfService);
   const mraAge = Number(mra ?? DEFAULT_MRA);
+  const meetsCivilianMinimum = civilian >= FERS_MINIMUM_CIVILIAN_YEARS;
 
   const immediateFull =
-    (a >= 62 && y >= 5) ||
+    meetsCivilianMinimum &&
+    ((a >= 62 && y >= 5) ||
     (a >= 60 && y >= 20) ||
-    (a >= mraAge && y >= 30);
+    (a >= mraAge && y >= 30));
 
-  const immediateMra10 = !immediateFull && a >= mraAge && y >= 10;
+  const immediateMra10 = meetsCivilianMinimum && !immediateFull && a >= mraAge && y >= 10;
 
-  const deferred = y >= 5;
+  const deferred = meetsCivilianMinimum && y >= 5;
 
   const messages = [];
-  if (immediateFull) {
+  if (!meetsCivilianMinimum && y >= 5) {
+    messages.push('Not eligible: FERS requires 5 years of civilian service, which military service cannot supply.');
+  } else if (immediateFull) {
     messages.push('Eligible for immediate retirement (unreduced annuity)');
   } else if (immediateMra10) {
     const reduction = calculateMra10ReductionPercent({ annuityStartAge: a, mra: mraAge });
@@ -254,6 +273,8 @@ export function evaluateFersRegularEligibility({
   return {
     age: a,
     totalYearsOfService: y,
+    civilianYearsOfService: civilian,
+    meetsCivilianMinimum,
     mra: mraAge,
     isEligibleImmediate: immediateFull || immediateMra10,
     isEligibleImmediateUnreduced: immediateFull,
@@ -266,19 +287,27 @@ export function evaluateFersRegularEligibility({
 export function findEarliestFersImmediateRetirementAge({
   currentAge,
   totalYearsOfService,
+  militaryCreditYears = 0,
   mra = DEFAULT_MRA,
   maxAgeToCheck = 70,
 }) {
   const ageNow = Number(currentAge ?? 0);
   const yearsNow = Number(totalYearsOfService ?? 0);
+  const military = Math.max(0, Number(militaryCreditYears) || 0);
   const maxAge = Number(maxAgeToCheck ?? 70);
 
   if (!Number.isFinite(ageNow) || !Number.isFinite(yearsNow)) return null;
   if (ageNow <= 0 || maxAge < ageNow) return null;
 
   for (let a = Math.ceil(ageNow); a <= maxAge; a++) {
-    const projectedYears = yearsNow + Math.max(0, a - ageNow);
-    const res = evaluateFersRegularEligibility({ age: a, totalYearsOfService: projectedYears, mra });
+    // Only civilian service grows with time; the military credit is fixed.
+    const civilianYears = yearsNow + Math.max(0, a - ageNow);
+    const res = evaluateFersRegularEligibility({
+      age: a,
+      totalYearsOfService: civilianYears + military,
+      civilianYearsOfService: civilianYears,
+      mra,
+    });
     if (res.isEligibleImmediate) return a;
   }
   return null;
@@ -335,26 +364,37 @@ export function calculateFersResults({
   // or postponed annuity that begins at 62 does not earn it, so the age the
   // multiplier keys off can differ from the age the annuity starts.
   multiplierAge = undefined,
+  // Military service credited by a paid deposit, in years. It behaves like a
+  // third service bucket beside civilian service and sick leave: it counts
+  // toward eligibility and the computation (and the 20 years behind the 1.1%
+  // factor), but it cannot supply the five civilian years, cannot raise the
+  // High-3, and is kept out of the supplement's civilian numerator by callers.
+  militaryCreditYears = 0,
 }) {
   const totalYears = Number(yearsOfService ?? 0) + Number(monthsOfService ?? 0) / 12;
   const ageNow = Number(currentAge ?? 0);
   const retireAge = Number(retirementAge ?? 0);
   const endAge = Number(retirementEndAge ?? DEFAULT_RETIREMENT_END_AGE);
+  const militaryYears = Math.max(0, Number(militaryCreditYears) || 0);
 
-  // Service that counts toward eligibility. Sick leave is deliberately excluded:
-  // it cannot be used to qualify for retirement.
+  // Civilian service at the retirement date. `yearsOfService` is civilian by
+  // definition; military time arrives through `militaryCreditYears`.
   const projectedYears =
     includeFutureService ? totalYears + Math.max(0, retireAge - ageNow) : totalYears;
 
-  const sickLeaveYears = convertSickLeaveHoursToServiceYears(unusedSickLeaveHours);
-  const computationYears = projectedYears + sickLeaveYears;
+  // Service that counts toward eligibility: civilian plus credited military.
+  // Sick leave is deliberately excluded: it cannot be used to qualify.
+  const eligibilityYears = projectedYears + militaryYears;
 
-  // The 1.1% factor requires age 62 with 20 years. Read conservatively here as a
-  // threshold sick leave cannot satisfy, consistent with sick leave being barred
-  // from establishing eligibility — so the multiplier keys off service alone.
+  const sickLeaveYears = convertSickLeaveHoursToServiceYears(unusedSickLeaveHours);
+  const computationYears = eligibilityYears + sickLeaveYears;
+
+  // The 1.1% factor requires age 62 with 20 years of creditable service. Sick
+  // leave cannot satisfy the 20 (it establishes nothing); credited military
+  // service can, because it is creditable service in the statute's sense.
   const multiplier = calculateFersMultiplier({
     retirementAge: multiplierAge === undefined ? retireAge : Number(multiplierAge),
-    totalYearsOfService: projectedYears,
+    totalYearsOfService: eligibilityYears,
   });
 
   // Special provision service is computed at 1.7% for the first 20 years and
@@ -371,7 +411,8 @@ export function calculateFersResults({
   // MRA+10 route carries an age reduction and the unreduced routes do not.
   const eligibility = evaluateFersRegularEligibility({
     age: retireAge,
-    totalYearsOfService: projectedYears,
+    totalYearsOfService: eligibilityYears,
+    civilianYearsOfService: projectedYears,
     mra,
   });
 
@@ -429,12 +470,16 @@ export function calculateFersResults({
     totalYears,
     projectedYears,
     service: {
-      // Eligibility and computation differ once sick leave is in play, and the
-      // difference is the whole point of tracking both.
-      eligibilityYears: projectedYears,
+      // Three buckets, because each behaves differently: civilian service does
+      // everything, military credit does everything except vest, and sick
+      // leave only raises the computation.
+      civilianYears: projectedYears,
+      militaryCreditYears: militaryYears,
+      eligibilityYears,
       sickLeaveYears,
       computationYears,
       unusedSickLeaveHours: Math.max(0, Number(unusedSickLeaveHours ?? 0)),
+      meetsCivilianMinimum: eligibility.meetsCivilianMinimum,
     },
     survivor,
     specialProvision: specialProvisionAnnuity

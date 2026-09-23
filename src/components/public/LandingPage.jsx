@@ -35,7 +35,7 @@ export default function LandingPage() {
       <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-12">
         <div className="max-w-3xl">
           <p className="text-sm font-semibold uppercase tracking-wider gold-accent mb-3">
-            For FERS employees
+            For FERS employees and military-connected households
           </p>
           <h1 className="text-4xl sm:text-5xl font-bold text-slate-900 dark:text-white leading-tight text-balance">
             Know what your federal retirement is actually worth.
@@ -44,6 +44,14 @@ export default function LandingPage() {
             Most retirement calculators do not know what a GS-13 is. FireFed is one model of your whole
             path — from today, through the day you leave, to the day Social Security starts and beyond —
             built on the federal rules that decide the number.
+          </p>
+          <p className="mt-3 text-lg text-slate-600 dark:text-slate-300">
+            Veterans in federal service, Guard and Reserve members, and military retirees are covered too:
+            military service credit, retired pay, VA income, and TRICARE sit on the same timeline. Start with the{' '}
+            <Link to="/calculators/military-retirement" className="underline underline-offset-2 navy-text" onClick={() => trackEvent('landing_cta_clicked', { target: 'military_calculator', placement: 'hero' })}>
+              Military Retirement Calculator
+            </Link>{' '}
+            if that is you.
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row gap-3">
@@ -107,6 +115,16 @@ export default function LandingPage() {
               <h3 className="font-semibold text-lg text-slate-900 dark:text-white mb-1">Special Retirement Supplement</h3>
               <p className="text-sm text-slate-600 dark:text-slate-300">
                 What the SRS pays you between retirement and 62 — and whether you qualify at all.
+              </p>
+              <span className="inline-flex items-center gap-1.5 mt-4 text-sm font-medium navy-text">
+                Open the calculator
+                <ArrowRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              </span>
+            </Link>
+            <Link to="/calculators/military-retirement" className="card p-6 block hover:border-navy-400 dark:hover:border-navy-500">
+              <h3 className="font-semibold text-lg text-slate-900 dark:text-white mb-1">Military Retirement Calculator</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Active-duty and Guard/Reserve retired pay under Final Pay, High-36, REDUX, and BRS, with every step shown.
               </p>
               <span className="inline-flex items-center gap-1.5 mt-4 text-sm font-medium navy-text">
                 Open the calculator

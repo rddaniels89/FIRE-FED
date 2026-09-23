@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
 import { useScenario } from '../contexts/ScenarioContext';
 import { FERS_HIRE_COHORT_LABELS } from '../lib/calculations/fers';
+import { PROFILE_KINDS, PROFILE_KIND_LABELS, isFederalEmployeeKind, profileKindUpdates } from '../lib/scenarios/schema';
 
 const STORAGE_KEY = 'firefed_onboarding_v2_dismissed';
 const PREFS_KEY = 'firefed_onboarding_v2_prefs';
@@ -42,6 +43,28 @@ const GOALS = Object.freeze([
     to: '/fers-pension',
   },
 ]);
+
+/** Goals for a plan with no federal job: the military calculator and the military plan. */
+const MILITARY_GOALS = Object.freeze([
+  {
+    id: 'military_pay',
+    title: 'Estimate my military retired pay',
+    description: 'Active, Guard and Reserve, medical, or TERA, with every step shown. No account needed.',
+    fields: [],
+    to: '/calculators/military-retirement',
+  },
+  {
+    id: 'military_plan',
+    title: 'Build my Military + Federal Plan',
+    description: 'Retired pay, VA income, the uniformed-services TSP, and health coverage on one timeline against your spending.',
+    fields: ['currentAge', 'monthlyIncomeGoal', 'separationAge'],
+    to: '/plan/military',
+  },
+]);
+
+const goalsFor = (kind) => (isFederalEmployeeKind(kind) ? GOALS : MILITARY_GOALS);
+
+const KIND_OPTIONS = Object.entries(PROFILE_KIND_LABELS).map(([value, label]) => ({ value, label }));
 
 const FIELD_DEFS = Object.freeze({
   currentAge: { label: 'Current age', min: 16, max: 100 },
@@ -172,6 +195,7 @@ function OnboardingCard() {
   const [dismissed, setDismissed] = useState(() => readStorage(STORAGE_KEY) === 'true');
   const [step, setStep] = useState(1);
   const [goalId, setGoalId] = useState(() => safeParseJson(readStorage(PREFS_KEY), {})?.goalId ?? null);
+  const [kind, setKind] = useState(() => currentScenario?.profile?.kind ?? PROFILE_KINDS.FEDERAL);
   const [values, setValues] = useState({});
   const [seededFor, setSeededFor] = useState(null);
   const headingRef = useRef(null);
@@ -202,8 +226,11 @@ function OnboardingCard() {
 
   if (dismissed) return null;
 
-  const goal = GOALS.find((g) => g.id === goalId) ?? null;
+  const goals = goalsFor(kind);
+  const goal = goals.find((g) => g.id === goalId) ?? null;
+  const federal = isFederalEmployeeKind(kind);
   const setValue = (key, value) => setValues((prev) => ({ ...prev, [key]: value }));
+  const fieldLabel = (key) => (key === 'separationAge' && !federal ? 'Age you stop working (a guess is fine)' : FIELD_DEFS[key].label);
 
   const missingRequired = goal
     ? goal.fields.filter((key) => !FIELD_DEFS[key].optional && parseNumber(values[key]) === null)
@@ -214,12 +241,17 @@ function OnboardingCard() {
     setDismissed(true);
   };
 
-  const finish = () => {
-    if (!goal) return;
-    updateCurrentScenario(buildOnboardingUpdates(goal, values));
+  // One write: who they are (with the military connection and, for a plan
+  // with no federal job, cleared FERS defaults) plus the goal's numbers.
+  const finishWith = (g) => {
+    if (!g) return;
+    const merged = profileKindUpdates(currentScenario, kind);
+    for (const [block, patch] of Object.entries(buildOnboardingUpdates(g, values))) merged[block] = { ...(merged[block] ?? {}), ...patch };
+    updateCurrentScenario(merged);
     dismiss();
-    navigate(goal.to);
+    navigate(g.to);
   };
+  const finish = () => finishWith(goal);
 
   const inputClass = 'input-field w-full';
 
@@ -262,8 +294,25 @@ function OnboardingCard() {
       </div>
 
       {step === 1 ? (
+        <fieldset className="mb-5" data-testid="onboarding-kind">
+          <legend className="label">First, which describes you?</legend>
+          <div className="grid sm:grid-cols-2 gap-2 mt-1">
+            {KIND_OPTIONS.map((o) => (
+              <label key={o.value} className={`flex items-center gap-2 rounded-lg border p-3 text-sm cursor-pointer ${kind === o.value ? 'border-navy-600 bg-navy-50 dark:bg-navy-900/30' : 'border-slate-200 dark:border-slate-700'}`}>
+                <input type="radio" name="onboarding-kind" value={o.value} checked={kind === o.value} onChange={() => { setKind(o.value); setGoalId(null); }} />
+                <span>{o.label}</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+            {federal ? 'The questions below are about federal retirement; military service is added on the same plan.' : 'No federal retirement questions: the plan is built around military retired pay, VA income, TSP, and health coverage.'}
+          </p>
+        </fieldset>
+      ) : null}
+
+      {step === 1 ? (
         <div className="grid sm:grid-cols-2 gap-3" role="group" aria-label="Goals">
-          {GOALS.map((g) => (
+          {goals.map((g) => (
             <button
               key={g.id}
               type="button"
@@ -274,7 +323,9 @@ function OnboardingCard() {
               }`}
               onClick={() => {
                 setGoalId(g.id);
-                setStep(2);
+                // A goal with nothing to ask goes straight to its page.
+                if (g.fields.length === 0) finishWith(g);
+                else setStep(2);
               }}
             >
               <span className="block font-medium text-slate-900 dark:text-white">{g.title}</span>
@@ -288,7 +339,10 @@ function OnboardingCard() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (!missingRequired.length) setStep(3);
+            if (missingRequired.length) return;
+            // The optional third step is FERS-specific (hire cohort, FEHB years).
+            if (federal) setStep(3);
+            else finish();
           }}
         >
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -298,7 +352,7 @@ function OnboardingCard() {
               return (
                 <div key={key}>
                   <label className="label" htmlFor={id}>
-                    {def.label}
+                    {fieldLabel(key)}
                     {def.optional ? <span className="text-slate-400 font-normal"> (optional)</span> : null}
                   </label>
                   <div className="relative">
@@ -339,8 +393,8 @@ function OnboardingCard() {
               aria-disabled={missingRequired.length > 0}
               aria-describedby="onboarding-missing"
             >
-              Next
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              {federal ? 'Next' : 'Finish'}
+              {federal ? <ArrowRight className="h-4 w-4" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
             </button>
             <span id="onboarding-missing" role="status" className="text-xs text-slate-500 dark:text-slate-400">
               {missingRequired.length ? 'Fill in every field to continue.' : ''}

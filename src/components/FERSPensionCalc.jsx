@@ -19,7 +19,7 @@ import { SURVIVOR_ELECTIONS, calculateFersResults } from '../lib/calculations/fe
 import { calculateSrs } from '../lib/calculations/srs';
 import { evaluateAllRetirementPaths } from '../lib/calculations/retirementPaths';
 import { DEFAULT_LOCALITY_CODE, LOCALITY_AREAS, calculateGsSalary } from '../lib/calculations/gsPay';
-import { evaluateMilitaryDepositDecision } from '../lib/calculations/militaryDeposit';
+import { compareDepositInCalculator } from '../lib/military/deposit';
 import { evaluateFehbContinuation } from '../lib/calculations/fehb';
 import TooltipWrapper from './TooltipWrapper';
 import NumberStepper from './NumberStepper';
@@ -125,17 +125,8 @@ function FERSPensionCalc() {
     paths: [],
     fehb: { outcome: 'continues', continues: true, meetsFiveYearRule: true, yearsShort: 0, message: '' },
     specialProvision: null,
-    military: {
-      deposit: { principal: 0, interest: 0, total: 0, interestFreeYearsRemaining: 2, isAccruingInterest: false },
-      militaryYears: 0,
-      annualAnnuityIncrease: 0,
-      monthlyAnnuityIncrease: 0,
-      breakEvenYears: null,
-      lifetimeIncrease: 0,
-      netLifetimeGain: 0,
-      isWorthPaying: false,
-      addsEligibility: false,
-    },
+    // Null until the user enters military service; see compareDepositInCalculator.
+    military: null,
     service: { eligibilityYears: 0, sickLeaveYears: 0, computationYears: 0, unusedSickLeaveHours: 0 },
     // Must exist before the first debounced calculation, or the panels below
     // dereference undefined on the very first render.
@@ -343,12 +334,24 @@ function FERSPensionCalc() {
       yearsOfService: fers.service.eligibilityYears,
     });
 
-    const military = evaluateMilitaryDepositDecision({
+    // The deposit question is answered by running the same engine twice, with
+    // and without the credit, never by a shortcut formula. The calculator has
+    // no dates, so interest is left to the agency's figure.
+    const military = compareDepositInCalculator({
       militaryYears: numericInputs.militaryYears,
       militaryBasicPay: numericInputs.militaryBasicPay,
-      high3Salary: numericInputs.high3Salary,
-      multiplier: fers.stayFed.multiplier,
-      yearsOfAnnuityExpected: Math.max(0, 85 - numericInputs.retirementAge),
+      calculateFers: calculateFersResults,
+      fersInputs: {
+        yearsOfService: numericInputs.yearsOfService,
+        monthsOfService: numericInputs.monthsOfService,
+        high3Salary: numericInputs.high3Salary,
+        currentAge: numericInputs.currentAge,
+        retirementAge: numericInputs.retirementAge,
+        includeFutureService: true,
+        unusedSickLeaveHours: numericInputs.unusedSickLeaveHours,
+        survivorElection: numericInputs.survivorElection,
+        isSpecialProvision: numericInputs.isSpecialProvision,
+      },
     });
 
     const fehb = evaluateFehbContinuation({ yearsEnrolled: numericInputs.fehbYearsEnrolled });
@@ -848,40 +851,66 @@ function FERSPensionCalc() {
                 </div>
               )}
 
-              {results.military.militaryYears > 0 && results.military.deposit.total > 0 && (
+              {results.military && (
                 <div className="mt-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                   <div className="font-medium text-slate-900 dark:text-white text-sm mb-2">
-                    Military service deposit
+                    Military service deposit: two scenarios
                   </div>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <div className="text-slate-600 dark:text-slate-400">Deposit owed</div>
+                      <div className="text-slate-600 dark:text-slate-400">Without the deposit</div>
                       <div className="font-medium text-slate-900 dark:text-white">
-                        ${Math.round(results.military.deposit.total).toLocaleString()}
+                        {results.military.without.isEligible
+                          ? `$${Math.round(results.military.without.annualPension).toLocaleString()}/yr`
+                          : 'No immediate annuity'}
                       </div>
                     </div>
                     <div>
-                      <div className="text-slate-600 dark:text-slate-400">Adds to your annuity</div>
-                      <div className="font-medium text-green-700 dark:text-green-400">
-                        +${Math.round(results.military.annualAnnuityIncrease).toLocaleString()}/yr
+                      <div className="text-slate-600 dark:text-slate-400">With the deposit paid</div>
+                      <div className="font-medium text-slate-900 dark:text-white">
+                        {results.military.withCredit.isEligible
+                          ? `$${Math.round(results.military.withCredit.annualPension).toLocaleString()}/yr`
+                          : 'No immediate annuity'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-600 dark:text-slate-400">Estimated principal</div>
+                      <div className="font-medium text-slate-900 dark:text-white">
+                        {results.military.principal > 0 ? `$${Math.round(results.military.principal).toLocaleString()}` : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-600 dark:text-slate-400">Difference</div>
+                      <div className="font-medium text-slate-900 dark:text-white">
+                        {results.military.annualIncrease > 0
+                          ? `+$${Math.round(results.military.annualIncrease).toLocaleString()}/yr`
+                          : '$0/yr'}
+                        {results.military.multiplierChanged ? ' (multiplier changes)' : ''}
                       </div>
                     </div>
                   </div>
-                  {results.military.breakEvenYears !== null && (
+                  {results.military.eligibilityChanged && (
+                    <p className="text-xs text-slate-700 dark:text-slate-300 mt-3">
+                      Under the facts entered, the credited service changes whether an immediate annuity is
+                      available at this age: {results.military.withCredit.message}
+                    </p>
+                  )}
+                  {results.military.simpleBreakEvenYears !== null && (
                     <p className="text-xs text-slate-600 dark:text-slate-400 mt-3">
-                      You get the deposit back in{' '}
+                      The estimated principal equals{' '}
                       <strong className="text-slate-900 dark:text-white">
-                        {results.military.breakEvenYears < 1
-                          ? `${Math.round(results.military.breakEvenYears * 12)} months`
-                          : `${results.military.breakEvenYears.toFixed(1)} years`}
-                      </strong>
-                      , then keep the increase for life &mdash; about{' '}
-                      ${Math.round(results.military.netLifetimeGain).toLocaleString()} net.
+                        {results.military.simpleBreakEvenYears < 1
+                          ? `${Math.round(results.military.simpleBreakEvenYears * 12)} months`
+                          : `${results.military.simpleBreakEvenYears.toFixed(1)} years`}
+                      </strong>{' '}
+                      of the annuity difference, before interest and taxes. The saved plan compares the whole
+                      timeline, including the retirement date, the supplement, and taxes.
                     </p>
                   )}
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-                    Without the deposit this service does not count at all &mdash; not toward the annuity, and
-                    not toward the years that decide when you may retire. It must be paid before you separate.
+                    {results.military.principalNote} This is not an official service-credit determination; your
+                    agency and OPM control the credit and the deposit amount, and the deposit must be complete
+                    before you separate.
                   </p>
                 </div>
               )}

@@ -37,6 +37,8 @@ export const COVERAGE_TYPES = Object.freeze({
   MARKETPLACE: 'marketplace',
   MEDICARE_ONLY: 'medicare_only',
   VA_TRICARE: 'va_tricare',
+  /** Cost resolved from confirmed per-person coverage periods (military module). */
+  COVERAGE_PERIODS: 'coverage_periods',
   NONE: 'none',
 });
 
@@ -224,10 +226,36 @@ export function projectHealthcareCostForYear({
   magiTwoYearsPrior = 0,
   filingStatus = 'single',
   includeIrmaa = false,
+  /**
+   * A per-person cost already resolved from confirmed coverage periods
+   * (src/lib/military/coverage.js). When present it replaces the premium
+   * side of this year's default coverage; IRMAA still applies to Part B
+   * when the periods include it, and out-of-pocket comes from the periods.
+   */
+  coverageCost = null,
 } = {}) {
   const h = resolveHealthcare(healthcare);
   const medicare = getAnnualParameters(year).medicare;
   const factor = growthFactor(h.premiumGrowthPercent, yearsFromNow);
+
+  if (coverageCost) {
+    const paysPartBFromPeriods = coverageCost.medicarePartB > 0;
+    const irmaa =
+      paysPartBFromPeriods && includeIrmaa
+        ? calculateIrmaaSurcharge({ magi: magiTwoYearsPrior, filingStatus, year }).annualSurcharge * factor
+        : 0;
+    return {
+      coverageType: COVERAGE_TYPES.COVERAGE_PERIODS,
+      fehbPremium: 0,
+      marketplacePremium: 0,
+      medicarePartB: coverageCost.medicarePartB,
+      irmaaSurcharge: irmaa,
+      otherCoverageCost: coverageCost.premiums + coverageCost.medicarePartD,
+      outOfPocket: coverageCost.outOfPocket,
+      total: coverageCost.total + irmaa,
+      periods: coverageCost.bySource,
+    };
+  }
 
   const coverageType = resolveCoverageType({
     age,

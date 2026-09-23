@@ -103,7 +103,7 @@ export function fehbOutcomeLabel(outcome) {
  * A cursor over the page with the header, page breaks and the primitives the
  * sections are written in. Every section is a sequence of these calls.
  */
-function createDoc(pdf, { scenarioName }) {
+export function createDoc(pdf, { scenarioName }) {
   const { left, right, top, bottom, header } = MARGIN;
   const width = MM_A4.width - left - right;
   const usableBottom = MM_A4.height - bottom;
@@ -278,7 +278,7 @@ function createDoc(pdf, { scenarioName }) {
   return doc;
 }
 
-function drawFooters(pdf) {
+export function drawFooters(pdf) {
   const pages = pdf.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
     pdf.setPage(i);
@@ -503,6 +503,15 @@ export function createRetirementReportPdf({
     { label: 'Service at separation', value: `${years(plan.service.eligibilityYears)} for eligibility, ${years(plan.service.computationYears)} for computation` },
     plan.service.sickLeaveYears > 0
       ? { label: 'Unused sick leave credited', value: `${years(plan.service.sickLeaveYears)}${plan.service.creditsSickLeave ? '' : ' (not credited on this path)'}` }
+      : null,
+    plan.military?.hasRecordedService
+      ? {
+          label: 'Military service credited',
+          value:
+            plan.military.creditYears > 0
+              ? `${years(plan.military.creditYears)}${plan.military.status === 'estimate_only' ? ' (estimate)' : ''}; counts toward eligibility and the computation, not the supplement`
+              : `None (${String(plan.military.reason ?? '').replace(/_/g, ' ')})`,
+        }
       : null,
     { label: 'High-3 at separation', value: `${money(plan.high3?.high3AtSeparation)} (${plan.high3?.basis === 'career' ? 'from the career simulator' : 'from salary growth'})` },
     { label: 'Multiplier', value: annuity.multiplier ? pct(annuity.multiplier * 100, 1) : '—' },
@@ -739,6 +748,123 @@ export function createRetirementReportPdf({
         r.survives ? 'Holds' : `Short at ${age(r.firstShortfallAge)}`,
         money(r.balanceAtEnd),
       ])
+    );
+  }
+
+  // ---------------- Military service and income (when recorded) ----------------
+  const mil = plan.military;
+  const milStreams = mil?.incomeStreams ?? [];
+  const militaryRecorded = Boolean(mil && (mil.hasRecordedService || milStreams.length > 0 || mil.retiredPay?.receives === 'yes'));
+  if (militaryRecorded && computed?.militaryPdfAllowed === false) {
+    // Launch-gated: the military pages are Pro. Say what is missing rather than
+    // let the report read as complete.
+    doc.section(null, 'Military service and income');
+    doc.paragraph(
+      'This scenario records military service or military-connected income. The military pages of this report (service credit, deposit, retired pay, income streams, TSP coordination, coverage, and the gross-to-net ledger) are part of Pro and are omitted here. The Military + Federal Plan page in the app shows all of it, with every warning and source, at no charge. The household figures in the other sections already include the military income the plan projects.'
+    );
+  } else if (militaryRecorded) {
+    doc.section(null, 'Military service and income');
+    doc.keyValues([
+      { label: 'Service FireFed modeled', value: mil.creditYears > 0 ? `${years(mil.creditYears)}${mil.status === 'estimate_only' ? ' (estimate)' : ''}` : `None credited${mil.reason ? ` (${String(mil.reason).replace(/_/g, ' ')})` : ''}` },
+      { label: 'Service recorded', value: years(mil.recordedYears) },
+      { label: mil.deposit?.mode === 'official_balance' ? 'Official deposit balance' : 'Estimated deposit balance', value: `${money(mil.deposit?.balance)} as of ${text(mil.deposit?.projectionDate)}` },
+      mil.deposit?.principal != null ? { label: 'Estimated principal / interest', value: `${money(mil.deposit.principal)} / ${money(mil.deposit.interest)}` } : null,
+      { label: 'Military retired pay', value: mil.retiredPay?.receives === 'yes' ? `${text(mil.retiredPay.type).replace(/_/g, ' ')}; path: ${text(mil.retiredPay.path).replace(/_/g, ' ')}` : mil.retiredPay?.receives === 'unknown' ? 'Not sure' : 'None' },
+    ].filter(Boolean));
+    if (milStreams.length > 0) {
+      doc.table(
+        [
+          { label: 'Stream', width: 50, align: 'left' },
+          { label: 'Whose', width: 18, align: 'left' },
+          { label: 'Per year' },
+          { label: 'Federal tax', width: 34, align: 'left' },
+          { label: 'Included', width: 20, align: 'left' },
+        ],
+        milStreams.map((s) => [
+          text(s.label),
+          s.ownerId === 'spouse' ? 'Spouse' : 'Me',
+          s.resolved?.annualGross > 0 ? money(s.resolved.annualGross) : '—',
+          text(s.resolved?.federalTaxClass).replace(/_/g, ' '),
+          s.resolved?.included ? (s.resolved.estimate ? 'Yes (estimate)' : 'Yes') : 'No',
+        ])
+      );
+    }
+    // Linked retired-pay calculations: the same figures the calculator showed.
+    const linkedCalcs = (scenario?.military?.retirementScenarios ?? [])
+      .map((sc) => ({ sc, calc: (sc.calculations ?? []).find((c) => c.id === sc.currentCalculationId) }))
+      .filter((x) => x.calc);
+    if (linkedCalcs.length > 0) {
+      doc.subheading('Retired-pay calculations connected to this plan');
+      doc.table(
+        [
+          { label: 'Calculation', width: 46, align: 'left' },
+          { label: 'System', width: 24, align: 'left' },
+          { label: 'Gross / month' },
+          { label: 'Starts', width: 22, align: 'left' },
+          { label: 'Status', width: 30, align: 'left' },
+          { label: 'Rules / engine', width: 26, align: 'left' },
+        ],
+        linkedCalcs.map(({ sc, calc }) => [text(sc.name), text(calc.systemLabel ?? calc.system), money(calc.projectedMonthly), text(calc.retiredPayStartDate), text(calc.status).replace(/_/g, ' '), `${text(calc.rulesVersion)} / ${text(calc.engineVersion)}`])
+      );
+    }
+    if (mil.tsp) {
+      doc.subheading('TSP coordination');
+      doc.keyValues([
+        { label: `Shared elective-deferral limit ${mil.tsp.year}`, value: `${money(mil.tsp.limits.total)}${mil.tsp.limits.catchUpApplies ? ' (with catch-up)' : ''}` },
+        { label: 'Planned deferrals, both accounts', value: money(mil.tsp.sharedDeferrals.total) },
+        { label: 'Over the limit', value: mil.tsp.electiveExcess > 0 ? money(mil.tsp.electiveExcess) : 'No' },
+        ...mil.tsp.byAccount.map((a) => ({ label: `${a.context === 'civilian' ? 'Civilian' : 'Uniformed services'} (${String(a.system).toUpperCase()}) service/agency`, value: `${money(a.employerContributions)}${a.match.lost > 0 ? `; match at risk ${money(a.match.lost)}` : ''}` })),
+      ]);
+    }
+    if ((mil.coverage ?? []).length > 0) {
+      doc.subheading('Health coverage by person');
+      doc.table(
+        [
+          { label: 'Who', width: 16, align: 'left' },
+          { label: 'Coverage', width: 50, align: 'left' },
+          { label: 'From', width: 22, align: 'left' },
+          { label: 'To', width: 22, align: 'left' },
+          { label: 'Premium / month' },
+          { label: 'Status', width: 20, align: 'left' },
+        ],
+        mil.coverage.map((c) => [c.ownerId === 'spouse' ? 'Spouse' : 'Me', text(c.source).replace(/_/g, ' '), text(c.startDate), c.endDate ? text(c.endDate) : 'ongoing', money(c.resolved?.premium?.monthly), c.resolved?.blocked ? 'Blocked' : c.enrollmentConfirmed ? 'Enrolled' : 'Unconfirmed'])
+      );
+    }
+    if (mil.ledger) {
+      doc.subheading(`Retired pay, gross to net (${mil.ledger.label})`);
+      doc.table(
+        [
+          { label: 'Line', width: 90, align: 'left' },
+          { label: 'Per month' },
+          { label: 'Source', width: 30, align: 'left' },
+        ],
+        [...mil.ledger.lines.map((l) => [text(l.label), money(l.amount), text(l.source)]), [mil.ledger.label, money(mil.ledger.net), mil.ledger.reconciledToRas ? 'reconciled' : 'estimate']]
+      );
+      if (mil.sbp?.applies) {
+        doc.keyValues([
+          { label: 'SBP category / base', value: `${text(mil.sbp.category).replace(/_/g, ' ')} / ${mil.sbp.base != null ? money(mil.sbp.base) : 'official'}` },
+          { label: 'SBP premium / survivor annuity', value: `${money(mil.sbp.premiumMonthly)} / ${money(mil.sbp.annuityMonthly)} per month (${text(mil.sbp.premiumSource).replace(/_/g, ' ')})` },
+          mil.sbp.paidUp?.paidUpAge != null ? { label: 'Paid up', value: `age ${mil.sbp.paidUp.paidUpAge} (${text(mil.sbp.paidUp.rule)})` } : null,
+        ].filter(Boolean));
+      }
+    }
+    const blocking = (mil.issues ?? []).filter((i) => i.severity === 'block');
+    if (blocking.length > 0) {
+      doc.paragraph('Items that stop a calculation until an official answer is recorded:', { size: 8.5 });
+      doc.bullets(blocking.slice(0, 8).map((i) => `${i.code}: ${i.message}`));
+    }
+    const warnings = (mil.issues ?? []).filter((i) => i.severity === 'warning');
+    if (warnings.length > 0) {
+      doc.paragraph('Items to check:', { size: 8.5 });
+      doc.bullets(warnings.slice(0, 8).map((i) => `${i.code}: ${i.message}`));
+    }
+    doc.keyValues([
+      { label: 'Military rules version', value: `${text(scenario?.military?.rulesVersion)}${mil.rules?.stale ? ` (newer rules ${text(mil.rules.current)} available; saved calculations unchanged)` : ''}` },
+      { label: 'Result status labels', value: 'Official input, Calculated, Estimated, Official determination required, Not modeled' },
+    ]);
+    doc.paragraph(
+      'Educational planning estimate, not legal, tax, investment, benefits, or claims advice. FireFed is not affiliated with or endorsed by any government agency. Official records and agency determinations control.',
+      { size: 8, color: [100, 116, 139] }
     );
   }
 

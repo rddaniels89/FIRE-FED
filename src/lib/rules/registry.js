@@ -34,6 +34,7 @@ export const RULE_CATEGORIES = Object.freeze({
   fehb: 'FEHB',
   timeline: 'Timeline and projection',
   career: 'Career and pay',
+  military: 'Military service',
 });
 
 const RULE_YEAR = 2026;
@@ -45,6 +46,9 @@ const OPM_FERS_TYPES = 'https://www.opm.gov/retirement-center/fers-information/t
 const OPM_FEHB_PLAN_INFO = 'https://www.opm.gov/healthcare-insurance/healthcare/plan-information/';
 const TSP_TAX_RULES = 'https://www.tsp.gov/publications/tspbk26.pdf';
 const IRS_REV_PROC = 'https://www.irs.gov/pub/irs-drop/rp-25-32.pdf';
+const OPM_CREDITABLE_SERVICE = 'https://www.opm.gov/retirement-center/fers-information/creditable-service/';
+const OPM_HANDBOOK_CH22 = 'https://www.opm.gov/retirement-center/publications-forms/csrsfers-handbook/c022.pdf';
+const OPM_HANDBOOK_CH50 = 'https://www.opm.gov/retirement-center/publications-forms/csrsfers-handbook/c050.pdf';
 
 function rule(def) {
   const { source, inputs, caveats, ...rest } = def;
@@ -188,7 +192,11 @@ const RULE_LIST = [
     statute: '5 U.S.C. 8412, 8413, 8414',
     verifiedAgainst: 'OPM eligibility table; MRA of 57 for those born 1970 or later',
     inputs: ['separationAge', 'yearsOfService', 'monthsOfService', 'mra', 'isVeraOffered', 'retirementPath'],
-    caveats: ['Months of service are carried, so 29 years 6 months at 57 is not MRA+30.', 'Special provision employees (LEO, firefighter, ATC) qualify at 50 with 20 covered years or any age with 25, and face mandatory separation.'],
+    caveats: [
+      'Months of service are carried, so 29 years 6 months at 57 is not MRA+30.',
+      'Special provision employees (LEO, firefighter, ATC) qualify at 50 with 20 covered years or any age with 25, and face mandatory separation.',
+      'Military service credited by a paid deposit counts toward these age-and-service tests but cannot supply the five years of civilian service every FERS annuity requires (5 U.S.C. 8410).',
+    ],
   }),
   rule({
     id: 'leave.lump_sum',
@@ -566,6 +574,430 @@ const RULE_LIST = [
     verifiedAgainst: 'eCFR 531.214; OPM 2026 salary tables (all 8,700 locality cells reproduced)',
     inputs: ['career.promotions', 'career.localityCode', 'career.annualRaisePercent'],
     caveats: ['The steps 9–10 refinement (adding two within-grade amounts beyond step 10) is not modelled.', 'Locality percentages are held fixed; the January raise applies to base pay only.'],
+  }),
+
+  // -------------------------------------------------------------- Military
+  rule({
+    id: 'military.creditability',
+    category: 'military',
+    title: 'Which military service FERS can credit',
+    formula:
+      'Creditable: active duty, active duty for training, and academy cadet or midshipman time, under honorable conditions. Not creditable: inactive-duty training (drill), state active duty. Full-time National Guard duty under 32 U.S.C. 316, 502, 503, 504 or 505 is creditable only when it interrupted federal civilian service followed by USERRA reemployment. Service after 1956 needs a deposit; service before 1957 does not.',
+    plainEnglish:
+      'Active-duty time served under honorable conditions can count toward your FERS retirement once the deposit is paid. Weekend drills and state duty never count. Full-time Guard duty counts only in the narrow case where you left a federal job for it and came back under reemployment rights. FireFed classifies each period from the facts you enter; your agency and OPM make the determination.',
+    source: { name: 'OPM — creditable service (FERS)', url: OPM_CREDITABLE_SERVICE },
+    statute: '5 U.S.C. 8411(c); CSRS/FERS Handbook ch. 22',
+    verifiedAgainst: 'OPM creditable service page and Handbook chapter 22 sections 22A1.1-2 and 22A4; src/lib/military/servicePeriods.js classifyServicePeriodForFers',
+    inputs: ['military.servicePeriods[].dutyStatus', 'military.servicePeriods[].characterStatus', 'military.servicePeriods[].authoritySection', 'military.servicePeriods[].interruptedFederalService'],
+    caveats: [
+      'Character of service, order authority, and the USERRA interruption are taken from the user; none is inferred from dates or branch.',
+      'ROTC field-training periods after 1964 can be creditable in narrow cases; that rule is not implemented and the period is held for an official determination.',
+      'Whether military retired pay must be waived to credit the service is a separate rule handled with the retired-pay streams.',
+    ],
+  }),
+  rule({
+    id: 'military.service_duration',
+    category: 'military',
+    title: 'How military service is totalled',
+    formula:
+      'Each period = (end date + 1 day) − start date in years, months and days with 30-day months; periods are summed and 30 days carry into a month, 12 months into a year. Periods are split at 1 January for year-specific deposit rates and earnings.',
+    plainEnglish:
+      'OPM adds up service the way it appears on your SF 50: whole years, months and days, treating every month as 30 days. FireFed does the same so the total matches what your agency shows, and separately keeps the exact calendar days in each year for the deposit.',
+    source: { name: 'OPM — CSRS/FERS Handbook ch. 50, computation of service', url: OPM_HANDBOOK_CH50 },
+    statute: 'CSRS/FERS Handbook ch. 50 section 50A2.1-1',
+    verifiedAgainst: 'Handbook chapter 50 30-day-month convention; src/lib/military/servicePeriods.js opmDuration and sumOpmDurations',
+    inputs: ['military.servicePeriods[].startDate', 'military.servicePeriods[].endDate'],
+    caveats: [
+      'Two periods that overlap are excluded from every total until the overlap is resolved or one is marked a sub-period of the other.',
+      'A legacy year count entered before dates were collected is displayed but not credited.',
+    ],
+  }),
+  rule({
+    id: 'military.fers_credit',
+    category: 'military',
+    title: 'What credited military service does inside FERS',
+    formula:
+      'Eligibility service = civilian service + credited military service. Computation service = eligibility service + unused sick leave. Five-year minimum: civilian service only. High-3: unchanged. Supplement numerator: civilian service only. Special-provision covered minimum: civilian covered service only. 1.1% at 62: 20 years of eligibility service.',
+    plainEnglish:
+      'Once the deposit is paid, your military years count toward when you can retire and toward the size of the annuity, and they can help you reach the 20 years that earn 1.1% at 62. They never count toward the five civilian years you need to retire at all, never raise your high-3, and are left out of the Special Retirement Supplement, which is prorated on civilian service alone.',
+    source: { name: 'OPM — FERS types of retirement and the annuity supplement', url: OPM_FERS_TYPES },
+    statute: '5 U.S.C. 8410, 8411(c), 8415(h), 8421(a)',
+    verifiedAgainst: 'OPM types-of-retirement page; CSRS/FERS Handbook ch. 51 (supplement: civilian service only); src/lib/military/fersCredit.js and the service buckets in src/lib/calculations/fers.js',
+    inputs: ['military.servicePeriods', 'military.deposit.status', 'fers.yearsOfService', 'fers.monthsOfService'],
+    caveats: [
+      'Credit is modeled only for periods the classifier accepts and only once the deposit is recorded as paid in full; a partly paid deposit earns no credit for that period.',
+      'Whether retired pay must be waived to take the credit is handled with the retired-pay streams, not here.',
+      'Military service recorded for a spouse is not yet applied to a dual-fed spouse\'s figures.',
+    ],
+  }),
+  rule({
+    id: 'military.deposit_rate',
+    lastVerified: '2026-09-20',
+    category: 'military',
+    title: 'Military service deposit: the principal',
+    formula: 'Principal = Σ over calendar years of (military basic pay earned that year × rate for that year), where the rate is 3% except 3.25% for 1999 and 3.40% for 2000. USERRA interruption: the lesser of that figure and the FERS deductions that would have been withheld from the civilian pay for the same months.',
+    plainEnglish:
+      'The deposit is a small percentage of the basic pay you earned while serving, in the dollars of the time, not today\'s money. Allowances, bonuses and special pays are not included. If you left a federal job to serve and came back under reemployment rights, you owe the smaller of that figure and what FERS would have taken from your civilian pay.',
+    source: { name: 'OPM — CSRS/FERS Handbook ch. 23, service credit payments', url: 'https://www.opm.gov/retirement-center/publications-forms/csrsfers-handbook/c023.pdf' },
+    statute: '5 U.S.C. 8422(e)(1), (5)',
+    verifiedAgainst: 'Handbook chapter 23 section 23A2.1-1 rate table; OPM creditable service page; src/lib/military/depositRates.js',
+    inputs: ['military.servicePeriods[].earningsByYear', 'military.servicePeriods[].civilianBasicPayByYear', 'profile.hireCohort'],
+    caveats: [
+      'Basic pay by year comes from a DFAS estimated-earnings statement; FireFed never derives it from a rank or pay table.',
+      'A year with no basic pay recorded leaves the principal incomplete and blocks the estimate for that period.',
+    ],
+  }),
+  rule({
+    id: 'military.deposit_interest',
+    lastVerified: '2026-09-20',
+    category: 'military',
+    title: 'Military service deposit: interest',
+    formula: 'Interest-accrual date (IAD) = 2 years after the first FERS-covered appointment (or USERRA reemployment). On each IAD anniversary the unpaid balance is charged a year\'s interest at OPM\'s composite rate (the prior calendar year\'s rate for the months before 1 January and the new year\'s rate after, on a 30-day-month count), compounded. Payments received before the anniversary reduce the balance charged. A deposit paid in full before its first anniversary carries no interest.',
+    plainEnglish:
+      'You get two interest-free years from when you first became covered by FERS. After that the unpaid balance is charged interest once a year, on the anniversary, at a blend of the two calendar-year rates Treasury set for that year. Pay it off before the first anniversary and you pay no interest at all. Each period of service counts only once its own share is fully paid.',
+    source: { name: 'OPM — Benefits Administration Letters, calendar-year interest rate (e.g. BAL 24-301)', url: 'https://www.opm.gov/retirement-center/publications-forms/benefits-administration-letters/' },
+    statute: '5 U.S.C. 8422(e)(3), 8334(e)',
+    verifiedAgainst: 'Every rate 1985–2026 checked 2026-09-20: OPM reference-materials table (1985–2017), BALs 17-306, 18-306, 19-308, 20-307, 23-301, 24-301, 25-301, 26-301, and the 2020, 2022 and 2024 composite-rate attachments, which the engine reproduces (src/lib/military/__tests__/deposit.test.js)',
+    inputs: ['military.deposit.firstFersCoverageDate', 'military.deposit.interestAccrualDate', 'military.deposit.payments', 'military.deposit.plannedPaymentDate'],
+    caveats: [
+      'When several periods are owed, payments are applied to the oldest first; an agency may record a different allocation, and its record controls.',
+      'An official balance entered with its through-date replaces the computed balance from that date forward.',
+      'A remittance counts on the day the agency receives it, not the postmark (BAL 24-301).',
+    ],
+  }),
+  rule({
+    id: 'military.deposit_comparison',
+    category: 'military',
+    title: 'Deposit comparison: the whole plan, twice',
+    formula: 'Baseline = plan with nothing paid and nothing credited. Credit = plan with every creditable period credited and the deposit balance paid as a one-off outflow on the payment date. Delta = credit − baseline on every timeline row: pension, supplement, taxes, balances. Break-even = first age where cumulative after-tax delta ≥ deposit; discounted at a disclosed rate. NPV = Σ discounted after-tax delta − discounted deposit.',
+    plainEnglish:
+      'FireFed does not value a deposit with a one-line formula, because paying it can change the door you retire through, remove a reduction, start the supplement, or change your multiplier and your taxes. It runs your whole plan with and without the deposit and shows the difference, year by year, with the break-even and present value at a discount rate you can see.',
+    source: { name: 'OPM — FERS types of retirement', url: OPM_FERS_TYPES },
+    statute: '5 U.S.C. 8410–8415, 8421',
+    verifiedAgainst: 'src/lib/military/depositComparison.js against resolveRetirementPlan and buildTimeline; the invariants in src/lib/military/__tests__/depositComparison.test.js',
+    inputs: ['military.deposit', 'military.servicePeriods', 'profile.separationAge', 'tsp.inflationRate'],
+    caveats: [
+      'The comparison shows consequences. It never states whether to pay.',
+      'If the deposit changes the retirement path, start age, supplement, or multiplier, the result is labelled a whole-plan comparison; an annuity-only break-even would understate it.',
+    ],
+  }),
+  rule({
+    id: 'military.income_tax_character',
+    lastVerified: '2026-09-20',
+    category: 'military',
+    title: 'Tax character of military and VA income',
+    formula:
+      'Taxable wages: basic pay, drill pay, reservist differential. Taxable pension: longevity and Reserve retired pay, CRDP, SBP/RCSBP annuities. Not taxable: VA disability compensation, DIC, CRSC, BAH/BAS. Disability retired pay: as the official 1099-R classifies it, projected taxable until recorded. Each stream is its own line; none is folded into another.',
+    plainEnglish:
+      'Retired pay is taxed like any pension. VA compensation, CRSC and DIC are never taxed and never counted toward the tax on your Social Security. Disability retired pay can go either way, so FireFed treats it as taxable until you tell it what your 1099-R says. CRDP and CRSC are taken only from an official statement; FireFed does not work out who qualifies or which is better.',
+    source: { name: 'IRS Publication 525 — taxable and nontaxable income (military and VA)', url: 'https://www.irs.gov/publications/p525' },
+    statute: 'IRC 104(a)(4), 122; 38 U.S.C. 5301; 10 U.S.C. 1413a, 1414',
+    verifiedAgainst: 'IRS Publication 525 and Publication 3; DFAS concurrent-receipt pages; src/lib/military/incomeStreams.js STREAM_TYPE_RULES',
+    inputs: ['military.incomeStreams[].type', 'military.incomeStreams[].grossAmount', 'military.incomeStreams[].amountStatus', 'military.incomeStreams[].colaPolicy'],
+    caveats: [
+      'Retired-pay and VA cost-of-living adjustments both follow the scenario\'s inflation assumption for future years; both are CPI-W adjustments in law.',
+      'Wage-class streams (drill pay) are added to taxable income without FICA modelling.',
+      'An official amount older than eighteen months is flagged; it has almost certainly been adjusted since.',
+    ],
+  }),
+  rule({
+    id: 'military.va_estimate',
+    lastVerified: '2026-09-20',
+    category: 'military',
+    title: 'VA compensation from the rate table',
+    formula: 'Monthly = base rate for the rating and dependent set (veteran alone; with spouse; with one or two parents; with one child) + per-child add-ons for further children under 18 and children over 18 in school + the spouse aid-and-attendance add-on. Rates effective 1 December 2025.',
+    plainEnglish:
+      'If you know your rating and dependents but not your monthly amount, FireFed reads the current VA table so you have a planning figure. It is labelled an estimate until you enter the amount from your award letter. FireFed never estimates a rating.',
+    source: { name: 'VA — veteran disability compensation rates', url: 'https://www.va.gov/disability/compensation-rates/veteran-rates/' },
+    statute: '38 U.S.C. 1114, 1115',
+    verifiedAgainst: 'va.gov rate tables retrieved 2026-09-20 (effective 2025-12-01); src/lib/military/vaCompensationRates.js',
+    inputs: ['military.incomeStreams[].vaEstimate.rating', 'military.incomeStreams[].vaEstimate.spouse', 'military.incomeStreams[].vaEstimate.childrenUnder18', 'military.incomeStreams[].vaEstimate.parents'],
+    caveats: [
+      'Special monthly compensation, individual unemployability, and the veteran\'s own aid-and-attendance or housebound amounts are not modelled; enter the official amount.',
+      'Ratings of 10% and 20% carry no dependent additions.',
+    ],
+  }),
+  rule({
+    id: 'tax.state_military_retired_pay',
+    category: 'military',
+    title: 'State tax on military retired pay',
+    formula: 'State taxable military retired pay = pay − the state\'s exclusion (full, a dollar cap, or none), applied only when the state\'s rule has been verified against its revenue department for the tax year and any age condition is met. Unverified: taxed in full at the state rate and flagged.',
+    plainEnglish:
+      'Most states exempt military retired pay in full and a dozen exclude part of it, but the rules change often. FireFed applies a state\'s exclusion only once it has been checked against that state\'s instructions; until then the plan taxes the pay and tells you it may be overstating state tax.',
+    source: { name: 'Tax Foundation — states that tax military retirement pay', url: 'https://taxfoundation.org/data/all/state/states-that-tax-military-retirement-pay/' },
+    statute: 'Each state\'s revenue code',
+    verifiedAgainst: 'No state verified yet; the transcribed table and its status are in src/lib/taxes/stateMilitaryRetiredPay.js and docs/MILITARY-VERIFICATION.md',
+    inputs: ['taxes.state.code', 'military.incomeStreams'],
+    caveats: [
+      'Nine states have no income tax; those apply without verification.',
+      'Income-limited exclusions (California, Vermont) are applied at the cap once verified; the income test itself is not modelled.',
+      'Survivor annuities (SBP/RCSBP) are taxed as ordinary pensions at state level; whether a state extends its military exclusion to them is not yet modelled.',
+    ],
+  }),
+  rule({
+    id: 'military.retired_pay_credit',
+    lastVerified: '2026-09-20',
+    category: 'military',
+    title: 'Military retired pay and FERS credit: the three paths',
+    formula:
+      'No retired pay: credit as usual once the deposit is paid. Retired pay of a type that must be waived (regular longevity, TERA, other): no credit until the waiver is elected, effective when the FERS annuity begins, and the agency determination is recorded; a hypothetical waiver comparison is offered. Chapter 1223 Reserve retired pay, or chapter 61 retired pay with an official combat or instrumentality-of-war finding: credit without a waiver once the user confirms the exception. Unknown type: no credit.',
+    plainEnglish:
+      'If you draw a regular military pension, the law lets you count that service toward FERS only if you give the pension up when your FERS annuity starts, and you still pay the deposit. Reserve retirees who started drawing at 60, and some disability retirees, may keep the pension and count the service. FireFed cannot tell which case you are in from the amount; you confirm the type and your agency and OPM decide. FireFed never prepares a waiver.',
+    source: { name: 'OPM — military retired pay and FERS', url: 'https://www.opm.gov/retirement-center/fers-information/military-retired-pay/' },
+    statute: '5 U.S.C. 8411(c)(2); 5 CFR 842.306',
+    verifiedAgainst: 'OPM military retired pay page; CSRS/FERS Handbook ch. 22 §22A3; src/lib/military/retiredPayWaiver.js evaluateRetiredPayGate',
+    inputs: ['military.retiredPay.receives', 'military.retiredPay.type', 'military.retiredPay.officialDeterminationStatus', 'military.retiredPay.chapter61Exception', 'military.retiredPay.waiver'],
+    caveats: [
+      'The waiver comparison stops retired pay and CRDP when the FERS annuity begins and credits the service; it leaves CRSC, VA compensation, SBP premiums, and healthcare as entered and says they need separate confirmation.',
+      'A chapter 61 award never enters the automated waiver path; FireFed does not model waiving disability retired pay.',
+      'The waiver comparison is always shown under the spec §6.7 warning and never states which scenario to choose.',
+    ],
+  }),
+  rule({
+    id: 'military.retirement_system',
+    category: 'military',
+    title: 'Which military retirement system applies',
+    lastVerified: '2026-09-20',
+    formula: 'Final Pay: entered before 8 Sep 1980. High-36: entered 8 Sep 1980 to 31 Dec 2017 with no REDUX or BRS election. REDUX/CSB: entered 1 Aug 1986 to 31 Dec 2002 and elected the Career Status Bonus. BRS: first entered on or after 1 Jan 2018, or opted in during 2018. The DIEMS suggests; the user confirms; an election is never inferred.',
+    plainEnglish:
+      'Your entry date narrows the system down, but two elections change it and only your record shows them. FireFed suggests a system from your entry date and asks you to confirm it before a result is labelled anything better than an estimate.',
+    source: { name: 'DoD — Military Compensation, retirement', url: 'https://militarypay.defense.gov/Pay/Retirement/' },
+    statute: '10 U.S.C. 1401a, 1407, 1409; Pub. L. 114-92 §631 (BRS)',
+    verifiedAgainst: 'DoD retirement pages; src/lib/military/retirement/system.js',
+    inputs: ['diems', 'cbsElected', 'brsOptIn', 'system', 'systemConfirmation'],
+    caveats: ['A conflict between the chosen system and the dates or elections blocks the result; FireFed never switches the system itself.'],
+  }),
+  rule({
+    id: 'military.retired_pay_formula',
+    category: 'military',
+    title: 'Gross military retired pay (regular longevity)',
+    lastVerified: '2026-09-20',
+    formula: 'Gross monthly = retired-pay base × multiplier, rounded down to the next lower dollar. Multiplier = 2.5% (Final Pay, High-36, REDUX) or 2.0% (BRS) × years of creditable service, where years = whole years + full months ÷ 12 and days are disregarded. Retirements before 1 Jan 2007 capped at 75%; later, uncapped to 100%.',
+    plainEnglish:
+      'Twenty years under High-36 is 50% of your highest three years of basic pay; under BRS it is 40%. Each extra month adds a twelfth of a year. The result is rounded down to the dollar, as DFAS does.',
+    source: { name: 'DoD — active duty retirement', url: 'https://militarypay.defense.gov/Pay/Retirement/ActiveDuty/' },
+    statute: '10 U.S.C. 1405(b), 1409(b), 1412',
+    verifiedAgainst: 'Statute text; DoD active-duty retirement page; src/lib/military/retirement/multiplier.js and calculate.js',
+    inputs: ['creditableService', 'system', 'retirementDate', 'gradePeriods'],
+    caveats: [
+      'Creditable service is the official 10 U.S.C. 1405 figure the user enters; it is never derived from enlistment and retirement dates.',
+      'Under 20 years of active service is shown only as a hypothetical comparison, never as an available retirement.',
+    ],
+  }),
+  rule({
+    id: 'military.high36',
+    category: 'military',
+    title: 'The High-36 pay base',
+    lastVerified: '2026-09-20',
+    formula: 'High-36 = total basic pay for the 36 months, whether or not consecutive, in which monthly basic pay was highest, ÷ 36. Each month is priced from the pay table in force for the grade and years-of-service band that month; a grade change inside a month is split by days. Final Pay uses the rate on the day before retirement.',
+    plainEnglish:
+      'Your pay base is the average of your best 36 months of basic pay, built month by month from the actual tables, not your last paycheck times 36. Months FireFed cannot price from a published table make the result an estimate.',
+    source: { name: 'DFAS — basic pay tables', url: 'https://www.dfas.mil/militarymembers/payentitlements/Pay-Tables/' },
+    statute: '10 U.S.C. 1406, 1407; DoD FMR Vol. 7B ch. 3',
+    verifiedAgainst: '2026 table read from DFAS on 2026-09-20; 2025 and 2024 derived and flagged; src/lib/military/retirement/payBase.js and payTables.js',
+    inputs: ['gradePeriods', 'payEntryBaseDate', 'retirementDate', 'assumptions.basicPayGrowth'],
+    caveats: [
+      'Published tables held: 2026. 2025 and 2024 are derived by removing the across-the-board raise and exclude E-1 to E-4 (the April 2025 junior-enlisted raise is not a flat factor); months priced from them are estimates.',
+      'Months after the latest table are projected at the basic-pay growth assumption and never labelled official.',
+    ],
+  }),
+  rule({
+    id: 'military.redux',
+    category: 'military',
+    title: 'REDUX / Career Status Bonus',
+    lastVerified: '2026-09-20',
+    formula: 'Multiplier = 2.5% × years − 1% × (30 − years) under 30 years; 2.5% × years at 30 or more. COLA = CPI less one point. At 62, retired pay is recomputed once to the full-multiplier, full-COLA amount; the minus-one COLA then resumes.',
+    plainEnglish:
+      'REDUX trades a $30,000 bonus at 15 years for a smaller pension and smaller raises until 62, when the pension is reset to what High-36 would have paid and the smaller raises resume. It runs only when you state that you took the bonus.',
+    source: { name: 'DoD — active duty retirement (REDUX)', url: 'https://militarypay.defense.gov/Pay/Retirement/ActiveDuty/' },
+    statute: '10 U.S.C. 1409(b)(2), 1410; 37 U.S.C. 354',
+    verifiedAgainst: 'DoD REDUX description; src/lib/military/retirement/multiplier.js and cola.js',
+    inputs: ['cbsElected', 'creditableService', 'ageAtRetirement'],
+    caveats: ['The age-62 recomputation is applied in the calendar year the member turns 62 on the annual projection.'],
+  }),
+  rule({
+    id: 'military.retired_pay_cola',
+    category: 'military',
+    title: 'Retired-pay cost-of-living adjustments',
+    lastVerified: '2026-09-20',
+    formula: 'Each 1 December retired pay rises by the CPI-W increase from third quarter to third quarter (REDUX: less one point). The first adjustment is prorated by the quarter of retirement: Q1 half, Q2 a quarter, Q3 none that year then full, Q4 three quarters of the next December. Future adjustments use the inflation assumption; published adjustments are used where supplied.',
+    plainEnglish:
+      'Military retired pay keeps pace with inflation through a raise every December. The first raise is partial because it counts only the months after you retired. FireFed uses your inflation assumption for the future and marks which years are assumed rather than published.',
+    source: { name: 'DoD FMR Volume 7B, chapter 8 (COLA)', url: 'https://comptroller.defense.gov/Portals/45/documents/fmr/Volume_07b.pdf' },
+    statute: '10 U.S.C. 1401a',
+    verifiedAgainst: 'Statute for the annual adjustment; the first-year proration table is pending verification against FMR 7B ch. 8 (see docs/MILITARY-VERIFICATION.md)',
+    inputs: ['retirementDate', 'assumptions.inflation', 'assumptions.publishedColas'],
+    caveats: ['The first-year proration shares are marked unverified in src/lib/military/retirement/cola.js and every result carries the note.'],
+  }),
+  rule({
+    id: 'military.reserve_points',
+    category: 'military',
+    title: 'Guard and Reserve retirement points, qualifying years, and equivalent service',
+    lastVerified: '2026-09-20',
+    formula: 'A qualifying year has at least 50 creditable points. Twenty qualifying years are required. Equivalent years of service for the multiplier = total creditable points / 360, at full precision. Per retirement year, membership points are capped at 15 and inactive-duty points (including membership) are capped at 60 (years ending before 23 Sep 1996), 75 (through 29 Oct 2000), 90 (through 29 Oct 2007), or 130 (since). Active-duty points are never capped that way. A year cannot exceed its days.',
+    plainEnglish:
+      'Reserve retirement counts points, not years. You need 20 "good years" of 50 or more points to retire at all, and your pension is based on all your points divided by 360. Drill and membership points have a yearly ceiling that has risen over time; active-duty days always count. Your official points statement controls, and FireFed blocks the result when your year-by-year entries do not add up to it.',
+    source: { name: 'Military Compensation: Reserve retirement', url: 'https://militarypay.defense.gov/Pay/Retirement/Reserve/' },
+    statute: '10 U.S.C. 12732, 12733',
+    verifiedAgainst: 'Statute text for the 50-point year, the 360 divisor, and the inactive-duty ceilings by date',
+    inputs: ['reserve.retirementYears[]', 'reserve.officialTotalPoints', 'reserve.officialQualifyingYears'],
+    caveats: ['Point totals entered as estimates produce an estimate-only result.', 'The qualifying-year test and the equivalent-service computation are separate and are never combined.'],
+  }),
+  rule({
+    id: 'military.reserve_retired_pay_age',
+    category: 'military',
+    title: 'The age Reserve retired pay begins',
+    lastVerified: '2026-09-20',
+    formula: 'Age 60, unless an official eligibility date is entered. Qualifying active duty on or after 28 January 2008 under the listed authorities reduces the age by three months for each aggregate of 90 days, within one fiscal year before 1 October 2014 and across fiscal years since; never below age 50. Retiree health coverage still begins at 60. Pay is computed from the pay table in force when pay begins; a Retired Reserve member keeps accruing years of service for the pay band until then, a discharged former member does not.',
+    plainEnglish:
+      'Reserve retired pay normally starts at 60. Certain deployments since 2008 can move it earlier in three-month steps, but never before 50, and only your service can confirm which days count. Health coverage for retirees still waits until 60. If you stay in the Retired Reserve while you wait, your pay is figured as though your years of service kept growing; if you were discharged instead, they stop.',
+    source: { name: 'Military Compensation: Reserve retirement', url: 'https://militarypay.defense.gov/Pay/Retirement/Reserve/' },
+    statute: '10 U.S.C. 12731(f), 1407(f)',
+    verifiedAgainst: 'Statute text for the age reduction, its floor, and the aggregation dates; the former-member pay-band treatment is pending verification against DoD FMR Volume 7B',
+    inputs: ['reserve.officialEligibilityDate', 'reserve.reducedAgePeriods[]', 'reserve.retiredReserveStatus', 'reserve.separationDate'],
+    caveats: ['Reduced-age results built on unverified duty are estimates; the age-60 comparison is kept.', 'Whether a period qualifies depends on the order authority, which only the service can confirm.'],
+  }),
+  rule({
+    id: 'military.tsp_coordination',
+    category: 'military',
+    title: 'Civilian and uniformed-services TSP: one elective-deferral limit, separate matches',
+    lastVerified: '2026-09-20',
+    formula: 'Shared elective deferrals = civilian employee deferrals + uniformed-services employee deferrals + other shared-plan deferrals; must not exceed the year’s 402(g) limit plus the age-based catch-up. Traditional contributions from tax-exempt combat-zone pay are outside that limit but inside the per-plan 415(c) annual-additions limit, which also counts automatic and matching contributions. FERS and BRS matching (100% of the first 3%, 50% of the next 2%, plus 1% automatic) are computed independently, per pay period.',
+    plainEnglish:
+      'Your own contributions to both TSP accounts share one yearly cap. Agency and service money sits on top of that under a separate, larger cap. Matching is paid pay period by pay period, so reaching the cap early in one account means later pay periods get no match. FireFed shows the usage and what the entered plan would leave unmatched; it does not tell you what to contribute.',
+    source: { name: 'TSP: Annual limit on elective deferrals (fact sheet)', url: 'https://www.tsp.gov/publications/tspfs07.pdf' },
+    statute: '26 U.S.C. 402(g), 414(v), 415(c); 5 U.S.C. 8432; 37 U.S.C. 211',
+    verifiedAgainst: 'TSP fact sheet 07; IRS Notice 2025-67 for the 2026 amounts',
+    inputs: ['military.tsp.civilian.ytdEmployeeDeferrals', 'military.tsp.uniformedServices.*', 'military.tsp.otherSharedPlanDeferrals', 'tsp.monthlyContributionPercent'],
+    caveats: ['The pay-period simulation assumes level deferrals for the rest of the year.', 'Loans are not modeled.'],
+  }),
+  rule({
+    id: 'military.brs_tsp',
+    category: 'military',
+    title: 'BRS service automatic and matching contributions, and vesting',
+    lastVerified: '2026-09-20',
+    formula: 'Service automatic 1% of basic pay begins after 60 days of service (immediately for 2018 opt-ins) and matching (100% of the first 3%, 50% of the next 2%) at the start of the 25th month; both stop after 26 years of service. Automatic contributions vest after two years of uniformed service; matching is vested at once. Civilian service does not vest a uniformed-services automatic contribution, and the reverse.',
+    plainEnglish:
+      'Under BRS the service adds 1% of your basic pay from about two months in and matches up to 4% more from your third year, until 26 years. The 1% is yours after two years of military service; civilian time does not count toward that. FireFed explains that contributing 5% captures the full match; it does not tell you to.',
+    source: { name: 'Military Compensation: Blended Retirement System', url: 'https://militarypay.defense.gov/BlendedRetirement/' },
+    statute: '37 U.S.C. 8440e; 5 U.S.C. 8432b',
+    verifiedAgainst: 'DoD BRS resource page; TSP contribution-types page',
+    inputs: ['military.tsp.uniformedServices.coverageSystem', 'military.tsp.uniformedServices.monthsOfService', 'military.tsp.uniformedServices.brsOptedIn', 'military.tsp.uniformedServices.employeePercent'],
+    caveats: ['Legacy (High-36, REDUX) members receive no service contributions.'],
+  }),
+  rule({
+    id: 'military.brs_continuation_pay',
+    category: 'military',
+    title: 'BRS continuation pay, from an official offer only',
+    lastVerified: '2026-09-20',
+    formula: 'Continuation pay = the service’s published multiple × monthly basic pay, paid between 8 and 12 years of service, in exchange for an additional service obligation (generally four years). The multiple varies by service, component, and year; FireFed uses only the figure on the member’s official offer.',
+    plainEnglish:
+      'Continuation pay is a one-time bonus your service may offer mid-career under BRS, with more years of service owed in return. There is no standard amount, so FireFed models it only from the offer you were given, and shows the obligation end date and the repayment risk.',
+    source: { name: 'Military Compensation: Blended Retirement System', url: 'https://militarypay.defense.gov/BlendedRetirement/' },
+    statute: '37 U.S.C. 356',
+    verifiedAgainst: 'Statute text; DoD BRS resource page',
+    inputs: ['military.brs.continuationPay.multiple', 'military.brs.continuationPay.monthlyBasicPay', 'military.brs.continuationPay.paymentDate', 'military.brs.continuationPay.obligationYears'],
+    caveats: ['Taxable as income in the year paid; installments are shown when the offer provides them.'],
+  }),
+  rule({
+    id: 'military.brs_lump_sum',
+    category: 'military',
+    title: 'BRS lump-sum election (25% or 50%)',
+    lastVerified: '2026-09-20',
+    formula: 'Lump sum = discounted present value, at the annual DoD lump-sum discount rate, of 25% or 50% of retired pay from the retired-pay start through the month before Social Security full retirement age. Monthly retired pay is reduced by the elected share for that period and restored in full at full retirement age. Blocked when the official rate for the year is missing or stale.',
+    plainEnglish:
+      'BRS lets a retiring member take part of their pension up front, with smaller monthly checks until Social Security full retirement age and the full pension after. The up-front amount depends on a discount rate DoD sets each year. FireFed shows the cash flows with and without the election; it does not call either one better.',
+    source: { name: '10 U.S.C. 1415', url: 'https://www.law.cornell.edu/uscode/text/10/1415' },
+    statute: '10 U.S.C. 1415',
+    verifiedAgainst: 'Statute text; the COLA, timing, and rounding conventions of the DoD computation are pending verification against the DoD technical reference (see docs/MILITARY-VERIFICATION.md)',
+    inputs: ['military.brs.lumpSum.electionPercent', 'military.brs.lumpSum.officialDiscountRate', 'military.brs.lumpSum.discountRateYear', 'Social Security full retirement age'],
+    caveats: ['No discount rate ships with FireFed; the annual rate is entered from the DoD memorandum.', 'VA waiver and offset interactions are not modeled; the scenario is gross.'],
+  }),
+  rule({
+    id: 'military.chapter61',
+    category: 'military',
+    title: 'Chapter 61 disability retirement and medical separation, from the official disposition',
+    lastVerified: '2026-09-20',
+    formula: 'Disability method = pay base × the official DoD disability percentage, capped at 75%; a TDRL placement before 1 January 2017 has a 50% floor. Longevity method = pay base × the system multiplier × creditable service. The member is paid the greater. Under 30% and under 20 years is a separation with severance = 2 × monthly basic pay × years of service (at least 3, or 6 if combat-related; at most 19), not retired pay.',
+    plainEnglish:
+      'A medical retirement is figured two ways, by the DoD percentage on your orders and by your years of service, and you get the larger. Below 30% with under 20 years the service separates you with a one-time payment instead. FireFed works only from the disposition and percentage your service issued; it does not evaluate fitness, and it does not decide whether the pay is taxable.',
+    source: { name: '10 U.S.C. 1401 (computation of retired pay)', url: 'https://www.law.cornell.edu/uscode/text/10/1401' },
+    statute: '10 U.S.C. 1201, 1202, 1212, 1401; Pub. L. 114-328 §521',
+    verifiedAgainst: 'Statute text for the two methods, the 75% cap, the severance bounds, and the 2017 floor change',
+    inputs: ['medical.disposition', 'medical.dodDisabilityPercent', 'medical.tdrlPlacementDate', 'medical.combatRelated'],
+    caveats: ['The VA rating is recorded separately and never used here.', 'CRDP, CRSC, the VA waiver, and severance recoupment are official amounts, not computed.'],
+  }),
+  rule({
+    id: 'military.tera',
+    category: 'military',
+    title: 'Temporary Early Retirement Authority (TERA), official approval only',
+    lastVerified: '2026-09-20',
+    formula: 'Retired pay = pay base × the system multiplier × years of service × (1 − 1% × years short of 20, prorated by month at 1/12 of 1%), for 15 or more and fewer than 20 years of service, only under an official TERA authority and approval.',
+    plainEnglish:
+      'TERA lets the service retire some members early, with the normal formula reduced by one percent for each year short of twenty. It exists only when Congress and the service open it, so FireFed calculates it only when you record the approval, and never shows it as a future option.',
+    source: { name: '10 U.S.C. 1293', url: 'https://www.law.cornell.edu/uscode/text/10/1293' },
+    statute: '10 U.S.C. 1293, 8323; Pub. L. 112-81 §504 and later extensions',
+    verifiedAgainst: 'Statute text for the reduction; the authority windows are the service’s',
+    inputs: ['tera.authorityName', 'tera.approvalDate', 'creditableService'],
+    caveats: ['A TERA retiree may later add service through public or community service credit; that is not modeled.'],
+  }),
+  rule({
+    id: 'military.sbp',
+    category: 'military',
+    title: 'Survivor Benefit Plan: premium, annuity, paid-up status',
+    lastVerified: '2026-09-20',
+    formula: 'Spouse (and spouse-and-child) coverage on an elected base of at least $300 up to full gross retired pay: premium 6.5% of the base for elections under the 1990 formula; annuity 55% of the base. Premiums end when the member is 70 and 360 monthly premiums have been paid. Other categories and RCSBP use the official premium and annuity. The SBP-DIC offset was two-thirds in 2021, one-third in 2022, and none from 1 January 2023.',
+    plainEnglish:
+      'SBP takes a monthly premium from retired pay and pays a surviving spouse a share of the covered amount for life. After thirty years of premiums and age 70 it is paid up. Since 2023 a survivor can receive both SBP and VA DIC in full. FireFed models the election you record and never suggests one.',
+    source: { name: 'DFAS: Survivor Benefit Plan', url: 'https://www.dfas.mil/retiredmilitary/provide/sbp/' },
+    statute: '10 U.S.C. 1447–1455; Pub. L. 116-92 §622',
+    verifiedAgainst: 'Statute text for the 55% annuity, the paid-up rule, and the offset phase-out; the 6.5% premium and the $300 minimum are pending verification against DFAS (see docs/MILITARY-VERIFICATION.md)',
+    inputs: ['military.sbp.category', 'military.sbp.electedBase', 'military.sbp.electionDate', 'military.sbp.premiumsPaidToDate', 'military.sbp.rcsbp.*'],
+    caveats: ['Former-spouse, child-only, insurable-interest, and court-ordered cases are official-amount only.', 'The pre-1990 threshold formula and the child add-on are not computed.'],
+  }),
+  rule({
+    id: 'military.gross_to_net',
+    category: 'military',
+    title: 'Retired pay from gross to estimated net deposit',
+    lastVerified: '2026-09-20',
+    formula: 'Gross retired pay − SBP/RCSBP premium − official VA waiver + official CRDP (+ CRSC paid separately) − withholding assumptions − official deductions = estimated net deposit. Never labelled DFAS net pay unless reconciled to a Retiree Account Statement.',
+    plainEnglish:
+      'The ledger walks from the pension formula to what would land in the bank, one labelled line at a time. The VA waiver, CRDP, CRSC, and any debts are amounts you read off your statement; withholding is an assumption you set. It is an estimate until you say it matches your statement.',
+    source: { name: 'DFAS: Retiree Account Statement', url: 'https://www.dfas.mil/retiredmilitary/manage/ras/' },
+    statute: '38 U.S.C. 5304, 5305; 10 U.S.C. 1414 (CRDP), 1413a (CRSC)',
+    verifiedAgainst: 'The line order in spec §20.11; each adjustment is an official input',
+    inputs: ['military.netPay.*', 'military.sbp'],
+    caveats: ['Allotments, garnishments, and insurance are not modeled unless entered as other deductions.'],
+  }),
+  rule({
+    id: 'healthcare.coverage_periods',
+    category: 'healthcare',
+    title: 'Health coverage by person and period: TRICARE, FEHB, CHAMPVA, Medicare',
+    lastVerified: '2026-09-20',
+    formula: 'Expected health cost per person per year = premiums for the months each coverage period is in force + expected out-of-pocket + Medicare Part B and D premiums, grown at the healthcare growth assumption. Rules: a Selected Reserve member eligible for FEHB cannot buy TRICARE Reserve Select until 1 January 2030; the same restriction applies to TRICARE Retired Reserve; TRICARE For Life requires Medicare Parts A and B; a person eligible for TRICARE cannot receive CHAMPVA; TAMP lasts 180 days; CHCBP lasts 18 months (members) or 36 months (others).',
+    plainEnglish:
+      'Each person in the household can have different coverage in the same month, and it can change over time. FireFed adds up the cost of the coverage you confirm for each person. When a combination breaks a current rule, it stops and says so rather than picking a plan for you. It never declares anyone eligible.',
+    source: { name: 'TRICARE: Eligibility', url: 'https://tricare.mil/Plans/Eligibility' },
+    statute: '10 U.S.C. 1076d, 1076e, 1086(d), 1145; 38 U.S.C. 1781; Pub. L. 116-92 §701',
+    verifiedAgainst: 'Statute text for each rule; TRICARE plan pages. The premium table holds the 2025 published amounts pending 2026 verification',
+    inputs: ['military.coverage[]', 'healthcare.premiumGrowthPercent', 'household.spouse.isFederal'],
+    caveats: ['Costs are compared, not ranked; geographic and network limits are not modeled.', 'VA health care is an out-of-pocket entry, not a plan FireFed declares adequate.'],
+  }),
+  rule({
+    id: 'military.deposit_required',
+    category: 'military',
+    title: 'Post-1956 military service needs a deposit',
+    formula: 'Service on or after 1 January 1957 is credited only when the military service deposit for that period is paid in full before separation from federal civilian service. Service before 1957 is credited without a deposit.',
+    plainEnglish:
+      'Almost all military service today is after 1956, so it counts toward FERS only if you pay the deposit for it, and you have to finish paying before you leave federal service. Each period is all or nothing: a partly paid period earns no credit.',
+    source: { name: 'OPM — CSRS/FERS Handbook ch. 22, military service', url: OPM_HANDBOOK_CH22 },
+    statute: '5 U.S.C. 8411(c)(1)(B), 8422(e)',
+    verifiedAgainst: 'Handbook chapter 22 section 22A4.1-1; OPM creditable service page',
+    inputs: ['military.servicePeriods[].startDate', 'military.deposit.status'],
+    caveats: [
+      'The deposit rate by service year and the interest computation are the deposit rule, added with the deposit engine.',
+      'Whether a specific period is fully paid is the agency\'s record; FireFed models what the user enters.',
+    ],
   }),
 ];
 

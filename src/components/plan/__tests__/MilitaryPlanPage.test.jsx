@@ -1,0 +1,204 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import MilitaryPlanPage from '../MilitaryPlanPage';
+import { applyScenarioUpdates, createDefaultScenario, normalizeScenario } from '../../../lib/scenarios/schema';
+import { FEATURES } from '../../../lib/entitlements';
+import { RETIRED_PAY_WAIVER_WARNING } from '../../../lib/military/retiredPayWaiver';
+
+const mocks = vi.hoisted(() => ({ scenario: null, entitlements: { features: {} }, track: vi.fn() }));
+
+vi.mock('../../../contexts/ScenarioContext', () => ({ useScenario: () => ({ currentScenario: mocks.scenario, isLoadingScenarios: false }) }));
+vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ entitlements: mocks.entitlements }) }));
+vi.mock('../../../lib/telemetry', () => ({ trackEvent: (...args) => mocks.track(...args) }));
+
+const PERIOD = {
+  id: 'ad',
+  dutyStatus: 'active_duty',
+  startDate: '1998-01-01',
+  endDate: '2001-12-31',
+  characterStatus: 'confirmed_honorable_conditions',
+  documentationStatus: 'dd214',
+  inputProvenance: 'user_entered_official',
+  earningsByYear: { 1998: 18000, 1999: 19000, 2000: 20000, 2001: 21000 },
+};
+
+const scenario = (military) =>
+  applyScenarioUpdates(
+    normalizeScenario({
+      ...createDefaultScenario('m'),
+      profile: { currentAge: 50, separationAge: 57, socialSecurityClaimAge: 67 },
+      tsp: { currentBalance: 400000, annualSalary: 110000, monthlyContributionPercent: 10, annualSalaryGrowthRate: 2, inflationRate: 2.5 },
+      fers: { yearsOfService: 19, monthsOfService: 0, high3Salary: 105000 },
+      fire: { monthlyFireIncomeGoal: 5000, sideHustleIncome: 0 },
+      summary: { monthlyExpenses: 4500, socialSecurity: { mode: 'manual', monthlyBenefit: 2400 } },
+    }),
+    { military }
+  );
+
+const renderPage = () =>
+  render(
+    <MemoryRouter>
+      <MilitaryPlanPage />
+    </MemoryRouter>
+  );
+
+describe('MilitaryPlanPage', () => {
+  beforeEach(() => {
+    mocks.entitlements = { features: {} };
+    mocks.track.mockClear();
+  });
+
+  it('invites the user to add a connection when none is recorded', () => {
+    mocks.scenario = scenario({ connection: 'none' });
+    renderPage();
+    expect(screen.getByRole('link', { name: 'Add a military connection' })).toHaveAttribute('href', '/plan/inputs#military');
+    expect(screen.getByText(/Official agencies make eligibility and payment decisions/)).toBeInTheDocument();
+  });
+
+  it('renders the five views for a veteran with a paid deposit', () => {
+    mocks.scenario = scenario({ connection: 'self', servicePeriods: [PERIOD], deposit: { firstFersCoverageDate: '2008-03-01' }, incomeStreams: [{ id: 'va', type: 'va_disability', grossAmount: 1500, amountStatus: 'official', officialAmountAsOfDate: '2026-01-01' }] });
+    renderPage();
+    for (const name of ['Military snapshot', 'Service-credit comparison', 'Military income timeline', 'Assumptions and sources']) {
+      expect(screen.getByRole('heading', { name })).toBeInTheDocument();
+    }
+    // No retired pay recorded, so no waiver view.
+    expect(screen.queryByRole('heading', { name: 'Retired-pay waiver comparison' })).not.toBeInTheDocument();
+    // The comparison: MRA+10 without the deposit, unreduced with it.
+    expect(screen.getByText('Whole-plan comparison')).toBeInTheDocument();
+    expect(screen.getByText('MRA+10, starting now')).toBeInTheDocument();
+    expect(screen.getByText('Immediate, unreduced')).toBeInTheDocument();
+    // The spec copy.
+    expect(screen.getByText(/not an official service-credit determination/)).toBeInTheDocument();
+    expect(screen.getByText(/official balance may differ/)).toBeInTheDocument();
+    // Income timeline carries the VA stream with its tax class.
+    expect(screen.getByRole('columnheader', { name: /VA disability compensation \(Not taxable\)/ })).toBeInTheDocument();
+    // Advanced analysis is Pro.
+    expect(screen.getByText(/Present value, the discounted break-even/)).toBeInTheDocument();
+  });
+
+  it('unlocks the analysis block for Pro', () => {
+    mocks.entitlements = { features: { [FEATURES.MILITARY_ANALYSIS]: true } };
+    mocks.scenario = scenario({ connection: 'self', servicePeriods: [PERIOD], deposit: { firstFersCoverageDate: '2008-03-01' } });
+    renderPage();
+    expect(screen.getByText(/Net present value at/)).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'After-tax difference by age' })).toBeInTheDocument();
+  });
+
+  it('always shows the §6.7 warning and the block for a regular retiree, and gates the scenarios', () => {
+    mocks.scenario = scenario({
+      connection: 'self',
+      servicePeriods: [PERIOD],
+      retiredPay: { receives: 'yes', type: 'regular_longevity' },
+      incomeStreams: [{ id: 'rp', type: 'longevity_retired_pay', grossAmount: 3000, amountStatus: 'official', officialAmountAsOfDate: '2026-01-01' }],
+    });
+    renderPage();
+    expect(screen.getByRole('heading', { name: 'Retired-pay waiver comparison' })).toBeInTheDocument();
+    expect(screen.getByRole('note')).toHaveTextContent(RETIRED_PAY_WAIVER_WARNING);
+    expect(document.querySelector('[data-issue-code="MIL_WAIVER_CONFIRMATION_REQUIRED"]')).not.toBeNull();
+    expect(screen.getByText(/The keep, waive, and exception scenarios/)).toBeInTheDocument();
+    // Nothing is credited in the plan of record.
+    expect(within(screen.getByRole('heading', { name: 'Military snapshot' }).closest('section')).getByText('None credited')).toBeInTheDocument();
+    expect(mocks.track).toHaveBeenCalledWith('unsupported_case_shown');
+  });
+
+  it('shows the keep and waive scenarios for Pro', () => {
+    mocks.entitlements = { features: { [FEATURES.MILITARY_SCENARIOS]: true } };
+    mocks.scenario = scenario({
+      connection: 'self',
+      servicePeriods: [PERIOD],
+      retiredPay: { receives: 'yes', type: 'regular_longevity' },
+      incomeStreams: [{ id: 'rp', type: 'longevity_retired_pay', grossAmount: 3000, amountStatus: 'official', officialAmountAsOfDate: '2026-01-01' }],
+    });
+    renderPage();
+    const table = screen.getByRole('table', { name: 'Keep, waive, and exception scenarios' });
+    expect(within(table).getByRole('columnheader', { name: 'Keep retired pay' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Waive (hypothetical)' })).toBeInTheDocument();
+    expect(screen.getByText(/FireFed does not prepare or submit a waiver/)).toBeInTheDocument();
+  });
+
+  it('shows the TSP coordination view with both accounts, the BRS value stack, and the coverage view per person', () => {
+    mocks.entitlements = { features: {} };
+    mocks.scenario = scenario({
+      connection: 'self',
+      servicePeriods: [PERIOD],
+      tsp: { uniformedServices: { enabled: true, coverageSystem: 'brs', monthsOfService: 96, contributing: true, monthlyBasicPay: 3000, employeePercent: 5, traditionalTaxableBalance: 40000, traditionalTaxExemptBasis: 10000, contributionEndAge: 55 } },
+      brs: { continuationPay: { offered: true, multiple: 2.5, monthlyBasicPay: 3000, paymentDate: '2027-06-01', provenance: 'user_entered_official' }, lumpSum: { electionPercent: 25 } },
+      coverage: [
+        { id: 'me', ownerId: 'primary', source: 'fehb', startDate: '2026-01-01', enrollmentConfirmed: true, monthlyPremium: 250 },
+        { id: 'sp', ownerId: 'spouse', source: 'trs', startDate: '2026-01-01', enrollmentConfirmed: true },
+      ],
+    });
+    renderPage();
+    const tsp = screen.getByRole('heading', { name: 'TSP coordination' }).closest('section');
+    const accounts = within(tsp).getByRole('table', { name: 'TSP accounts' });
+    expect(within(accounts).getByText('Civilian')).toBeInTheDocument();
+    expect(within(accounts).getByText('Uniformed services')).toBeInTheDocument();
+    expect(within(tsp).getByText(/tax-exempt basis/)).toBeInTheDocument();
+    const stack = screen.getByTestId('brs-value-stack');
+    expect(within(stack).getByText('$7,500')).toBeInTheDocument(); // continuation pay from the official offer
+    expect(within(stack).getByText('Blocked')).toBeInTheDocument(); // lump sum without the official rate
+    expect(within(stack).getByText(/discount rate for this year is missing or stale/)).toBeInTheDocument();
+    const cov = screen.getByRole('heading', { name: 'Health coverage by person' }).closest('section');
+    const periods = within(cov).getByRole('table', { name: 'Coverage periods' });
+    expect(within(periods).getByText('TRICARE Reserve Select')).toBeInTheDocument();
+    expect(within(cov).getByRole('table', { name: 'Expected health cost by year and person' })).toBeInTheDocument();
+    // Never one unlabeled retirement-benefit number.
+    expect(document.body.textContent).not.toMatch(/total retirement benefit/i);
+  });
+
+  it('shows the gross-to-net ledger with SBP and the newer-rules banner', () => {
+    mocks.entitlements = { features: {} };
+    mocks.scenario = scenario({
+      connection: 'self',
+      rulesVersion: '2025.1',
+      retiredPay: { receives: 'yes', type: 'regular_longevity' },
+      incomeStreams: [{ id: 'rp', type: 'longevity_retired_pay', grossAmount: 3000, frequency: 'monthly', amountStatus: 'official', officialAmountAsOfDate: '2026-01-01' }],
+      sbp: { elected: 'yes', category: 'spouse', fullBase: true, provenance: 'user_entered_official', premiumsPaidToDate: 0 },
+      netPay: { vaWaiverMonthly: 500, crdpMonthly: 500, federalWithholdingRate: 0.1, adjustmentsOfficial: true },
+    });
+    renderPage();
+    expect(screen.getByTestId('rules-stale-banner')).toHaveTextContent('Newer military rules are available (2026.1); this scenario was last resolved under 2025.1');
+    const view = screen.getByRole('heading', { name: 'Retired pay: gross to net' }).closest('section');
+    const table = within(view).getByRole('table', { name: 'Gross-to-net ledger' });
+    expect(within(table).getByText('SBP premium')).toBeInTheDocument();
+    expect(within(table).getByText('VA waiver / offset')).toBeInTheDocument();
+    expect(within(table).getByText('CRDP restored')).toBeInTheDocument();
+    expect(within(table).getByText('Estimated net deposit')).toBeInTheDocument();
+    expect(within(view).getByText(/Not DFAS net pay unless reconciled/)).toBeInTheDocument();
+    expect(within(view).getByText(/FireFed does not compute concurrent receipt/)).toBeInTheDocument();
+  });
+
+  it('after launch the BRS value stack is Pro while the BRS warnings stay free', () => {
+    vi.stubEnv('VITE_MILITARY_LAUNCH_GATES', 'true');
+    try {
+      mocks.entitlements = { features: {} };
+      mocks.scenario = scenario({
+        connection: 'self',
+        tsp: { uniformedServices: { enabled: true, coverageSystem: 'brs', monthsOfService: 96, contributing: true, monthlyBasicPay: 3000, employeePercent: 5 } },
+        brs: { continuationPay: { offered: true, multiple: 2.5, monthlyBasicPay: 3000, paymentDate: '2027-06-01', provenance: 'user_estimate' }, lumpSum: { electionPercent: 25 } },
+      });
+      renderPage();
+      expect(screen.queryByTestId('brs-value-stack')).not.toBeInTheDocument();
+      const pro = screen.getByTestId('brs-value-stack-pro');
+      expect(pro).toHaveTextContent('part of Pro');
+      // The offer-required block and the missing-rate block are still shown.
+      expect(pro.querySelector('[data-issue-code="MRT_BRS_CP_OFFER_REQUIRED"]')).not.toBeNull();
+      expect(pro.querySelector('[data-issue-code="MRT_BRS_LSDR_MISSING"]')).not.toBeNull();
+      // Pro sees the stack.
+      document.body.innerHTML = '';
+      mocks.entitlements = { features: { [FEATURES.MILITARY_BRS]: true } };
+      renderPage();
+      expect(screen.getByTestId('brs-value-stack')).toBeInTheDocument();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('never uses recommendation language', () => {
+    mocks.entitlements = { features: { [FEATURES.MILITARY_SCENARIOS]: true, [FEATURES.MILITARY_ANALYSIS]: true } };
+    mocks.scenario = scenario({ connection: 'self', servicePeriods: [PERIOD], retiredPay: { receives: 'yes', type: 'regular_longevity' }, incomeStreams: [{ id: 'rp', type: 'longevity_retired_pay', grossAmount: 3000, amountStatus: 'official' }] });
+    renderPage();
+    expect(document.body.textContent.toLowerCase()).not.toMatch(/you should|you qualify|buy back|best plan|worth paying/);
+  });
+});

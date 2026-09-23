@@ -40,6 +40,8 @@
  *   Social Security subtractions cited in `notes`.
  */
 
+import { stateMilitaryRetiredPayExclusion } from './stateMilitaryRetiredPay';
+
 function num(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -200,9 +202,12 @@ export function calculateStateIncomeTax({
   state,
   ordinaryIncome = 0,
   federalPensionIncome = 0,
+  militaryRetiredPayIncome = 0,
   socialSecurityBenefits = 0,
   taxableSocialSecurityFederal = 0,
   longTermCapitalGains = 0,
+  taxYear = null,
+  age = null,
 } = {}) {
   const resolved = typeof state === 'string' ? getStatePreset(state) : state;
   if (!resolved) {
@@ -212,21 +217,35 @@ export function calculateStateIncomeTax({
   const rate = nonNegative(resolved.rate);
   const ordinary = nonNegative(ordinaryIncome);
   const pension = Math.min(ordinary, nonNegative(federalPensionIncome));
+  const military = Math.min(Math.max(0, ordinary - pension), nonNegative(militaryRetiredPayIncome));
   const gains = nonNegative(longTermCapitalGains);
   const taxableSs = nonNegative(taxableSocialSecurityFederal);
 
   const exemptPension = resolved.exemptsFederalPension
     ? pension
     : Math.min(pension, nonNegative(resolved.pensionExclusion));
+  // Military retired pay has its own rule in most states. It is applied only
+  // when that rule has been verified; otherwise the pay is taxed in full and
+  // the caller is told so (see stateMilitaryRetiredPay.js).
+  const militaryRule = military > 0
+    ? stateMilitaryRetiredPayExclusion({ code: resolved.code, militaryRetiredPay: military, taxYear, age })
+    : null;
+  const exemptMilitary = militaryRule ? militaryRule.excluded : 0;
   const taxedSocialSecurity = resolved.exemptsSocialSecurity ? 0 : taxableSs;
 
-  const taxableIncome = Math.max(0, ordinary + gains - exemptPension + taxedSocialSecurity);
+  const taxableIncome = Math.max(0, ordinary + gains - exemptPension - exemptMilitary + taxedSocialSecurity);
   const tax = taxableIncome * rate;
 
   return {
     code: resolved.code ?? null,
     rate,
     exemptFederalPension: exemptPension,
+    militaryRetiredPay: military,
+    exemptMilitaryRetiredPay: exemptMilitary,
+    militaryRuleApplied: Boolean(militaryRule?.applied),
+    militaryRuleVerified: Boolean(militaryRule?.verified),
+    militaryRuleReason: militaryRule?.reason ?? null,
+    militaryRuleTreatment: militaryRule?.treatment ?? null,
     taxedSocialSecurity,
     socialSecurityBenefits: nonNegative(socialSecurityBenefits),
     taxableIncome,

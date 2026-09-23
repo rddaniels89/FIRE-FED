@@ -110,11 +110,18 @@ export function calculateHouseholdTaxes({
     socialSecurity = 0,
     otherTaxable = 0,
     otherPension = 0,
+    // Military retired pay (including CRDP): ordinary income federally, with
+    // its own state treatment. Tax-exempt income (VA compensation, CRSC, DIC,
+    // allowances) is echoed back for the cash-flow view and never taxed; it is
+    // not tax-exempt interest, so it does not enter provisional income either.
+    militaryRetiredPay = 0,
+    taxExemptIncome = 0,
   } = income;
 
   const ordinaryIncome = nonNegative(wages)
     + nonNegative(federalPension)
     + nonNegative(otherPension)
+    + nonNegative(militaryRetiredPay)
     + nonNegative(srs)
     + nonNegative(traditionalWithdrawals)
     + nonNegative(taxableInterest)
@@ -137,9 +144,12 @@ export function calculateHouseholdTaxes({
       state,
       ordinaryIncome,
       federalPensionIncome: nonNegative(federalPension),
+      militaryRetiredPayIncome: nonNegative(militaryRetiredPay),
       socialSecurityBenefits: benefits,
       taxableSocialSecurityFederal: federal.taxableSocialSecurity,
       longTermCapitalGains: gains,
+      taxYear: year,
+      age: ages.length > 0 ? Math.max(...ages.map((a) => Number(a) || 0)) : null,
     })
     : null;
 
@@ -153,6 +163,7 @@ export function calculateHouseholdTaxes({
     ordinaryIncome,
     grossIncome,
     rothWithdrawals: nonNegative(rothWithdrawals),
+    taxExemptIncome: nonNegative(taxExemptIncome),
     federal,
     state: stateResult,
     federalTax: federal.totalTax,

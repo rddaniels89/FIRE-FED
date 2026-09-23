@@ -35,11 +35,44 @@ import {
 import { projectCareerSalaries } from '../calculations/careerProjection';
 import { birthYearFromAgeAndMonths, isMraTransitionYear, minimumRetirementAge } from '../calculations/mra';
 import { RETIREMENT_PATH_AUTO } from '../scenarios/schema';
+import { resolveMilitaryFersCredit } from '../military/fersCredit';
+import { ISSUE_CODES, raiseIssue } from '../military/status';
+import { SERVICE_OWNERS } from '../military/servicePeriods';
+import { STATE_TREATMENTS, resolveMilitaryIncomeStreams } from '../military/incomeStreams';
+import { stateMilitaryRetiredPayExclusion } from '../taxes/stateMilitaryRetiredPay';
+import { ACCOUNT_CONTEXTS, TSP_SYSTEMS, isAutomaticVested, normalizeUserraMakeUp, validateTspCoordination } from '../military/tspCoordination';
+import { validateCoveragePeriods } from '../military/coverage';
+import { continuationPayScenario, lumpSumScenario } from '../military/brs';
+import { computeRcsbp, computeSbp, retiredPayLedger } from '../military/sbp';
+import { rulesStatus } from '../military/status';
 
 const num = (v, fallback = 0) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 };
+
+/** 'YYYY-MM-DD' for a Date, in local calendar terms. */
+function isoDate(d) {
+  const date = d instanceof Date ? d : new Date(d);
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${m}-${day}`;
+}
+
+/**
+ * The first day of the month in which the person reaches `targetAge`, derived
+ * from their age in years and months today. Month precision is all the profile
+ * carries, and all the deposit deadline needs.
+ */
+export function isoMonthAtAge({ currentAge, currentAgeMonths = 0, targetAge, asOfDate = new Date() }) {
+  const d = asOfDate instanceof Date ? asOfDate : new Date(asOfDate);
+  const nowMonths = d.getFullYear() * 12 + d.getMonth();
+  const birthMonths = nowMonths - Math.floor(num(currentAge)) * 12 - Math.min(11, Math.max(0, Math.floor(num(currentAgeMonths))));
+  const target = birthMonths + Math.round(num(targetAge) * 12);
+  const year = Math.floor(target / 12);
+  const month = target - year * 12;
+  return `${year}-${String(month + 1).padStart(2, '0')}-01`;
+}
 
 export function isSpecialProvisionType(employeeType) {
   return Object.values(SPECIAL_PROVISION_TYPES).includes(employeeType);
@@ -95,8 +128,8 @@ export function resolveSocialSecurityInputs(scenario, { asOfYear = new Date().ge
  * Unreduced beats an early-out beats MRA+10 beats deferred. Whether MRA+10 is
  * taken now or postponed depends on whether an annuity start age was chosen.
  */
-export function chooseAutomaticPath({ separationAge, yearsOfService, annuityStartAge, mra, isVeraOffered }) {
-  const paths = evaluateAllRetirementPaths({ separationAge, yearsOfService, annuityStartAge, mra, isVeraOffered });
+export function chooseAutomaticPath({ separationAge, yearsOfService, civilianYearsOfService, annuityStartAge, mra, isVeraOffered }) {
+  const paths = evaluateAllRetirementPaths({ separationAge, yearsOfService, civilianYearsOfService, annuityStartAge, mra, isVeraOffered });
   const eligible = (p) => paths.find((x) => x.path === p && x.isEligible);
 
   if (eligible(RETIREMENT_PATHS.IMMEDIATE_UNREDUCED)) return RETIREMENT_PATHS.IMMEDIATE_UNREDUCED;
@@ -170,12 +203,35 @@ export function resolveRetirementPlan(scenario, options = {}) {
   const separationAge = num(profile.separationAge, currentAge);
   const isSpecialProvision = isSpecialProvisionType(profile.employeeType);
 
-  const eligibilityYears = serviceAtSeparation({
+  // Civilian service at separation. Military service credited by a paid
+  // deposit is a separate bucket: it opens the age-and-service doors and
+  // raises the computation, but it cannot supply the five civilian years,
+  // the High-3, the supplement's numerator, or covered special-provision time.
+  const civilianYears = serviceAtSeparation({
     yearsOfService: fers.yearsOfService,
     monthsOfService: fers.monthsOfService,
     currentAge,
     separationAge,
   });
+  // The deposit is date arithmetic, so the plan's as-of date and the month of
+  // separation are derived from the ages the profile stores (year and month,
+  // never a day) and handed to the credit resolver.
+  const asOfDate = options.asOfDate ?? new Date(asOfYear, options.asOfMonth ?? new Date().getMonth(), 1);
+  const separationDate = isoMonthAtAge({ currentAge, currentAgeMonths: num(profile.currentAgeMonths, 0), targetAge: separationAge, asOfDate });
+  const militaryCredit = resolveMilitaryFersCredit(scenario.military, {
+    ownerId: SERVICE_OWNERS.PRIMARY,
+    hireCohort: profile.hireCohort,
+    asOfDate: isoDate(asOfDate),
+    separationDate,
+  });
+  const militaryCreditYears = militaryCredit.creditYears;
+  const eligibilityYears = civilianYears + militaryCreditYears;
+  const militaryIssues = [...militaryCredit.issues];
+  if (
+    (scenario.military?.servicePeriods ?? []).some((p) => (p.ownerId ?? SERVICE_OWNERS.PRIMARY) === SERVICE_OWNERS.SPOUSE)
+  ) {
+    militaryIssues.push(raiseIssue(ISSUE_CODES.MIL_SPOUSE_CREDIT_NOT_MODELED));
+  }
 
   const requestedStart = profile.annuityStartAge == null ? null : num(profile.annuityStartAge);
 
@@ -184,15 +240,21 @@ export function resolveRetirementPlan(scenario, options = {}) {
     path = chooseAutomaticPath({
       separationAge,
       yearsOfService: eligibilityYears,
+      civilianYearsOfService: civilianYears,
       annuityStartAge: requestedStart,
       mra,
       isVeraOffered: Boolean(profile.isVeraOffered),
     });
   }
 
+  // Covered service for the special-provision test is civilian by definition;
+  // military credit is kept out of it.
   const special = isSpecialProvision
-    ? evaluateSpecialProvisionEligibility({ age: separationAge, coveredYears: eligibilityYears, type: profile.employeeType })
+    ? evaluateSpecialProvisionEligibility({ age: separationAge, coveredYears: civilianYears, type: profile.employeeType })
     : null;
+  if (isSpecialProvision && militaryCreditYears > 0) {
+    militaryIssues.push(raiseIssue(ISSUE_CODES.MIL_SPECIAL_SERVICE_EXCLUSION));
+  }
   // Special provision employees are separated by law at the mandatory age (57;
   // 56 for air traffic controllers). A later separation age is not available.
   const mandatoryRetirementAge = isSpecialProvision ? getMandatoryRetirementAge(profile.employeeType) : null;
@@ -207,6 +269,7 @@ export function resolveRetirementPlan(scenario, options = {}) {
         path,
         separationAge,
         yearsOfService: eligibilityYears,
+        civilianYearsOfService: civilianYears,
         annuityStartAge:
           requestedStart ?? defaultAnnuityStartAge({ path, separationAge, yearsOfService: eligibilityYears, mra }),
         mra,
@@ -215,6 +278,11 @@ export function resolveRetirementPlan(scenario, options = {}) {
     : null;
 
   const isEligibleForAnnuity = Boolean(pathEval?.isEligible) || Boolean(special?.isEligible);
+  // The one case the doors alone cannot explain: enough total service, too
+  // little of it civilian. Said plainly rather than left as "not eligible".
+  if (!isEligibleForAnnuity && militaryCreditYears > 0 && civilianYears < 5 && eligibilityYears >= 5) {
+    militaryIssues.push(raiseIssue(ISSUE_CODES.MIL_FIVE_CIVILIAN_YEARS));
+  }
   const annuityStartAge = special?.isEligible
     ? separationAge
     : isEligibleForAnnuity
@@ -231,8 +299,9 @@ export function resolveRetirementPlan(scenario, options = {}) {
   const fersResults =
     isEligibleForAnnuity && !takeRefund
       ? calculateFersResults({
-          yearsOfService: eligibilityYears,
+          yearsOfService: civilianYears,
           monthsOfService: 0,
+          militaryCreditYears,
           high3Salary: high3.high3AtSeparation,
           currentAge,
           retirementAge: annuityStartAge,
@@ -259,6 +328,8 @@ export function resolveRetirementPlan(scenario, options = {}) {
       ? calculateSrs({
           retirementAge: separationAge,
           creditableYearsOfService: eligibilityYears,
+          // The supplement is prorated on civilian FERS service only.
+          civilianYearsOfService: civilianYears,
           socialSecurityAt62Monthly: socialSecurity.monthlyAt62,
           mra,
           isVoluntaryEarlyRetirement: path === RETIREMENT_PATHS.VERA,
@@ -267,6 +338,10 @@ export function resolveRetirementPlan(scenario, options = {}) {
           isSpecialProvision: Boolean(special?.isEligible),
         })
       : null;
+
+  if (srs?.isEligible && militaryCreditYears > 0) {
+    militaryIssues.push(raiseIssue(ISSUE_CODES.MIL_SRS_EXCLUSION));
+  }
 
   const healthcare = scenario.healthcare ?? {};
   const fehb = evaluateFehbContinuation({
@@ -296,6 +371,145 @@ export function resolveRetirementPlan(scenario, options = {}) {
     hours: num(fers.annualLeaveHoursAtSeparation, 0),
   });
 
+  // Military and VA income streams: validated once here so the timeline
+  // projects them and the screens explain them from the same resolution.
+  const incomeStreams = resolveMilitaryIncomeStreams(scenario.military, { asOfDate });
+  militaryIssues.push(...incomeStreams.issues);
+  const hasMilitaryRetiredPay = incomeStreams.streams.some(
+    (s) => s.resolved.included && s.resolved.stateTreatment === STATE_TREATMENTS.MILITARY_RETIRED_PAY
+  );
+  const stateCode = scenario.taxes?.includeStateTax === false ? null : scenario.taxes?.state?.code ?? null;
+  let stateMilitaryRule = null;
+  if (hasMilitaryRetiredPay && stateCode && stateCode !== 'NONE') {
+    stateMilitaryRule = stateMilitaryRetiredPayExclusion({ code: stateCode, militaryRetiredPay: 1, taxYear: asOfYear, age: separationAge });
+    if (!stateMilitaryRule.applied && stateMilitaryRule.reason !== 'no_rule') {
+      militaryIssues.push(raiseIssue(ISSUE_CODES.MIL_STATE_TAX_UNVERIFIED, { detail: { state: stateCode, reason: stateMilitaryRule.reason, treatment: stateMilitaryRule.treatment } }));
+    }
+  }
+
+  // ---- TSP coordination: the civilian and uniformed-services accounts share
+  // one elective-deferral limit; matches and vesting stay separate.
+  const milTsp = scenario.military?.tsp ?? {};
+  const uni = milTsp.uniformedServices ?? {};
+  const userra = normalizeUserraMakeUp(milTsp.userraMakeUp ?? []);
+  let tspCoordination = null;
+  if (uni.enabled) {
+    militaryIssues.push(...userra.issues);
+    const fractionLeft = (12 - asOfDate.getMonth()) / 12;
+    const civPeriods = Math.max(1, num(milTsp.civilian?.payPeriodsPerYear, 26));
+    const uniPeriods = Math.max(1, num(uni.payPeriodsPerYear, 12));
+    const civSalary = currentAge < separationAge ? num(scenario.tsp?.annualSalary) : 0;
+    const civPct = num(scenario.tsp?.monthlyContributionPercent);
+    const uniAnnualPay = uni.contributing ? num(uni.monthlyBasicPay) * 12 : 0;
+    const uniTraditional = uni.contributionType !== 'roth';
+    const czAnnual = uniTraditional ? Math.min(uniAnnualPay, num(uni.combatZoneTaxExemptAnnual)) : 0;
+    const uniSystem = uni.coverageSystem === 'brs' ? TSP_SYSTEMS.BRS : TSP_SYSTEMS.NEITHER;
+    tspCoordination = validateTspCoordination({
+      year: asOfYear,
+      age: currentAge,
+      accounts: [
+        {
+          context: ACCOUNT_CONTEXTS.CIVILIAN,
+          system: TSP_SYSTEMS.FERS,
+          employeeDeferralsYtd: num(milTsp.civilian?.ytdEmployeeDeferrals),
+          plannedPerPeriod: (civSalary / civPeriods) * (civPct / 100),
+          payPeriodsRemaining: civSalary > 0 ? Math.round(civPeriods * fractionLeft) : 0,
+          payPerPeriod: civSalary / civPeriods,
+          employeePercent: civPct,
+          monthsOfService: num(fers.yearsOfService) * 12 + num(fers.monthsOfService),
+        },
+        {
+          context: ACCOUNT_CONTEXTS.UNIFORMED,
+          system: uniSystem,
+          employeeDeferralsYtd: num(uni.ytdEmployeeDeferrals),
+          plannedPerPeriod: Math.max(0, (uniAnnualPay * (num(uni.employeePercent) / 100) - czAnnual) / uniPeriods),
+          payPeriodsRemaining: uniAnnualPay > 0 ? Math.round(uniPeriods * fractionLeft) : 0,
+          payPerPeriod: uniAnnualPay / uniPeriods,
+          employeePercent: num(uni.employeePercent),
+          monthsOfService: num(uni.monthsOfService),
+          optedIn: Boolean(uni.brsOptedIn),
+          taxExemptPlannedPerPeriod: czAnnual / uniPeriods,
+          hasCombatZoneContributions: Boolean(uni.hasCombatZoneContributions),
+          traditionalTaxExemptBasis: uni.traditionalTaxExemptBasis,
+        },
+      ],
+      otherSharedPlanDeferrals: num(milTsp.otherSharedPlanDeferrals),
+      userraMakeUp: userra.transactions,
+    });
+    militaryIssues.push(...tspCoordination.issues);
+    if (uniSystem === TSP_SYSTEMS.BRS && num(uni.unvestedAutomaticBalance) > 0 && !isAutomaticVested({ system: TSP_SYSTEMS.BRS, yearsOfServiceInSystem: num(uni.monthsOfService) / 12 })) {
+      militaryIssues.push(raiseIssue(ISSUE_CODES.MIL_TSP_VESTING_AT_RISK, { entity: { type: 'tspAccount', id: ACCOUNT_CONTEXTS.UNIFORMED } }));
+    }
+  }
+
+  // ---- Health coverage periods, one row per person; conflicts block.
+  const coverage = validateCoveragePeriods(scenario.military?.coverage ?? [], {
+    fehbEligibility: {
+      primary: currentAge < separationAge || (Boolean(scenario.healthcare?.fehbEnrolled) && fehb.outcome === 'continues'),
+      spouse: Boolean(scenario.household?.spouse?.enabled && scenario.household?.spouse?.isFederal),
+    },
+    asOfDate: `${asOfDate.getFullYear()}-${String(asOfDate.getMonth() + 1).padStart(2, '0')}-01`,
+  });
+  militaryIssues.push(...coverage.issues);
+
+  // ---- BRS extras: continuation pay from an official offer, and the lump sum
+  // against the linked BRS retired-pay calculation.
+  const brsCfg = scenario.military?.brs ?? {};
+  let brs = null;
+  if (uni.coverageSystem === 'brs' || brsCfg.continuationPay?.offered || num(brsCfg.lumpSum?.electionPercent) > 0) {
+    const continuationPay = brsCfg.continuationPay?.offered ? continuationPayScenario({ offer: brsCfg.continuationPay }) : null;
+    let lumpSum = null;
+    if (num(brsCfg.lumpSum?.electionPercent) > 0) {
+      const linked = (scenario.military?.retirementScenarios ?? [])
+        .map((sc) => (sc.calculations ?? []).find((c) => c.id === sc.currentCalculationId))
+        .find((c) => c && c.system === 'brs' && c.projectedMonthly > 0);
+      const fra = fullRetirementAge({ birthYear });
+      const fraDate = `${birthYear + fra.years}-${String(1 + fra.months).padStart(2, '0')}-01`;
+      lumpSum = lumpSumScenario({
+        electionPercent: num(brsCfg.lumpSum.electionPercent),
+        grossMonthly: linked?.projectedMonthly ?? 0,
+        retiredPayStartDate: linked?.retiredPayStartDate ?? null,
+        fullRetirementDate: fraDate,
+        officialDiscountRate: brsCfg.lumpSum.officialDiscountRate === null || brsCfg.lumpSum.officialDiscountRate === undefined ? null : { rate: num(brsCfg.lumpSum.officialDiscountRate), year: brsCfg.lumpSum.discountRateYear, source: brsCfg.lumpSum.discountRateSource },
+        asOfYear,
+        colaAssumption: num(scenario.tsp?.inflationRate, 2.5) / 100,
+        vaOffsetKnown: Boolean(brsCfg.lumpSum.vaOffsetKnown),
+      });
+      lumpSum = { ...lumpSum, linkedCalculationId: linked?.id ?? null };
+    }
+    brs = { continuationPay, lumpSum };
+    militaryIssues.push(...(continuationPay?.issues ?? []), ...(lumpSum?.issues ?? []));
+  }
+
+  // ---- SBP, RCSBP, and the gross-to-net ledger on the primary's retired pay.
+  const retiredPayMonthly = incomeStreams.streams
+    .filter((s) => s.resolved.included && (s.type === 'longevity_retired_pay' || s.type === 'reserve_retired_pay' || s.type === 'disability_retired_pay') && (s.ownerId ?? 'primary') === 'primary')
+    .reduce((sum, s) => sum + s.resolved.annualGross / 12, 0);
+  const sbpElection = scenario.military?.sbp ?? null;
+  const sbp = sbpElection && sbpElection.elected !== 'unknown' ? computeSbp({ election: sbpElection, grossMonthly: retiredPayMonthly, memberAge: currentAge }) : null;
+  const rcsbp = sbpElection?.rcsbp?.elected ? computeRcsbp({ rcsbp: sbpElection.rcsbp }) : null;
+  const netPay = scenario.military?.netPay ?? {};
+  const ledger = retiredPayMonthly > 0
+    ? retiredPayLedger({
+        grossMonthly: retiredPayMonthly,
+        sbpPremiumMonthly: sbp?.applies ? sbp.premiumMonthly : 0,
+        rcsbpPremiumMonthly: rcsbp && !rcsbp.blocked ? rcsbp.premiumMonthly : 0,
+        vaWaiverMonthly: num(netPay.vaWaiverMonthly),
+        crdpMonthly: num(netPay.crdpMonthly),
+        crscMonthly: num(netPay.crscMonthly),
+        federalWithholdingRate: num(netPay.federalWithholdingRate),
+        stateWithholdingRate: num(netPay.stateWithholdingRate),
+        otherDeductionsMonthly: num(netPay.otherDeductionsMonthly),
+        adjustmentsOfficial: Boolean(netPay.adjustmentsOfficial),
+        reconciledToRas: Boolean(netPay.reconciledToRas),
+      })
+    : null;
+  militaryIssues.push(...(sbp?.issues ?? []), ...(rcsbp?.issues ?? []), ...(ledger?.issues ?? []));
+
+  // ---- rules version: saved scenarios are marked, never rewritten.
+  const rules = rulesStatus(scenario.military);
+  if (rules.stale) militaryIssues.push(raiseIssue(ISSUE_CODES.MRT_SCENARIO_RULES_STALE, { detail: { savedRulesVersion: rules.saved, currentRulesVersion: rules.current } }));
+
   return {
     path,
     pathLabel: pathEval?.label ?? (special?.isEligible ? 'Special provision, immediate' : 'No annuity'),
@@ -323,10 +537,66 @@ export function resolveRetirementPlan(scenario, options = {}) {
     mra,
     service: {
       todayYears: num(fers.yearsOfService) + num(fers.monthsOfService) / 12,
+      civilianYears,
+      militaryCreditYears,
       eligibilityYears,
       computationYears: fersResults?.service?.computationYears ?? eligibilityYears,
       sickLeaveYears: fersResults?.service?.sickLeaveYears ?? 0,
       creditsSickLeave,
+    },
+    military: {
+      creditYears: militaryCreditYears,
+      creditDuration: militaryCredit.creditDuration,
+      status: militaryCredit.status,
+      reason: militaryCredit.reason,
+      depositPaidInFull: militaryCredit.depositPaidInFull,
+      hasRecordedService: militaryCredit.hasRecordedService,
+      creditedPeriodIds: militaryCredit.creditedPeriodIds,
+      recordedYears: militaryCredit.normalized.totals.creditableYears + militaryCredit.normalized.totals.undatedApproximateYears,
+      /** Each recorded period with its classification, for the screens. */
+      normalizedPeriods: militaryCredit.normalized.periods,
+      separationDate,
+      deposit: {
+        mode: militaryCredit.deposit.mode,
+        principal: militaryCredit.deposit.principal,
+        principalComplete: militaryCredit.deposit.principalComplete,
+        interest: militaryCredit.deposit.interest,
+        balance: militaryCredit.deposit.balance,
+        totalPaid: militaryCredit.deposit.totalPaid,
+        projectionDate: militaryCredit.deposit.projectionDate,
+        interestAccrualDate: militaryCredit.deposit.interestAccrualDate,
+        nextPostingDate: militaryCredit.deposit.nextPostingDate,
+        officialBalance: militaryCredit.deposit.officialBalance,
+        plannedPaymentDate: scenario.military?.deposit?.plannedPaymentDate ?? null,
+        plannedPaymentAssumed: militaryCredit.deposit.plannedPaymentAssumed,
+        plannedAfterSeparation: militaryCredit.deposit.plannedAfterSeparation,
+        byPeriod: militaryCredit.deposit.byPeriod,
+        ledger: militaryCredit.deposit.ledger,
+        ratesUsed: militaryCredit.deposit.ratesUsed,
+      },
+      retiredPay: {
+        ...militaryCredit.retiredPayGate,
+        receives: scenario.military?.retiredPay?.receives ?? 'no',
+        type: scenario.military?.retiredPay?.type ?? null,
+        hypotheticalWaiver: Boolean(scenario.military?.hypotheticalWaiver),
+      },
+      incomeStreams: incomeStreams.streams,
+      stateMilitaryRetiredPay: stateMilitaryRule
+        ? { state: stateCode, applied: stateMilitaryRule.applied, verified: stateMilitaryRule.verified, treatment: stateMilitaryRule.treatment, reason: stateMilitaryRule.reason }
+        : null,
+      /** Shared-limit validation across the civilian and uniformed-services accounts; null when no uniformed account. */
+      tsp: tspCoordination,
+      userra: { transactions: userra.transactions, totals: userra.totals },
+      /** Validated coverage periods, one per person per period, with their issues. */
+      coverage: coverage.periods,
+      brs,
+      /** SBP election as computed (null when no election is recorded), RCSBP official amounts, and the gross-to-net ledger. */
+      sbp,
+      rcsbp,
+      ledger,
+      retiredPayMonthly,
+      rules,
+      issues: militaryIssues,
     },
     high3: high3,
     annuity: {

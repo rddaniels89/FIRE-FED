@@ -32,6 +32,36 @@ const yearsFmt = (v) => `${num(v).toFixed(1)} years`;
 const ageFmt = (v) => (v === null || v === undefined ? 'Path default' : `${num(v)}`);
 const text = (v) => (v === null || v === undefined || v === '' ? '—' : String(v));
 
+/** What the user has recorded, before any rule is applied to it. */
+function militaryRecordedText(military, fers) {
+  const periods = military?.servicePeriods ?? [];
+  if (periods.length === 0) return 'None';
+  const dated = periods.filter((p) => p.startDate && p.endDate).length;
+  const undated = periods.length - dated;
+  const parts = [];
+  if (dated > 0) parts.push(`${dated} period${dated === 1 ? '' : 's'} with dates`);
+  if (undated > 0) parts.push(`${num(fers?.militaryServiceYears)} years without dates`);
+  const deposit = military?.deposit?.status ?? 'not_requested';
+  parts.push(`deposit ${deposit === 'paid_in_full' ? 'paid in full' : text(deposit).replace(/_/g, ' ')}`);
+  return parts.join(', ');
+}
+
+/** What the plan actually credited, and why the rest is not. */
+function militaryCreditText(military) {
+  if (!military?.hasRecordedService) return 'None recorded';
+  if (military.creditYears > 0) {
+    const status = military.status === 'estimate_only' ? ' (estimate)' : '';
+    return `${yearsFmt(military.creditYears)}${status}`;
+  }
+  const why = {
+    deposit_unpaid: 'deposit not recorded as paid in full',
+    official_determination_required: 'awaiting an official determination',
+    not_creditable: 'not creditable service',
+    no_service: '',
+  }[military.reason] ?? '';
+  return why ? `None credited: ${why}` : 'None credited';
+}
+
 const PATH_LABELS = {
   auto: 'Automatic (best door open)',
   immediate_unreduced: 'Immediate, unreduced',
@@ -94,7 +124,7 @@ function enteredRows(s) {
         ['Survivor election', SURVIVOR_LABELS[fers.survivorElection] ?? text(fers.survivorElection)],
         ['Annual leave at separation', `${num(fers.annualLeaveHoursAtSeparation).toLocaleString()} hours`],
         ['Take refund of FERS contributions', yesNo(fers.takeRefundOfContributions)],
-        ['Military service', `${num(fers.militaryServiceYears)} years, deposit ${fers.militaryDepositPaid ? 'paid' : 'not paid'}`],
+        ['Military service recorded', militaryRecordedText(s.military, fers)],
       ],
     },
     {
@@ -218,6 +248,8 @@ function calculatedRows(plan, timeline) {
     ['Retirement path', plan.pathLabel],
     ['Eligible for an annuity', yesNo(plan.isEligibleForAnnuity)],
     ['Annuity start age', plan.annuityStartAge == null ? 'None' : String(plan.annuityStartAge)],
+    ['Civilian service at separation', yearsFmt(plan.service.civilianYears ?? plan.service.eligibilityYears)],
+    ['Military service credited', militaryCreditText(plan.military)],
     ['Service for eligibility at separation', yearsFmt(plan.service.eligibilityYears)],
     ['Service for computation (with sick leave)', yearsFmt(plan.service.computationYears)],
     ['High-3 at separation', `${money(plan.high3.high3AtSeparation)} (${plan.high3.basis === 'career' ? 'from GS career projection' : 'from salary growth'})`],

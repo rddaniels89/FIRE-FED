@@ -17,6 +17,7 @@ import TimelineChart from './TimelineChart';
 import YearByYearTable, { YEAR_BY_YEAR_PANEL_ID } from './YearByYearTable';
 import DurabilitySection from './DurabilitySection';
 import { fmtMoney, fmtYears } from './planFormat';
+import { isFederalEmployeeKind } from '../../lib/scenarios/schema';
 
 const MAX_SEPARATION_AGE = 75;
 
@@ -140,6 +141,18 @@ export default function PlanDashboard() {
         </p>
       </div>
 
+      {!isFederalEmployeeKind(profile?.kind) ? (
+        <Section id="military-first" title="Your military plan" lede="This plan has no federal job in it, so there is no FERS eligibility to find. The Military + Federal Plan page is the main view; the sections below read the same timeline.">
+          <div className="card p-6" data-testid="military-first">
+            <p className="text-sm text-slate-700 dark:text-slate-300 mb-4">
+              Retired pay, VA income, the uniformed-services TSP, health coverage, and the gross-to-net ledger live there, with every rule and its source.
+            </p>
+            <Link to="/plan/military" className="btn-primary btn-sm">
+              Open the Military + Federal Plan
+            </Link>
+          </div>
+        </Section>
+      ) : (
       <Section
         id="when"
         title="When could I leave?"
@@ -229,6 +242,7 @@ export default function PlanDashboard() {
 
         <DeltaCards deltas={deltas} onUseAge={setSeparationAge} />
       </Section>
+      )}
 
       <Section
         id="bridge"
@@ -254,6 +268,44 @@ export default function PlanDashboard() {
           <IncomeSection timeline={timeline} deflate={deflate} />
         </div>
       </Section>
+
+      {currentScenario.military?.connection && currentScenario.military.connection !== 'none' ? (
+        <Section
+          id="military"
+          title="What does military service change?"
+          lede="Service credit, the deposit, retired pay, and VA income on the same timeline."
+        >
+          <div className="card p-6" data-testid="military-teaser">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mb-4">
+              <div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">Military service credited</div>
+                <div className="font-medium text-slate-800 dark:text-slate-200 tabular-nums">
+                  <HowCalculated ruleId="military.fers_credit">
+                    {plan.military.creditYears > 0 ? `${plan.military.creditYears.toFixed(1)} years` : 'None'}
+                  </HowCalculated>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">Deposit balance</div>
+                <div className="font-medium text-slate-800 dark:text-slate-200 tabular-nums">{fmtMoney(plan.military.deposit.balance)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">Military and VA income this year</div>
+                <div className="font-medium text-slate-800 dark:text-slate-200 tabular-nums">{fmtMoney(rows[0]?.militaryIncome?.total ?? 0)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">Items needing an official answer</div>
+                <div className="font-medium text-slate-800 dark:text-slate-200 tabular-nums">
+                  {plan.military.issues.filter((i) => i.severity === 'block').length}
+                </div>
+              </div>
+            </div>
+            <Link to="/plan/military" className="btn-primary btn-sm">
+              Open the Military + Federal Plan
+            </Link>
+          </div>
+        </Section>
+      ) : null}
 
       <div className="card p-6 mb-10">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">

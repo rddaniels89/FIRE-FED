@@ -16,6 +16,13 @@
  * working while they are migrated, and legacy writes are translated onto the
  * profile by `translateLegacyUpdates`. Nothing else may write to a mirror.
  *
+ * Version 4 adds the `military` block: service periods with dates, the
+ * deposit, military and VA income streams, the uniformed-services TSP
+ * account, health coverage periods, and saved retired-pay calculations. The
+ * pre-v4 fields `fers.militaryServiceYears` and `fers.militaryDepositPaid`
+ * become mirrors of that block; a legacy year count with no dates is carried
+ * as an undated period that is shown but never credited.
+ *
  * Persistence: the cloud table has four JSONB columns (tsp, fers, fire,
  * summary). New blocks travel inside `summary_data.extensions` so no database
  * migration is required — see storage.js.
@@ -28,8 +35,10 @@ import {
 } from '../calculations/contributionLimits';
 import { DEFAULT_MRA, FERS_HIRE_COHORTS, SURVIVOR_ELECTIONS } from '../calculations/fers';
 import { FILING_STATUSES } from '../calculations/annualParameters';
+import { MILITARY_RULES_VERSION } from '../military/status';
+import { createServicePeriod, normalizeMilitaryServicePeriods } from '../military/servicePeriods';
 
-export const SCENARIO_SCHEMA_VERSION = 3;
+export const SCENARIO_SCHEMA_VERSION = 4;
 
 /** Blocks that live at the top level of a scenario. */
 export const SCENARIO_BLOCKS = Object.freeze([
@@ -42,11 +51,23 @@ export const SCENARIO_BLOCKS = Object.freeze([
   'healthcare',
   'career',
   'strategies',
+  'military',
   'summary',
 ]);
 
 /** Blocks that are persisted inside summary_data.extensions (see storage.js). */
-export const EXTENSION_BLOCKS = Object.freeze(['profile', 'household', 'taxes', 'healthcare', 'career', 'strategies']);
+export const EXTENSION_BLOCKS = Object.freeze([
+  'profile',
+  'household',
+  'taxes',
+  'healthcare',
+  'career',
+  'strategies',
+  'military',
+]);
+
+/** Id of the single undated period a v3 `militaryServiceYears` figure migrates into. */
+export const LEGACY_MILITARY_PERIOD_ID = 'legacy_military_years';
 
 export const RETIREMENT_PATH_AUTO = 'auto';
 
@@ -93,6 +114,8 @@ export function createDefaultProfile() {
     // explicit override for someone who knows their own MRA.
     mra: null,
     isDiscontinuedService: false,
+    /** Who the plan is for; decides which sections and figures apply. See PROFILE_KINDS. */
+    kind: 'federal',
   };
 }
 
@@ -185,7 +208,17 @@ export function createDefaultSpouse() {
 }
 
 export function createDefaultHousehold() {
-  return { spouse: createDefaultSpouse() };
+  return {
+    spouse: createDefaultSpouse(),
+    /**
+     * Optional ages at death for a survivor scenario. null means no death is
+     * modelled. Today only the military and VA income streams honour these
+     * (a stream stops on its owner's death; SBP and DIC start on the named
+     * death); the full household death scenario arrives with the survivor
+     * work.
+     */
+    deathAges: { primary: null, spouse: null },
+  };
 }
 
 export function createDefaultTaxes() {
@@ -242,6 +275,193 @@ export function createDefaultCareer() {
   };
 }
 
+/** Answers to "does anyone in this household have a military connection?" */
+export const MILITARY_CONNECTIONS = Object.freeze({
+  NONE: 'none',
+  SELF: 'self',
+  OTHER_MEMBER: 'other_member',
+  MULTIPLE: 'multiple',
+  UNSURE: 'unsure',
+});
+
+/**
+ * Who the plan is for. Asked once, at onboarding and in the You section, so a
+ * military member with no federal job is never shown FERS questions and a
+ * veteran in federal service is pointed at the military sections.
+ */
+export const PROFILE_KINDS = Object.freeze({
+  FEDERAL: 'federal',
+  FEDERAL_WITH_MILITARY: 'federal_with_military',
+  MILITARY_ONLY: 'military_only',
+  SPOUSE_SURVIVOR: 'spouse_survivor',
+});
+
+export const PROFILE_KIND_LABELS = Object.freeze({
+  [PROFILE_KINDS.FEDERAL]: 'Federal employee',
+  [PROFILE_KINDS.FEDERAL_WITH_MILITARY]: 'Federal employee with military service',
+  [PROFILE_KINDS.MILITARY_ONLY]: 'Military member or veteran, no federal job',
+  [PROFILE_KINDS.SPOUSE_SURVIVOR]: 'Spouse or survivor of a service member, no federal job',
+});
+
+/** Whether the plan has a federal civilian job in it (FERS sections, FERS figures). */
+export function isFederalEmployeeKind(kind) {
+  return kind !== PROFILE_KINDS.MILITARY_ONLY && kind !== PROFILE_KINDS.SPOUSE_SURVIVOR;
+}
+
+/**
+ * The scenario patch that records who the person is. It sets the military
+ * connection when the answer implies one and nothing is recorded yet, and for
+ * a plan with no federal job it clears the FERS service and salary defaults
+ * (only untouched defaults; anything the user entered stays).
+ */
+export function profileKindUpdates(scenario, kind) {
+  const updates = { profile: { kind } };
+  const connection = scenario?.military?.connection ?? MILITARY_CONNECTIONS.NONE;
+  if (connection === MILITARY_CONNECTIONS.NONE) {
+    if (kind === PROFILE_KINDS.FEDERAL_WITH_MILITARY || kind === PROFILE_KINDS.MILITARY_ONLY) updates.military = { connection: MILITARY_CONNECTIONS.SELF };
+    if (kind === PROFILE_KINDS.SPOUSE_SURVIVOR) updates.military = { connection: MILITARY_CONNECTIONS.OTHER_MEMBER };
+  }
+  if (!isFederalEmployeeKind(kind)) {
+    const f = createDefaultFers();
+    const t = createDefaultTsp();
+    const fers = scenario?.fers ?? {};
+    const tsp = scenario?.tsp ?? {};
+    if (fers.yearsOfService === f.yearsOfService && fers.monthsOfService === f.monthsOfService) updates.fers = { yearsOfService: 0, monthsOfService: 0 };
+    if (tsp.annualSalary === t.annualSalary && tsp.monthlyContributionPercent === t.monthlyContributionPercent) updates.tsp = { annualSalary: 0, monthlyContributionPercent: 0 };
+  }
+  return updates;
+}
+
+/** The user's current relationship to the uniformed services. */
+export const MILITARY_RELATIONSHIPS = Object.freeze({
+  ACTIVE_DUTY: 'active_duty',
+  VETERAN: 'veteran',
+  SELECTED_RESERVE: 'selected_reserve',
+  OTHER_RESERVE_GUARD: 'other_reserve_guard',
+  REGULAR_RETIREE: 'regular_retiree',
+  RESERVE_RETIREE: 'reserve_retiree',
+  SPOUSE: 'spouse',
+  SURVIVOR: 'survivor',
+  UNSURE: 'unsure',
+});
+
+/** Where the military service deposit stands with the agency. */
+export const DEPOSIT_STATUSES = Object.freeze({
+  NOT_REQUESTED: 'not_requested',
+  EARNINGS_REQUESTED: 'earnings_requested',
+  APPLICATION_SUBMITTED: 'application_submitted',
+  AGENCY_QUOTE_RECEIVED: 'agency_quote_received',
+  PAYMENTS_IN_PROGRESS: 'payments_in_progress',
+  PAID_IN_FULL: 'paid_in_full',
+  AGENCY_DENIED: 'agency_denied',
+  UNKNOWN: 'unknown',
+});
+
+/**
+ * The military block. Every sub-block is present from the start so later
+ * passes fill structure rather than invent it; most stay empty for most users.
+ */
+export function createDefaultMilitary() {
+  return {
+    connection: MILITARY_CONNECTIONS.NONE,
+    relationship: null,
+    servicePeriods: [],
+    deposit: {
+      /** 'official_balance' when the agency figure is entered; 'estimate' otherwise. */
+      mode: 'estimate',
+      status: DEPOSIT_STATUSES.NOT_REQUESTED,
+      officialBalance: null,
+      officialBalanceThroughDate: null,
+      paidAmount: 0,
+      paidThroughDate: null,
+      paidInFullDate: null,
+      firstFersCoverageDate: null,
+      /** Overrides the derived interest-accrual date when the agency has stated one. */
+      interestAccrualDate: null,
+      plannedPaymentDate: null,
+      /** [{ id, date, amount, official }] in any order; the engine sorts them. */
+      payments: [],
+    },
+    incomeStreams: [],
+    /**
+     * Whether the person receives military retired pay and of what type. This
+     * gates the FERS credit: regular retired pay must be waived to credit the
+     * service; chapter 1223 Reserve retired pay and certain disability awards
+     * are exceptions the user identifies; an unknown type stops the credit.
+     */
+    retiredPay: {
+      receives: 'no',
+      type: null,
+      officialDeterminationStatus: 'unknown',
+      chapter61Exception: 'unknown',
+      exceptionAcknowledged: false,
+      waiver: { mode: 'none', effectiveAge: null },
+    },
+    tsp: {
+      /** The civilian account is scenario.tsp; only its limit-sharing facts live here. */
+      civilian: { ytdEmployeeDeferrals: 0, payPeriodsPerYear: 26, yearsOfServiceInSystem: null, vestingYears: null },
+      uniformedServices: {
+        enabled: false,
+        /** 'brs' | 'legacy' | 'neither' — legacy (High-36/REDUX) members get no service contributions. */
+        coverageSystem: 'neither',
+        brsOptedIn: false,
+        serviceEntryDate: null,
+        monthsOfService: null,
+        traditionalTaxableBalance: 0,
+        traditionalTaxExemptBasis: null,
+        rothBalance: 0,
+        rothContributionBasis: 0,
+        unvestedAutomaticBalance: 0,
+        outstandingLoanBalance: null,
+        balanceAsOfDate: null,
+        hasCombatZoneContributions: false,
+        /** Current contributions from military pay, while contributing. */
+        contributing: false,
+        monthlyBasicPay: 0,
+        employeePercent: 0,
+        contributionType: 'traditional',
+        contributionEndAge: null,
+        combatZoneTaxExemptAnnual: 0,
+        ytdEmployeeDeferrals: 0,
+        payPeriodsPerYear: 12,
+      },
+      otherSharedPlanDeferrals: 0,
+      userraMakeUp: [],
+    },
+    brs: {
+      continuationPay: { offered: false, multiple: null, monthlyBasicPay: null, paymentDate: null, installments: 1, obligationYears: 4, provenance: 'user_estimate' },
+      lumpSum: { electionPercent: 0, officialDiscountRate: null, discountRateYear: null, discountRateSource: null, vaOffsetKnown: false },
+    },
+    /** Survivor Benefit Plan election as read from the orders or RAS; never inferred. */
+    sbp: {
+      elected: 'unknown',
+      category: 'unknown',
+      fullBase: true,
+      electedBase: null,
+      electionDate: null,
+      officialPremiumMonthly: null,
+      officialAnnuityMonthly: null,
+      provenance: 'user_estimate',
+      premiumsPaidToDate: 0,
+      rcsbp: { elected: false, noticeOfEligibilityDate: null, option: null, officialPremiumMonthly: null, officialAnnuityMonthly: null, provenance: 'user_estimate' },
+    },
+    /** Gross-to-net ledger inputs: official adjustments and withholding assumptions. */
+    netPay: {
+      vaWaiverMonthly: 0,
+      crdpMonthly: 0,
+      crscMonthly: 0,
+      federalWithholdingRate: 0,
+      stateWithholdingRate: 0,
+      otherDeductionsMonthly: 0,
+      adjustmentsOfficial: false,
+      reconciledToRas: false,
+    },
+    coverage: [],
+    retirementScenarios: [],
+    rulesVersion: MILITARY_RULES_VERSION,
+  };
+}
+
 export function createDefaultSummary() {
   return {
     monthlyExpenses: 4000,
@@ -280,6 +500,7 @@ export function createDefaultScenario(name = 'New Scenario') {
     healthcare: createDefaultHealthcare(),
     career: createDefaultCareer(),
     strategies: createDefaultStrategies(),
+    military: createDefaultMilitary(),
     summary: createDefaultSummary(),
   };
 }
@@ -329,6 +550,30 @@ function migrateV2ToV3(s) {
   return { ...s, profile, household, schemaVersion: 3 };
 }
 
+/**
+ * v3 → v4: the military year count and deposit flag become a military block.
+ *
+ * The legacy figure had no dates, no branch, and no character of service, so
+ * it cannot be credited under the v4 rules. It becomes one undated period
+ * with `approximateYears` set, which the classifier holds for an official
+ * determination and the UI shows with a prompt to enter the real periods.
+ * A saved row is re-migrated on every load (the row does not persist its
+ * schema version), so this must be a no-op when the block already exists.
+ */
+function migrateV3ToV4(s) {
+  if (s.military && typeof s.military === 'object') return { ...s, schemaVersion: 4 };
+
+  const fers = s.fers ?? {};
+  const military = createDefaultMilitary();
+  const legacyYears = num(fers.militaryServiceYears, 0);
+  if (legacyYears > 0) {
+    military.connection = MILITARY_CONNECTIONS.SELF;
+    military.servicePeriods = [createServicePeriod({ id: LEGACY_MILITARY_PERIOD_ID, approximateYears: legacyYears })];
+    military.deposit.status = fers.militaryDepositPaid ? DEPOSIT_STATUSES.PAID_IN_FULL : DEPOSIT_STATUSES.UNKNOWN;
+  }
+  return { ...s, military, schemaVersion: 4 };
+}
+
 export function migrateScenarioToLatest(scenario) {
   if (!scenario || typeof scenario !== 'object') return scenario;
 
@@ -357,6 +602,11 @@ export function migrateScenarioToLatest(scenario) {
     version = 3;
   }
 
+  if (version < 4) {
+    s = migrateV3ToV4(s);
+    version = 4;
+  }
+
   if (!Number.isFinite(version) || version !== SCENARIO_SCHEMA_VERSION) {
     s.schemaVersion = SCENARIO_SCHEMA_VERSION;
   }
@@ -377,12 +627,28 @@ export function applyProfileMirrors(scenario) {
   return {
     ...scenario,
     tsp: { ...scenario.tsp, currentAge: p.currentAge, retirementAge: p.separationAge },
-    fers: { ...scenario.fers, currentAge: p.currentAge, retirementAge: annuityStart },
+    fers: { ...scenario.fers, currentAge: p.currentAge, retirementAge: annuityStart, ...militaryMirrors(scenario.military) },
     fire: { ...scenario.fire, desiredFireAge: p.separationAge, spouseIncome: spouseMonthly },
     summary: {
       ...scenario.summary,
       socialSecurity: { ...scenario.summary.socialSecurity, claimingAge: p.socialSecurityClaimAge },
     },
+  };
+}
+
+/**
+ * The legacy `fers.militaryServiceYears` and `fers.militaryDepositPaid` as
+ * read-only mirrors of the military block. The years figure is what the user
+ * has recorded (creditable periods plus any undated legacy count), rounded to
+ * the month; it is display only and no engine reads it after Pass 2.
+ */
+function militaryMirrors(military) {
+  const periods = military?.servicePeriods ?? [];
+  const { totals } = normalizeMilitaryServicePeriods(periods);
+  const years = totals.creditableYears + totals.undatedApproximateYears;
+  return {
+    militaryServiceYears: Math.round(years * 12) / 12,
+    militaryDepositPaid: military?.deposit?.status === DEPOSIT_STATUSES.PAID_IN_FULL,
   };
 }
 
@@ -473,6 +739,33 @@ export function translateLegacyUpdates(updates, current) {
     out.household = deepMerge(out.household ?? {}, {
       spouse: { enabled: monthly > 0 || Boolean(current?.household?.spouse?.enabled), annualIncome: monthly * 12 },
     });
+  }
+
+  // Legacy military writes land on the undated legacy period and the deposit
+  // status. Once real dated periods exist the year count is derived from them,
+  // so a legacy write is ignored rather than allowed to disagree.
+  const legacyYears = updates.fers?.militaryServiceYears;
+  const legacyPaid = updates.fers?.militaryDepositPaid;
+  if (legacyYears !== undefined || legacyPaid !== undefined) {
+    const existing = current?.military?.servicePeriods ?? [];
+    const dated = existing.filter((p) => p.id !== LEGACY_MILITARY_PERIOD_ID);
+    const militaryPatch = {};
+    if (legacyYears !== undefined && dated.length === 0) {
+      const years = Math.max(0, num(legacyYears, 0));
+      militaryPatch.servicePeriods =
+        years > 0 ? [createServicePeriod({ id: LEGACY_MILITARY_PERIOD_ID, approximateYears: years })] : [];
+      if (years > 0 && (current?.military?.connection ?? MILITARY_CONNECTIONS.NONE) === MILITARY_CONNECTIONS.NONE) {
+        militaryPatch.connection = MILITARY_CONNECTIONS.SELF;
+      }
+    }
+    if (legacyPaid !== undefined) {
+      militaryPatch.deposit = { status: legacyPaid ? DEPOSIT_STATUSES.PAID_IN_FULL : DEPOSIT_STATUSES.UNKNOWN };
+    }
+    if (Object.keys(militaryPatch).length > 0) out.military = deepMerge(out.military ?? {}, militaryPatch);
+    if (out.fers) {
+      const { militaryServiceYears: _y, militaryDepositPaid: _p, ...rest } = out.fers;
+      out.fers = rest;
+    }
   }
 
   if (Object.keys(profilePatch).length > 0) {

@@ -172,9 +172,16 @@ export function applySrsEarningsTest({
  * Full picture for one retirement scenario: eligibility, monthly amount, the
  * earnings test, and the years over which it is paid.
  */
+/**
+ * `creditableYearsOfService` decides eligibility and may include credited
+ * military service. `civilianYearsOfService` is the numerator of the amount and
+ * must not; it defaults to the creditable figure for callers with no military
+ * credit.
+ */
 export function calculateSrs({
   retirementAge,
   creditableYearsOfService,
+  civilianYearsOfService,
   socialSecurityAt62Monthly,
   mra = DEFAULT_MRA,
   isVoluntaryEarlyRetirement = false,
@@ -210,7 +217,10 @@ export function calculateSrs({
 
   const monthly = calculateSrsMonthly({
     socialSecurityAt62Monthly,
-    civilianYearsOfService: creditableYearsOfService,
+    civilianYearsOfService:
+      civilianYearsOfService === undefined || civilianYearsOfService === null
+        ? creditableYearsOfService
+        : civilianYearsOfService,
   });
   const annual = monthly * 12;
 

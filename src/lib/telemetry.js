@@ -25,10 +25,54 @@ export function initTelemetry() {
   }
 }
 
+/**
+ * Property keys an event may carry. Anything else is dropped before it leaves
+ * the browser: no dollar amounts, grades, service dates, ratings, points,
+ * health-plan choices, or free text ever reach analytics (spec §11.3, §20.19).
+ */
+export const TELEMETRY_ALLOWED_KEYS = Object.freeze([
+  'calculator', 'engaged', 'target', 'placement', 'path', 'status', 'mode', 'reason', 'code', 'operation',
+  'count', 'limit', 'importedCount', 'skippedCount', 'selectedCount', 'simulations', 'fromAge', 'toAge',
+  'includeCharts', 'detailLevel', 'plan', 'preset', 'kind', 'id', 'http_status', 'email_domain', 'message',
+  'feature', 'section', 'screen', 'ruleId', 'a',
+]);
+
+const SENSITIVE_KEY = /amount|balance|pay\b|salary|grade|date|rating|points|premium|dollar|value|income|gross|net|disability|va|tsp|coverage|branch|component|system|dob|birth|ssn|name|email$|address|unit|location/i;
+const LOOKS_LIKE_DATE = /^\d{4}-\d{2}(-\d{2})?$/;
+
+/** The properties an event may carry, and nothing else. Exported for the redaction test. */
+export function sanitizeTelemetryProperties(properties = {}) {
+  const out = {};
+  for (const [key, value] of Object.entries(properties ?? {})) {
+    if (!TELEMETRY_ALLOWED_KEYS.includes(key)) continue;
+    if (SENSITIVE_KEY.test(key)) continue;
+    if (value === null || value === undefined) {
+      out[key] = value;
+      continue;
+    }
+    if (typeof value === 'boolean') {
+      out[key] = value;
+      continue;
+    }
+    if (typeof value === 'number') {
+      // Counts and ages only; anything that could be a dollar figure is dropped.
+      if (Number.isFinite(value) && Math.abs(value) <= 10000) out[key] = value;
+      continue;
+    }
+    if (typeof value === 'string') {
+      if (LOOKS_LIKE_DATE.test(value) || value.length > 80) continue;
+      out[key] = value;
+      continue;
+    }
+    // Objects and arrays are never sent.
+  }
+  return out;
+}
+
 export function trackEvent(eventName, properties = {}) {
   try {
     if (import.meta.env.VITE_POSTHOG_KEY) {
-      posthog.capture(eventName, properties);
+      posthog.capture(eventName, sanitizeTelemetryProperties(properties));
     }
   } catch {
     // swallow

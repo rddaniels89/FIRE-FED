@@ -7,7 +7,7 @@ import { SPECIAL_PROVISION_LABELS } from '../../../lib/calculations/specialProvi
 import { PATH_LABELS } from '../../../lib/calculations/retirementPaths';
 import { OTHER_COVERAGE_TYPES } from '../../../lib/calculations/healthcareCosts';
 import { estimatePiaFromSalary } from '../../../lib/calculations/socialSecurity';
-import { RETIREMENT_PATH_AUTO } from '../../../lib/scenarios/schema';
+import { PROFILE_KIND_LABELS, RETIREMENT_PATH_AUTO, isFederalEmployeeKind } from '../../../lib/scenarios/schema';
 import { fractionToPercent, money, pct } from './format';
 import {
   ENROLLMENT_OPTIONS,
@@ -20,10 +20,13 @@ import {
 
 export function youSummary(scenario) {
   const p = scenario.profile;
+  const age = p.currentAgeMonths ? `${p.currentAge}y ${p.currentAgeMonths}m` : `${p.currentAge}`;
+  if (!isFederalEmployeeKind(p.kind)) {
+    return `${PROFILE_KIND_LABELS[p.kind] ?? p.kind} · age ${age} · stops working at ${p.separationAge} · Social Security at ${p.socialSecurityClaimAge}`;
+  }
   const employee = p.employeeType === 'regular' ? 'Regular' : SPECIAL_PROVISION_LABELS[p.employeeType] ?? p.employeeType;
   const annuity = p.annuityStartAge == null ? 'annuity at separation' : `annuity at ${p.annuityStartAge}`;
   const path = p.retirementPath === RETIREMENT_PATH_AUTO ? 'Auto path' : PATH_LABELS[p.retirementPath] ?? p.retirementPath;
-  const age = p.currentAgeMonths ? `${p.currentAge}y ${p.currentAgeMonths}m` : `${p.currentAge}`;
   return `Age ${age} · leaves at ${p.separationAge} · ${annuity} · Social Security at ${p.socialSecurityClaimAge} · ${path} · ${employee}`;
 }
 
@@ -114,4 +117,18 @@ export function assumptionsSummary(scenario) {
   const a = scenario.summary.assumptions;
   const ret = a.expectedReturnPercent == null ? 'return from TSP allocation' : `${pct(a.expectedReturnPercent)} return`;
   return `Inflation ${pct(scenario.tsp.inflationRate)} · plan to age ${a.endAge} · ${ret} · ${pct(fractionToPercent(a.safeWithdrawalRate))} withdrawal rate`;
+}
+
+export function militarySummary(scenario) {
+  const m = scenario.military ?? {};
+  if (!m.connection || m.connection === 'none') return 'No military connection recorded';
+  const periods = (m.servicePeriods ?? []).length;
+  const streams = (m.incomeStreams ?? []).length;
+  const parts = [
+    `${periods} service period${periods === 1 ? '' : 's'}`,
+    `deposit ${String(m.deposit?.status ?? 'not_requested').replace(/_/g, ' ')}`,
+    m.retiredPay?.receives === 'yes' ? 'receives retired pay' : 'no retired pay',
+    `${streams} income stream${streams === 1 ? '' : 's'}`,
+  ];
+  return parts.join(' · ');
 }

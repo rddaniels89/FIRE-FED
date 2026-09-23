@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_FREE_SCENARIO_LIMIT,
   FEATURES,
+  LAUNCH_GATED_FEATURES,
   getEntitlements,
   hasEntitlement,
 } from '../entitlements';
@@ -24,7 +25,10 @@ describe('entitlements', () => {
   it('withholds every declared feature from free users', () => {
     for (const key of Object.values(FEATURES)) {
       expect(FREE.features).toHaveProperty(key);
-      expect(hasEntitlement(FREE, key)).toBe(false);
+      expect(FREE.features[key]).toBe(false);
+      // Launch-gated military features are open to everyone until the switch
+      // is on; entitlementsLaunchGates.test.js covers both states.
+      if (!LAUNCH_GATED_FEATURES.includes(key)) expect(hasEntitlement(FREE, key)).toBe(false);
     }
   });
 

@@ -4,8 +4,10 @@ import { ArrowRight, ShieldCheck } from 'lucide-react';
 import { useScenario } from '../../contexts/ScenarioContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { hasEntitlement } from '../../lib/entitlements';
+import { isFederalEmployeeKind } from '../../lib/scenarios/schema';
 import YouSection from './inputs/YouSection';
 import ServiceSection from './inputs/ServiceSection';
+import MilitarySection, { MilitaryCoverageSection, MilitaryIncomeSection, MilitaryTspSection } from './inputs/MilitarySection';
 import SavingsSection from './inputs/SavingsSection';
 import SpendingSection from './inputs/SpendingSection';
 import SocialSecuritySection from './inputs/SocialSecuritySection';
@@ -19,6 +21,11 @@ import PlanEmptyState from './PlanEmptyState';
 const SECTIONS = [
   ['you', YouSection],
   ['service', ServiceSection],
+  ['military', MilitarySection],
+  // The next three render nothing until a military connection is recorded.
+  ['military-income', MilitaryIncomeSection],
+  ['military-tsp', MilitaryTspSection],
+  ['military-coverage', MilitaryCoverageSection],
   ['savings', SavingsSection],
   ['spending', SpendingSection],
   ['social-security', SocialSecuritySection],
@@ -59,9 +66,11 @@ export default function PlanInputs() {
   }
 
   const canUse = (feature) => hasEntitlement(entitlements, feature);
+  // A plan with no federal job has no FERS service section.
+  const sections = SECTIONS.filter(([id]) => id !== 'service' || isFederalEmployeeKind(currentScenario.profile?.kind));
   const toggle = (id) => setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
-  const allOpen = SECTIONS.every(([id]) => openSections[id]);
-  const setAll = (open) => setOpenSections(Object.fromEntries(SECTIONS.map(([id]) => [id, open])));
+  const allOpen = sections.every(([id]) => openSections[id]);
+  const setAll = (open) => setOpenSections(Object.fromEntries(sections.map(([id]) => [id, open])));
 
   return (
     <div className="animate-fade-in max-w-5xl mx-auto">
@@ -90,7 +99,7 @@ export default function PlanInputs() {
       </p>
 
       <div className="space-y-4">
-        {SECTIONS.map((entry) => {
+        {sections.map((entry) => {
           const [id, SectionComponent] = entry;
           return (
             <SectionComponent
