@@ -197,6 +197,18 @@ describe('provider failure', () => {
     expect(r.httpStatus).toBe(502);
     expect(entries[0]).toMatchObject({ step: 'create', status: 422, message: 'invalid email' });
   });
+
+  it('waits for an async log hook before resolving, so a Sentry flush is never cut off by the runtime freezing', async () => {
+    const { impl } = fakeFetch([{ status: 503, body: { message: 'Beehiiv is down' } }]);
+    let logSettled = false;
+    const log = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      logSettled = true;
+    };
+    const r = await subscribeAuthenticatedUser({ user: optedInUser, config, fetchImpl: impl, log });
+    expect(logSettled).toBe(true);
+    expect(r.httpStatus).toBe(502);
+  });
 });
 
 describe('the key only ever travels as a bearer header', () => {
