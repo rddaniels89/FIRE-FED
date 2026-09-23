@@ -1,6 +1,7 @@
 /* eslint-env node */
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import { reportServerError } from '../_lib/observability.js';
 
 function mustGetEnv(name) {
   const value = process.env[name];
@@ -63,10 +64,19 @@ export function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-export function sendError(res, error) {
+/**
+ * Client errors are the caller's problem and get their message back. Server
+ * errors get a generic body and go to Sentry — after the response is sent, so
+ * reporting never slows the user down. `report` is injectable for tests.
+ */
+export async function sendError(res, error, { report = reportServerError } = {}) {
   const status = Number(error?.statusCode || 500);
   const message = status >= 500 ? 'Internal error' : (error?.message || 'Request failed');
   sendJson(res, status, { error: message });
+  if (status >= 500) {
+    console.error('[api] unhandled error', error?.message ?? error);
+    await report(error, { tags: { status } });
+  }
 }
 
 /**

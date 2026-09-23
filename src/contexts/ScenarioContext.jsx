@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase, isSupabaseAvailable } from '../supabaseClient';
 import { useAuth } from './AuthContext';
 import { DEFAULT_FREE_SCENARIO_LIMIT } from '../lib/entitlements';
-import { trackEvent } from '../lib/telemetry';
+import { reportError, trackEvent } from '../lib/telemetry';
 import { isLocalOnlyUser } from '../lib/auth/session';
 import { SNAPSHOT_CONFLICT_TARGET, buildScenarioSnapshot } from '../lib/scenarios/snapshots';
 import {
@@ -184,6 +184,7 @@ export const ScenarioProvider = ({ children }) => {
       console.error('Error saving scenario to Supabase:', error);
       setCloudSyncError({ operation: 'save', error });
       trackEvent('scenario_cloud_sync_failed', { operation: 'save', code: error?.code ?? null });
+      reportError(error, { tags: { operation: 'scenario_save', code: error?.code ?? 'none' } });
       return null;
     }
   };
@@ -209,6 +210,7 @@ export const ScenarioProvider = ({ children }) => {
       console.error('Error updating scenario in Supabase:', error);
       setCloudSyncError({ operation: 'update', error });
       trackEvent('scenario_cloud_sync_failed', { operation: 'update', code: error?.code ?? null });
+      reportError(error, { tags: { operation: 'scenario_update', code: error?.code ?? 'none' } });
       return null;
     }
   };

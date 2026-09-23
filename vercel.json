@@ -1,7 +1,14 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/health/writes",
+      "schedule": "0 13 * * *"
+    }
+  ]
 }
-
-
-
-

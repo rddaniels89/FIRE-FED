@@ -1,5 +1,6 @@
 /* eslint-env node */
 import { requireAuthedUser, sendError, sendJson } from '../stripe/_shared.js';
+import { reportServerError } from '../_lib/observability.js';
 import {
   BeehiivError,
   createSubscriber,
@@ -32,7 +33,14 @@ export const STATUS = Object.freeze({
   PROVIDER_UNAVAILABLE: 'provider_unavailable',
 });
 
-const defaultLog = (entry) => console.error('[beehiiv]', entry);
+const defaultLog = (entry) => {
+  console.error('[beehiiv]', entry);
+  void reportServerError(new Error(`Beehiiv ${entry.step} failed (${entry.status}): ${entry.message}`), {
+    tags: { provider: 'beehiiv', step: entry.step, status: entry.status },
+    extra: { userId: entry.userId },
+    level: 'warning',
+  });
+};
 
 /**
  * The whole decision, given an already-authenticated user.
