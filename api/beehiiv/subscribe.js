@@ -1,5 +1,6 @@
 /* eslint-env node */
 import { requireAuthedUser, sendError, sendJson } from '../stripe/_shared.js';
+import { reportServerError } from '../_lib/observability.js';
 import {
   BeehiivError,
   createSubscriber,
@@ -32,7 +33,18 @@ export const STATUS = Object.freeze({
   PROVIDER_UNAVAILABLE: 'provider_unavailable',
 });
 
-const defaultLog = (entry) => console.error('[beehiiv]', entry);
+/**
+ * Awaited by the caller: on a serverless runtime the invocation can be frozen
+ * the moment the handler returns, and an unflushed Sentry event is lost.
+ */
+const defaultLog = async (entry) => {
+  console.error('[beehiiv]', entry);
+  await reportServerError(new Error(`Beehiiv ${entry.step} failed (${entry.status}): ${entry.message}`), {
+    tags: { provider: 'beehiiv', step: entry.step, status: entry.status },
+    extra: { userId: entry.userId },
+    level: 'warning',
+  });
+};
 
 /**
  * The whole decision, given an already-authenticated user.
@@ -71,7 +83,7 @@ export async function subscribeAuthenticatedUser({ user, config, fetchImpl = fet
   } catch (error) {
     // Status and Beehiiv's message are useful; the key is never part of either.
     if (error instanceof BeehiivError) {
-      log({ step: error.step, status: error.status, message: error.beehiivMessage, userId: user?.id ?? null });
+      await log({ step: error.step, status: error.status, message: error.beehiivMessage, userId: user?.id ?? null });
       return { httpStatus: 502, body: { ok: false, status: STATUS.PROVIDER_UNAVAILABLE } };
     }
     throw error;

@@ -26,6 +26,26 @@ export function initTelemetry() {
 }
 
 /**
+ * Sends an error a user has already been shown (or would never see) to Sentry.
+ *
+ * Reserved for failures that matter to the business rather than every caught
+ * exception: a cloud save that did not land is the canonical case, because it
+ * is exactly the failure that went unreported for eight months.
+ */
+export function reportError(error, { tags = {}, extra = {} } = {}) {
+  try {
+    if (!import.meta.env.VITE_SENTRY_DSN) return;
+    Sentry.withScope((scope) => {
+      for (const [k, v] of Object.entries(tags)) scope.setTag(k, String(v));
+      for (const [k, v] of Object.entries(extra)) scope.setExtra(k, v);
+      Sentry.captureException(error instanceof Error ? error : new Error(String(error?.message ?? error)));
+    });
+  } catch {
+    // swallow
+  }
+}
+
+/**
  * Property keys an event may carry. Anything else is dropped before it leaves
  * the browser: no dollar amounts, grades, service dates, ratings, points,
  * health-plan choices, or free text ever reach analytics (spec §11.3, §20.19).
